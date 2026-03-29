@@ -1,0 +1,42 @@
+{
+  "name": "LabStock — Lab Inventory",
+  "short_name": "LabStock",
+  "description": "Lab inventory management with Slack integration",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f3ee",
+  "theme_color": "#2d6a4f",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Log Transaction",
+      "short_name": "Log",
+      "description": "Quickly log an inward or outward transaction",
+      "url": "/index.html#transaction",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "View Inventory",
+      "short_name": "Inventory",
+      "description": "Check current stock levels",
+      "url": "/index.html#inventory",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
