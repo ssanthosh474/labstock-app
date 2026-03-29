@@ -510,43 +510,52 @@ select.form-input { cursor: pointer; }
   <div class="login-hero">
     <div class="login-icon">🧪</div>
     <div class="login-title">LabStock</div>
-    <div class="login-sub">Lab inventory for your whole team — works offline, syncs with Telegram bot automatically</div>
+    <div class="login-sub">Smart lab inventory management — automated with Telegram</div>
   </div>
   <div class="login-card">
-    <!-- Step 1: Choose login method -->
-    <div id="loginStep1">
-      <button class="google-btn" onclick="showEmailLogin()">
-        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-        Sign in with Google
-      </button>
-      <div class="divider">or</div>
-      <button class="demo-btn" onclick="demoLogin()">🔬 Try Demo — No login needed</button>
-    </div>
 
-    <!-- Step 2: Email + Name input (shown after clicking Google) -->
-    <div id="loginStep2" style="display:none">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;text-align:center">
-        <strong>Sign in with your Google email</strong><br>
-        <span style="font-size:12px;color:var(--muted)">Use the same email as your Google account</span>
-      </div>
+    <!-- STEP 1: Admin sign in -->
+    <div id="loginStep1">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px;text-align:center">Admin Sign In</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px;text-align:center">Create and manage your lab inventory group</div>
       <div style="display:flex;flex-direction:column;gap:12px">
         <div class="form-group">
-          <label class="form-label">Your Name</label>
+          <label class="form-label">Your Full Name *</label>
           <input class="form-input" id="loginName" placeholder="e.g. Dr. Ravi Kumar" style="font-size:15px">
         </div>
         <div class="form-group">
-          <label class="form-label">Google Email</label>
+          <label class="form-label">Email Address *</label>
           <input class="form-input" id="loginEmail" type="email" placeholder="yourname@gmail.com" style="font-size:15px" inputmode="email">
         </div>
-        <button class="google-btn" onclick="submitEmailLogin()" style="margin-top:4px">
-          ✅ Sign In
+        <button class="google-btn" onclick="submitStep1()" style="margin-top:4px;background:var(--accent);color:white;border-color:var(--accent)">
+          Continue →
         </button>
-        <button class="demo-btn" onclick="showStep1()" style="background:var(--surface2);border-color:var(--border);color:var(--muted)">← Back</button>
       </div>
     </div>
+
+    <!-- STEP 2: Create first group (only for new admins) -->
+    <div id="loginStep2" style="display:none">
+      <button onclick="backToStep1()" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:12px;padding:0">← Back</button>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">Create Your Lab Group</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px">You can add items and members after setup</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Group Name *</label>
+          <input class="form-input" id="setupGroupName" placeholder="e.g. Biochemistry Lab" style="font-size:15px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description (optional)</label>
+          <input class="form-input" id="setupGroupDesc" placeholder="e.g. Main research lab, Floor 3" style="font-size:15px">
+        </div>
+        <button class="google-btn" onclick="submitStep2()" style="background:var(--accent);color:white;border-color:var(--accent)">
+          🚀 Create Group & Start
+        </button>
+      </div>
+    </div>
+
   </div>
   <p style="font-size:11px;color:var(--muted);margin-top:16px;text-align:center;padding:0 20px">
-    Your data stays private. Real Google OAuth coming soon.
+    Members are invited by admin — no separate sign up needed
   </p>
 </div>
 
@@ -985,40 +994,96 @@ window.addEventListener('offline', () => document.getElementById('offlineBanner'
 window.addEventListener('online', () => document.getElementById('offlineBanner').classList.remove('show'));
 
 // ── AUTH ────────────────────────────────────────────────
-function showEmailLogin() {
-  document.getElementById('loginStep1').style.display = 'none';
-  document.getElementById('loginStep2').style.display = 'block';
-  setTimeout(() => document.getElementById('loginName').focus(), 100);
+// ── LOGIN STEPS ──────────────────────────────────────────
+let _pendingUser = null;
+
+function submitStep1() {
+  const name = document.getElementById('loginName').value.trim();
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const nameEl = document.getElementById('loginName');
+  const emailEl = document.getElementById('loginEmail');
+  nameEl.style.borderColor = ''; emailEl.style.borderColor = '';
+  if (!name) { nameEl.style.borderColor='var(--danger)'; nameEl.focus(); return; }
+  if (!email.includes('@')) { emailEl.style.borderColor='var(--danger)'; emailEl.focus(); return; }
+
+  load(); // Load any existing data
+  _pendingUser = { email, name, picture: null };
+
+  // Check if returning admin
+  const existingUser = S.user?.email === email;
+  const hasGroups = S.groups.some(g => g.adminEmail === email);
+
+  if (existingUser || hasGroups) {
+    // Returning admin — go straight to app
+    doLogin(_pendingUser);
+  } else {
+    // New admin — show group creation step
+    document.getElementById('loginStep1').style.display = 'none';
+    document.getElementById('loginStep2').style.display = 'block';
+    setTimeout(() => document.getElementById('setupGroupName').focus(), 100);
+  }
 }
-function showStep1() {
+
+function submitStep2() {
+  const groupName = document.getElementById('setupGroupName').value.trim();
+  const groupDesc = document.getElementById('setupGroupDesc').value.trim();
+  const nameEl = document.getElementById('setupGroupName');
+  nameEl.style.borderColor = '';
+  if (!groupName) { nameEl.style.borderColor='var(--danger)'; nameEl.focus(); return; }
+
+  // Create the group right after login
+  doLogin(_pendingUser, { name: groupName, desc: groupDesc });
+}
+
+function backToStep1() {
   document.getElementById('loginStep1').style.display = 'block';
   document.getElementById('loginStep2').style.display = 'none';
 }
-function submitEmailLogin() {
-  const name = document.getElementById('loginName').value.trim();
-  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-  if (!name) { document.getElementById('loginName').style.borderColor='var(--danger)'; return; }
-  if (!email.includes('@')) { document.getElementById('loginEmail').style.borderColor='var(--danger)'; return; }
-  doLogin({ email, name, picture: null });
-}
-// Allow Enter key to submit
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('loginEmail')?.addEventListener('keydown', e => { if(e.key==='Enter') submitEmailLogin(); });
-  document.getElementById('loginName')?.addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('loginEmail').focus(); });
-});
 
-function signInGoogle() { showEmailLogin(); }
-function mobileEmailLogin() { showEmailLogin(); }
-function demoLogin() { doLogin({ email: 'admin@labstock.demo', name: 'Lab Admin', picture: null, isDemo: true }); }
-
-function doLogin(user) {
+function doLogin(user, firstGroup = null) {
   load();
+  // Clear ALL old demo/sample data when a real admin logs in fresh
+  const isNewAdmin = !S.user || S.user.email !== user.email;
+  if (isNewAdmin && !user.isDemo) {
+    // Wipe any leftover demo data
+    S.inventory = S.inventory.filter(i => false); // clear all
+    S.transactions = S.transactions.filter(t => false);
+    S.groups = S.groups.filter(g => g.adminEmail === user.email);
+    S.members = S.members.filter(m => m.email === user.email);
+  }
   S.user = user;
-  if (user.isDemo && !S.groups.length) seedDemo();
+
+  // Create first group if provided
+  if (firstGroup) {
+    const gid = 'g_' + Date.now();
+    S.groups.push({ id: gid, name: firstGroup.name, desc: firstGroup.desc || '', adminEmail: user.email, created: new Date().toISOString() });
+    S.members.push({ id: 'm_' + Date.now(), groupId: gid, email: user.email, name: user.name, role: 'admin', joined: new Date().toISOString() });
+    S.activeGroupId = gid;
+  } else if (!S.activeGroupId && S.groups.length) {
+    S.activeGroupId = S.groups[0].id;
+  }
+
   save();
+
+  // Handle invite link
   const urlParams = new URLSearchParams(window.location.search);
   const inviteCode = urlParams.get('invite');
-  if (inviteCode) setTimeout(()=>handleInviteLink(inviteCode), 500);
+  if (inviteCode) setTimeout(() => handleInviteLink(inviteCode), 500);
+
+  showApp();
+}
+
+function signInGoogle() {} // placeholder for real OAuth later
+function mobileEmailLogin() {}
+function showEmailLogin() {}
+function showStep1() { backToStep1(); }
+function submitEmailLogin() { submitStep1(); }
+function demoLogin() {
+  load();
+  if (!S.groups.length) seedDemo();
+  S.user = { email: 'admin@labstock.demo', name: 'Lab Admin', picture: null, isDemo: true };
+  S.activeGroupId = S.groups[0]?.id;
+  save();
   showApp();
 }
 
