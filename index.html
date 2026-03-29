@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="LabStock">
 <meta name="theme-color" content="#2d6a4f">
-<meta name="description" content="Lab inventory management with Slack integration">
+<meta name="description" content="Lab inventory management with Telegram bot integration">
 
 <title>LabStock</title>
 
@@ -510,7 +510,7 @@ select.form-input { cursor: pointer; }
   <div class="login-hero">
     <div class="login-icon">🧪</div>
     <div class="login-title">LabStock</div>
-    <div class="login-sub">Lab inventory for your whole team — works offline, syncs with Slack</div>
+    <div class="login-sub">Lab inventory for your whole team — works offline, syncs with Telegram bot automatically</div>
   </div>
   <div class="login-card">
     <button class="google-btn" onclick="signInGoogle()">
@@ -592,14 +592,26 @@ select.form-input { cursor: pointer; }
     <!-- ══ SLACK ══ -->
     <div class="page" id="pg-slack">
       <div class="page-pad">
-        <div class="section-title" style="margin-bottom:12px">💬 Slack Sync</div>
+        <div class="section-title" style="margin-bottom:12px">🤖 Telegram Bot Sync</div>
         <div class="info-box" style="margin-bottom:14px">
-          Copy a message from your Slack <strong>#lab-inventory</strong> channel and paste below to update stock instantly.
+          Your Telegram bot is <strong>automatically syncing</strong> stock every 30 seconds. Team members just send messages to the bot — no manual action needed!
         </div>
 
         <div class="card" style="margin-bottom:14px">
-          <div class="card-hd"><div class="card-title">Message Format</div></div>
+          <div class="card-hd"><div class="card-title">✅ Live Sync Status</div></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px;font-size:14px">
+              <span style="width:10px;height:10px;background:var(--accent-l);border-radius:50%;display:inline-block;animation:pulse 2s infinite"></span>
+              Auto-syncing from Railway server every 30 seconds
+            </div>
+            <button class="btn btn-primary btn-full" onclick="syncFromServer();toast('Syncing now...','ok')">🔄 Sync Now</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-hd"><div class="card-title">📋 Message Format</div></div>
           <div style="padding:14px">
+            <p style="font-size:13px;color:var(--text2);margin-bottom:10px">Share this format with your team on Telegram:</p>
             <div class="code-box">
               <span class="k">ITEM:</span> <span class="v">Ethanol 95%</span><br>
               <span class="k">CATEGORY:</span> <span class="v">Chemicals</span><br>
@@ -610,14 +622,27 @@ select.form-input { cursor: pointer; }
           </div>
         </div>
 
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-hd"><div class="card-title">👥 How to add team members</div></div>
+          <div style="padding:14px;font-size:13px;color:var(--text2);line-height:1.8">
+            1. Open Telegram → Create a group<br>
+            2. Add all 30+ lab members<br>
+            3. Add your bot to the group<br>
+            4. Anyone can now post stock updates!<br><br>
+            <strong>Bot commands:</strong><br>
+            /start — Show format<br>
+            /stock — View current stock
+          </div>
+        </div>
+
         <div class="form-group" style="margin-bottom:12px">
-          <label class="form-label">Paste Slack Message</label>
-          <textarea class="form-input" id="slackPaste" rows="7"
+          <label class="form-label">Manual Paste (backup)</label>
+          <textarea class="form-input" id="slackPaste" rows="6"
             placeholder="ITEM: Sodium Chloride&#10;CATEGORY: Chemicals&#10;COUNT: 100&#10;TYPE: INWARD&#10;BY: Dr. Priya"
             style="font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
         </div>
         <div id="slackPreview" style="display:none;margin-bottom:12px"></div>
-        <button class="btn btn-ghost btn-full" onclick="parseSlack()" style="margin-bottom:8px">🔍 Parse Message</button>
+        <button class="btn btn-ghost btn-full" onclick="parseSlack()" style="margin-bottom:8px">🔍 Parse & Apply Manually</button>
         <button class="btn btn-primary btn-full" id="applySlackBtn" onclick="applySlack()" style="display:none">✅ Apply to Stock</button>
       </div>
     </div>
@@ -679,7 +704,7 @@ select.form-input { cursor: pointer; }
       <span class="nav-icon">↕️</span><span class="nav-label">Log</span>
     </div>
     <div class="nav-tab" id="tab-slack" onclick="switchTab('slack')">
-      <span class="nav-icon">💬</span><span class="nav-label">Slack</span>
+      <span class="nav-icon">🤖</span><span class="nav-label">Telegram</span>
     </div>
     <div class="nav-tab" id="tab-more" onclick="switchTab('more')">
       <span class="nav-icon">⋯</span><span class="nav-label">More</span>
@@ -848,12 +873,8 @@ select.form-input { cursor: pointer; }
         <input class="form-input" type="number" id="sThreshold" value="10" inputmode="numeric" oninput="saveSetting()">
       </div>
       <div class="form-group">
-        <label class="form-label">Slack Channel</label>
-        <input class="form-input" id="sChannel" placeholder="#lab-inventory" oninput="saveSetting()">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Server Webhook URL</label>
-        <input class="form-input" id="sWebhook" placeholder="https://your-server.railway.app" oninput="saveSetting()">
+        <label class="form-label">Telegram Bot Name</label>
+        <input class="form-input" id="sChannel" placeholder="@labstock_yourlab_bot" oninput="saveSetting()">
       </div>
       <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer">
         <input type="checkbox" id="sNotifyLow" checked onchange="saveSetting()" style="accent-color:var(--accent);width:18px;height:18px">
@@ -967,6 +988,8 @@ function showApp() {
   loadSettings();
   renderHome();
   updateAlertBadge();
+  // Start syncing from Railway server
+  setTimeout(startServerSync, 1000);
 }
 
 // ── TOPBAR ──────────────────────────────────────────────
@@ -1303,7 +1326,7 @@ function applySlack() {
     item = {id:'i_'+Date.now(),groupId:gid(),name:p.itemName,category:p.category||'Uncategorized',stock:0,unit:'units',minStock:S.settings.threshold};
     S.inventory.push(item);
   }
-  const ok = submitTx({itemId:item.id,qty:p.qty,person:p.person,date:new Date().toISOString().split('T')[0],notes:p.notes||'From Slack',type:p.type,source:'SLACK'});
+  const ok = submitTx({itemId:item.id,qty:p.qty,person:p.person,date:new Date().toISOString().split('T')[0],notes:p.notes||'Manual entry',type:p.type,source:'MANUAL'});
   if (ok) {
     document.getElementById('slackPaste').value='';
     document.getElementById('slackPreview').style.display='none';
@@ -1391,13 +1414,119 @@ function seedDemo() {
   const today=new Date().toISOString().split('T')[0];
   S.transactions=[
     {id:'t1',groupId:id,type:'IN',source:'APP',itemId:'i2',itemName:'Sodium Chloride',category:'Chemicals',qty:500,unit:'g',person:'Dr. Ravi Kumar',date:today,notes:'Restock',timestamp:new Date().toISOString()},
-    {id:'t2',groupId:id,type:'OUT',source:'SLACK',itemId:'i6',itemName:'Agar Powder',category:'Reagents',qty:50,unit:'g',person:'Dr. Priya Sharma',date:today,notes:'Batch #7',timestamp:new Date().toISOString()},
+    {id:'t2',groupId:id,type:'OUT',source:'TELEGRAM',itemId:'i6',itemName:'Agar Powder',category:'Reagents',qty:50,unit:'g',person:'Dr. Priya Sharma',date:today,notes:'Batch #7',timestamp:new Date().toISOString()},
   ];
+}
+
+// ── RAILWAY SERVER SYNC ──────────────────────────────────
+const RAILWAY_URL = 'https://labstockserver-production.up.railway.app';
+let syncInterval = null;
+let sseConnection = null;
+
+async function syncFromServer() {
+  try {
+    // Fetch inventory from server
+    const invRes = await fetch(`${RAILWAY_URL}/api/inventory`);
+    const serverItems = await invRes.json();
+
+    // Fetch transactions from server
+    const txRes = await fetch(`${RAILWAY_URL}/api/transactions`);
+    const serverTx = await txRes.json();
+
+    if (!S.activeGroupId) return;
+
+    // Merge server items into local inventory
+    serverItems.forEach(serverItem => {
+      const key = serverItem.name?.toLowerCase();
+      if (!key) return;
+      const existing = S.inventory.find(i =>
+        i.groupId === S.activeGroupId &&
+        i.name?.toLowerCase() === key
+      );
+      if (existing) {
+        existing.stock = serverItem.stock;
+        existing.category = serverItem.category || existing.category;
+      } else {
+        S.inventory.push({
+          id: 'srv_' + Date.now() + Math.random(),
+          groupId: S.activeGroupId,
+          name: serverItem.name,
+          category: serverItem.category || 'Uncategorized',
+          stock: serverItem.stock,
+          unit: serverItem.unit || 'units',
+          minStock: serverItem.minStock || 10
+        });
+      }
+    });
+
+    // Merge server transactions
+    serverTx.forEach(tx => {
+      if (!tx.itemName) return;
+      const exists = S.transactions.find(t => t.id === tx.id || t.id === String(tx.id));
+      if (!exists) {
+        S.transactions.unshift({
+          ...tx,
+          id: String(tx.id),
+          groupId: S.activeGroupId,
+          source: tx.source || 'TELEGRAM'
+        });
+      }
+    });
+
+    // Sort transactions by timestamp
+    S.transactions.sort((a,b) => new Date(b.timestamp||0) - new Date(a.timestamp||0));
+    save();
+
+    // Refresh current view
+    const activePage = document.querySelector('.page.active')?.id;
+    if (activePage === 'pg-home') renderHome();
+    if (activePage === 'pg-inv') renderInv();
+    if (activePage === 'pg-log') renderLog();
+    updateAlertBadge();
+
+  } catch(e) {
+    console.log('Server sync failed:', e.message);
+  }
+}
+
+function startServerSync() {
+  // Sync immediately
+  syncFromServer();
+
+  // Sync every 30 seconds
+  if (syncInterval) clearInterval(syncInterval);
+  syncInterval = setInterval(syncFromServer, 30000);
+
+  // Also connect SSE for real-time updates
+  connectSSE();
+}
+
+function connectSSE() {
+  if (sseConnection) sseConnection.close();
+  try {
+    sseConnection = new EventSource(`${RAILWAY_URL}/stream`);
+    sseConnection.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'TRANSACTION') {
+        syncFromServer(); // Re-sync when new transaction arrives
+        toast('📦 New Telegram update received!', 'ok');
+      }
+    };
+    sseConnection.onerror = () => {
+      // SSE disconnected, will rely on polling
+      sseConnection.close();
+    };
+  } catch(e) {
+    console.log('SSE not available, using polling');
+  }
 }
 
 // ── INIT ─────────────────────────────────────────────────
 load();
-if (S.user) showApp();
+if (S.user) {
+  showApp();
+  startServerSync();
+}
 </script>
 </body>
 </html>
