@@ -513,13 +513,41 @@ select.form-input { cursor: pointer; }
     <div class="login-sub">Lab inventory for your whole team — works offline, syncs with Telegram bot automatically</div>
   </div>
   <div class="login-card">
-    <button class="google-btn" onclick="signInGoogle()">
-      <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-      Sign in with Google
-    </button>
-    <div class="divider">or</div>
-    <button class="demo-btn" onclick="demoLogin()">🔬 Try Demo — No login needed</button>
+    <!-- Step 1: Choose login method -->
+    <div id="loginStep1">
+      <button class="google-btn" onclick="showEmailLogin()">
+        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Sign in with Google
+      </button>
+      <div class="divider">or</div>
+      <button class="demo-btn" onclick="demoLogin()">🔬 Try Demo — No login needed</button>
+    </div>
+
+    <!-- Step 2: Email + Name input (shown after clicking Google) -->
+    <div id="loginStep2" style="display:none">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;text-align:center">
+        <strong>Sign in with your Google email</strong><br>
+        <span style="font-size:12px;color:var(--muted)">Use the same email as your Google account</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Your Name</label>
+          <input class="form-input" id="loginName" placeholder="e.g. Dr. Ravi Kumar" style="font-size:15px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Google Email</label>
+          <input class="form-input" id="loginEmail" type="email" placeholder="yourname@gmail.com" style="font-size:15px" inputmode="email">
+        </div>
+        <button class="google-btn" onclick="submitEmailLogin()" style="margin-top:4px">
+          ✅ Sign In
+        </button>
+        <button class="demo-btn" onclick="showStep1()" style="background:var(--surface2);border-color:var(--border);color:var(--muted)">← Back</button>
+      </div>
+    </div>
   </div>
+  <p style="font-size:11px;color:var(--muted);margin-top:16px;text-align:center;padding:0 20px">
+    Your data stays private. Real Google OAuth coming soon.
+  </p>
 </div>
 
 <!-- ════════════════════════════════════
@@ -957,44 +985,40 @@ window.addEventListener('offline', () => document.getElementById('offlineBanner'
 window.addEventListener('online', () => document.getElementById('offlineBanner').classList.remove('show'));
 
 // ── AUTH ────────────────────────────────────────────────
-function signInGoogle() {
-  // Try Google One Tap first
-  if (typeof google !== 'undefined' && google.accounts) {
-    google.accounts.id.initialize({
-      client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
-      callback: (response) => {
-        try {
-          const payload = JSON.parse(atob(response.credential.split('.')[1]));
-          doLogin({ email: payload.email, name: payload.name, picture: payload.picture });
-        } catch(e) { toast('Login failed. Try Demo.', 'err'); }
-      },
-      auto_select: false,
-      cancel_on_tap_outside: true
-    });
-    google.accounts.id.prompt((notification) => {
-      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-        // Fallback to email input on mobile
-        mobileEmailLogin();
-      }
-    });
-  } else {
-    mobileEmailLogin();
-  }
+function showEmailLogin() {
+  document.getElementById('loginStep1').style.display = 'none';
+  document.getElementById('loginStep2').style.display = 'block';
+  setTimeout(() => document.getElementById('loginName').focus(), 100);
 }
-
-function mobileEmailLogin() {
-  const email = prompt('Enter your Google email to sign in:');
-  if (!email?.includes('@')) { toast('Invalid email', 'err'); return; }
-  const name = email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+function showStep1() {
+  document.getElementById('loginStep1').style.display = 'block';
+  document.getElementById('loginStep2').style.display = 'none';
+}
+function submitEmailLogin() {
+  const name = document.getElementById('loginName').value.trim();
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  if (!name) { document.getElementById('loginName').style.borderColor='var(--danger)'; return; }
+  if (!email.includes('@')) { document.getElementById('loginEmail').style.borderColor='var(--danger)'; return; }
   doLogin({ email, name, picture: null });
 }
-function demoLogin() { doLogin({ email: 'admin@labstock.demo', name: 'Lab Admin', picture: null }); }
+// Allow Enter key to submit
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('loginEmail')?.addEventListener('keydown', e => { if(e.key==='Enter') submitEmailLogin(); });
+  document.getElementById('loginName')?.addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('loginEmail').focus(); });
+});
+
+function signInGoogle() { showEmailLogin(); }
+function mobileEmailLogin() { showEmailLogin(); }
+function demoLogin() { doLogin({ email: 'admin@labstock.demo', name: 'Lab Admin', picture: null, isDemo: true }); }
 
 function doLogin(user) {
   load();
   S.user = user;
-  if (!S.groups.length) seedDemo();
+  if (user.isDemo && !S.groups.length) seedDemo();
   save();
+  const urlParams = new URLSearchParams(window.location.search);
+  const inviteCode = urlParams.get('invite');
+  if (inviteCode) setTimeout(()=>handleInviteLink(inviteCode), 500);
   showApp();
 }
 
@@ -1092,13 +1116,20 @@ function sheetBgClose(e, id) { if (e.target === e.currentTarget) closeSheet(id);
 // ── GROUPS ──────────────────────────────────────────────
 function renderGroupSheet() {
   const el = document.getElementById('groupSheetBody');
-  if (!S.groups.length) { el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:13px;padding:12px">No groups yet.</p>'; return; }
+  if (!S.groups.length) { el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:13px;padding:12px">No groups yet. Create your first group!</p>'; return; }
   el.innerHTML = S.groups.map(g => {
     const active = g.id === S.activeGroupId;
     const count = S.members.filter(m => m.groupId === g.id).length;
-    return `<div onclick="setGroup('${g.id}')" style="background:${active?'var(--accent-bg)':'var(--surface2)'};border:1.5px solid ${active?'var(--accent-l)':'var(--border)'};border-radius:var(--r);padding:14px;cursor:pointer">
-      <div style="font-weight:700;font-size:15px;margin-bottom:4px">🧪 ${g.name} ${active?'<span class="badge bg-green">Active</span>':''}</div>
-      <div style="font-size:12px;color:var(--muted)">${g.desc||'No description'} • ${count} member${count!==1?'s':''}</div>
+    const isOwner = g.adminEmail === S.user?.email;
+    return `<div style="background:${active?'var(--accent-bg)':'var(--surface2)'};border:1.5px solid ${active?'var(--accent-l)':'var(--border)'};border-radius:var(--r);padding:14px;margin-bottom:2px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div onclick="setGroup('${g.id}')" style="font-weight:700;font-size:15px;cursor:pointer;flex:1">🧪 ${g.name} ${active?'<span class="badge bg-green">Active</span>':''}</div>
+        ${isOwner ? `<div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-xs" onclick="editGroup('${g.id}')">✏️</button>
+          <button class="btn btn-danger btn-xs" onclick="deleteGroup('${g.id}')">🗑️</button>
+        </div>` : ''}
+      </div>
+      <div onclick="setGroup('${g.id}')" style="font-size:12px;color:var(--muted);cursor:pointer">${g.desc||'No description'} • ${count} member${count!==1?'s':''}</div>
     </div>`;
   }).join('');
 }
@@ -1122,6 +1153,55 @@ function promptCreateGroup() {
   S.activeGroupId = id; save();
   renderGroupSheet(); updateTopbar();
   toast(`"${name}" created!`, 'ok');
+}
+
+function editGroup(id) {
+  const g = S.groups.find(g => g.id === id); if (!g) return;
+  const name = prompt('Group name:', g.name);
+  if (!name?.trim()) return;
+  const desc = prompt('Description:', g.desc || '');
+  g.name = name.trim();
+  g.desc = desc || '';
+  logAct(`Edited group: ${g.name}`); save(); renderGroupSheet(); updateTopbar();
+  toast('Group updated!', 'ok');
+}
+
+function deleteGroup(id) {
+  const g = S.groups.find(g => g.id === id); if (!g) return;
+  if (!confirm(`Delete "${g.name}"?\n\nThis will delete all members and inventory in this group. Cannot be undone.`)) return;
+  S.groups = S.groups.filter(g => g.id !== id);
+  S.members = S.members.filter(m => m.groupId !== id);
+  S.inventory = S.inventory.filter(i => i.groupId !== id);
+  S.transactions = S.transactions.filter(t => t.groupId !== id);
+  if (S.activeGroupId === id) S.activeGroupId = S.groups[0]?.id || null;
+  save(); renderGroupSheet(); updateTopbar(); renderHome();
+  toast('Group deleted', 'wrn');
+}
+
+// ── INVITE LINK ──────────────────────────────────────────
+function generateInviteLink(groupId) {
+  const base = window.location.origin + window.location.pathname;
+  const code = btoa(groupId + '|' + Date.now());
+  return `${base}?invite=${code}`;
+}
+
+function handleInviteLink(code) {
+  try {
+    const decoded = atob(code);
+    const groupId = decoded.split('|')[0];
+    const g = S.groups.find(g => g.id === groupId);
+    if (!g) { toast('Invalid invite link', 'err'); return; }
+    // Check if already a member
+    const already = S.members.find(m => m.groupId === groupId && m.email === S.user?.email);
+    if (already) { setGroup(groupId); return; }
+    // Add as member
+    S.members.push({ id: 'm_'+Date.now(), groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() });
+    S.activeGroupId = groupId;
+    logAct(`Joined group via invite link`); save(); updateTopbar(); renderHome();
+    toast(`✅ Joined "${g.name}" as member!`, 'ok');
+    // Clean URL
+    window.history.replaceState({}, '', window.location.pathname);
+  } catch(e) { toast('Invalid invite link', 'err'); }
 }
 
 // ── MEMBERS ─────────────────────────────────────────────
@@ -1149,14 +1229,33 @@ function renderMembersSheet() {
 
 function promptInvite() {
   if (!isAdmin()) { toast('Admin only', 'err'); return; }
-  const email = prompt('Member email:');
-  if (!email?.includes('@')) { toast('Invalid email', 'err'); return; }
-  const name = prompt('Their name:') || email.split('@')[0];
-  const role = confirm('Make them Admin?\n(OK = Admin, Cancel = Member)') ? 'admin' : 'member';
-  if (S.members.find(m => m.groupId === S.activeGroupId && m.email === email)) { toast('Already a member', 'wrn'); return; }
-  S.members.push({ id: 'm_'+Date.now(), groupId: S.activeGroupId, email, name, role, joined: new Date().toISOString() });
-  logAct(`Invited ${email} as ${role}`); save(); renderMembersSheet();
-  toast(`${name} added as ${role}`, 'ok');
+  if (!S.activeGroupId) { toast('Select a group first', 'wrn'); return; }
+  // Show two options
+  const choice = confirm('How to invite?\n\nOK → Share Invite Link\nCancel → Enter Email');
+  if (choice) {
+    // Share invite link
+    const link = generateInviteLink(S.activeGroupId);
+    if (navigator.share) {
+      navigator.share({ title: 'Join LabStock', text: 'Join our lab inventory group on LabStock:', url: link });
+    } else {
+      // Copy to clipboard
+      navigator.clipboard.writeText(link).then(() => {
+        toast('📋 Invite link copied! Share it with your team.', 'ok');
+      }).catch(() => {
+        prompt('Copy this invite link:', link);
+      });
+    }
+  } else {
+    // Email invite
+    const email = prompt('Member email:');
+    if (!email?.includes('@')) { toast('Invalid email', 'err'); return; }
+    const name = prompt('Their name:') || email.split('@')[0];
+    const role = confirm('Make them Admin?\n(OK = Admin, Cancel = Member)') ? 'admin' : 'member';
+    if (S.members.find(m => m.groupId === S.activeGroupId && m.email === email)) { toast('Already a member', 'wrn'); return; }
+    S.members.push({ id: 'm_'+Date.now(), groupId: S.activeGroupId, email, name, role, joined: new Date().toISOString() });
+    logAct(`Invited ${email} as ${role}`); save(); renderMembersSheet();
+    toast(`${name} added as ${role}`, 'ok');
+  }
 }
 
 function removeMem(id) {
