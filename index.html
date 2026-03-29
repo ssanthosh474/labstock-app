@@ -957,11 +957,19 @@ window.addEventListener('offline', () => document.getElementById('offlineBanner'
 window.addEventListener('online', () => document.getElementById('offlineBanner').classList.remove('show'));
 
 // ── AUTH ────────────────────────────────────────────────
-function signInGoogle() {
-  const email = prompt('Enter your Google email:');
-  if (!email?.includes('@')) { toast('Invalid email', 'err'); return; }
-  const name = email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-  doLogin({ email, name, picture: null });
+   function signInGoogle() {
+  google.accounts.id.initialize({
+    client_id: '629944900273-5ub8581429gkmg3b4uce1t41hfbpoat4.apps.googleusercontent.com',
+    callback: (response) => {
+      const payload = JSON.parse(atob(response.credential.split('.')[1]));
+      doLogin({
+        email: payload.email,
+        name: payload.name,
+        picture: payload.picture
+      });
+    }
+  });
+  google.accounts.id.prompt();
 }
 function demoLogin() { doLogin({ email: 'admin@labstock.demo', name: 'Lab Admin', picture: null }); }
 
