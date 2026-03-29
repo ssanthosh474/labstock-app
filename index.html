@@ -14,7 +14,7 @@
 
 <!-- PWA Manifest -->
 <link rel="manifest" href="manifest.json">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+
 <!-- Apple Touch Icons (inline SVG as base64 for single-file deployment) -->
 <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjM0IiBmaWxsPSIjMmQ2YTRmIi8+PHRleHQgeD0iOTYiIHk9IjEyNSIgZm9udC1zaXplPSI5NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiPvCfpqY8L3RleHQ+PC9zdmc+">
 
@@ -957,19 +957,36 @@ window.addEventListener('offline', () => document.getElementById('offlineBanner'
 window.addEventListener('online', () => document.getElementById('offlineBanner').classList.remove('show'));
 
 // ── AUTH ────────────────────────────────────────────────
-   function signInGoogle() {
-  google.accounts.id.initialize({
-    client_id: '629944900273-5ub8581429gkmg3b4uce1t41hfbpoat4.apps.googleusercontent.com',
-    callback: (response) => {
-      const payload = JSON.parse(atob(response.credential.split('.')[1]));
-      doLogin({
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture
-      });
-    }
-  });
-  google.accounts.id.prompt();
+function signInGoogle() {
+  // Try Google One Tap first
+  if (typeof google !== 'undefined' && google.accounts) {
+    google.accounts.id.initialize({
+      client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+      callback: (response) => {
+        try {
+          const payload = JSON.parse(atob(response.credential.split('.')[1]));
+          doLogin({ email: payload.email, name: payload.name, picture: payload.picture });
+        } catch(e) { toast('Login failed. Try Demo.', 'err'); }
+      },
+      auto_select: false,
+      cancel_on_tap_outside: true
+    });
+    google.accounts.id.prompt((notification) => {
+      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+        // Fallback to email input on mobile
+        mobileEmailLogin();
+      }
+    });
+  } else {
+    mobileEmailLogin();
+  }
+}
+
+function mobileEmailLogin() {
+  const email = prompt('Enter your Google email to sign in:');
+  if (!email?.includes('@')) { toast('Invalid email', 'err'); return; }
+  const name = email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  doLogin({ email, name, picture: null });
 }
 function demoLogin() { doLogin({ email: 'admin@labstock.demo', name: 'Lab Admin', picture: null }); }
 
