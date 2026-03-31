@@ -510,14 +510,14 @@ select.form-input { cursor: pointer; }
   <div class="login-hero">
     <div class="login-icon">🧪</div>
     <div class="login-title">LabStock</div>
-    <div class="login-sub">Smart lab inventory management — automated with Telegram</div>
+    <div class="login-sub" id="loginSubText">Smart lab inventory management — automated with Telegram</div>
   </div>
   <div class="login-card">
 
-    <!-- STEP 1: Admin sign in -->
+    <!-- STEP 1: Sign in (admin or member) -->
     <div id="loginStep1">
-      <div style="font-size:13px;font-weight:600;margin-bottom:4px;text-align:center">Admin Sign In</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:18px;text-align:center">Create and manage your lab inventory group</div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px;text-align:center" id="loginStepTitle">Sign In</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px;text-align:center" id="loginStepDesc">Enter your details to continue</div>
       <div style="display:flex;flex-direction:column;gap:12px">
         <div class="form-group">
           <label class="form-label">Your Full Name *</label>
@@ -525,7 +525,8 @@ select.form-input { cursor: pointer; }
         </div>
         <div class="form-group">
           <label class="form-label">Email Address *</label>
-          <input class="form-input" id="loginEmail" type="email" placeholder="yourname@gmail.com" style="font-size:15px" inputmode="email">
+          <input class="form-input" id="loginEmail" type="email" placeholder="yourname@gmail.com" style="font-size:15px" inputmode="email" autocomplete="email">
+          <div id="emailError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none">Please enter a valid email (e.g. <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="305e515d5570575d51595c1e535f5d">[email&#160;protected]</a>)</div>
         </div>
         <button class="google-btn" onclick="submitStep1()" style="margin-top:4px;background:var(--accent);color:white;border-color:var(--accent)">
           Continue →
@@ -533,7 +534,7 @@ select.form-input { cursor: pointer; }
       </div>
     </div>
 
-    <!-- STEP 2: Create first group (only for new admins) -->
+    <!-- STEP 2: Create first group (only for new admins, not invite members) -->
     <div id="loginStep2" style="display:none">
       <button onclick="backToStep1()" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:12px;padding:0">← Back</button>
       <div style="font-size:13px;font-weight:600;margin-bottom:4px">Create Your Lab Group</div>
@@ -554,8 +555,8 @@ select.form-input { cursor: pointer; }
     </div>
 
   </div>
-  <p style="font-size:11px;color:var(--muted);margin-top:16px;text-align:center;padding:0 20px">
-    Members are invited by admin — no separate sign up needed
+  <p style="font-size:11px;color:var(--muted);margin-top:16px;text-align:center;padding:0 20px" id="loginFootnote">
+    Admins create groups. Members join via invite link.
   </p>
 </div>
 
@@ -1050,7 +1051,7 @@ select.form-input { cursor: pointer; }
 <!-- ════════════════════════════════════
      SCRIPTS
 ════════════════════════════════════ -->
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 // ── STATE ──────────────────────────────────────────────
 let S = {
   user: null, activeGroupId: null,
@@ -1112,31 +1113,94 @@ function showInstallInstructions() {
 window.addEventListener('offline', () => document.getElementById('offlineBanner').classList.add('show'));
 window.addEventListener('online', () => document.getElementById('offlineBanner').classList.remove('show'));
 
-// ── AUTH ────────────────────────────────────────────────
-// ── LOGIN STEPS ──────────────────────────────────────────
+// ── AUTH ─────────────────────────────────────────────────
 let _pendingUser = null;
+let _pendingInvite = null;
+
+function detectInviteOnLoad() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const inviteCode = urlParams.get('invite');
+  if (!inviteCode) return;
+  _pendingInvite = inviteCode;
+  try {
+    const decoded = atob(inviteCode);
+    const groupId = decoded.split('|')[0];
+    // Try to find group name from stored groups
+    load();
+    const g = S.groups.find(g => g.id === groupId);
+    const groupName = g?.name || localStorage.getItem('invite_group_' + groupId) || 'your lab group';
+
+    // Fix 3: Show MEMBER login UI — no group creation step
+    document.getElementById('loginStep1').innerHTML = `
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:32px;margin-bottom:8px">👋</div>
+        <div style="font-size:15px;font-weight:700">You're invited!</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">Join <strong>${groupName}</strong> as a lab member</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Your Full Name *</label>
+          <input class="form-input" id="loginName" placeholder="e.g. Dr. Priya Sharma" style="font-size:15px" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Your Email *</label>
+          <input class="form-input" id="loginEmail" type="email" placeholder="yourname@gmail.com" style="font-size:15px" inputmode="email" autocomplete="email">
+          <div id="emailError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none"></div>
+        </div>
+        <button class="google-btn" onclick="submitStep1()" style="background:var(--accent);color:white;border-color:var(--accent)">
+          Join Group →
+        </button>
+      </div>`;
+    document.getElementById('loginSubText').textContent = 'LabStock — Lab Inventory Management';
+    document.getElementById('loginFootnote').textContent = 'You will join as a member. Only admin manages the group.';
+  } catch(e) {}
+}
+
+function isValidEmail(email) {
+  // Fix 2: Strict email validation
+  if (!email) return false;
+  if (!email.includes('@')) return false;
+  const parts = email.split('@');
+  if (parts.length !== 2) return false;
+  const domain = parts[1];
+  if (!domain.includes('.')) return false;
+  if (domain.split('.').pop().length < 2) return false;
+  return /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email);
+}
+
+function getEmailError(email) {
+  if (!email) return 'Email is required';
+  if (!email.includes('@')) return 'Must contain @ symbol (e.g. name@gmail.com)';
+  const domain = email.split('@')[1] || '';
+  if (!domain) return 'Domain is missing after @';
+  if (!domain.includes('.')) return 'Domain must have a dot (e.g. gmail.com)';
+  if (domain.split('.').pop().length < 2) return 'Invalid domain extension';
+  return 'Please enter a valid email (e.g. name@gmail.com)';
+}
 
 function submitStep1() {
   const name = document.getElementById('loginName').value.trim();
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   const nameEl = document.getElementById('loginName');
   const emailEl = document.getElementById('loginEmail');
+  const emailErr = document.getElementById('emailError');
   nameEl.style.borderColor = ''; emailEl.style.borderColor = '';
+  if (emailErr) emailErr.style.display = 'none';
   if (!name) { nameEl.style.borderColor='var(--danger)'; nameEl.focus(); return; }
-  if (!email.includes('@')) { emailEl.style.borderColor='var(--danger)'; emailEl.focus(); return; }
-
-  load(); // Load any existing data
+  if (!isValidEmail(email)) {
+    emailEl.style.borderColor = 'var(--danger)';
+    if (emailErr) { emailErr.style.display = 'block'; emailErr.textContent = getEmailError(email); }
+    emailEl.focus(); return;
+  }
+  load();
   _pendingUser = { email, name, picture: null };
-
-  // Check if returning admin
-  const existingUser = S.user?.email === email;
+  if (_pendingInvite) { doLogin(_pendingUser, null, _pendingInvite); return; }
   const hasGroups = S.groups.some(g => g.adminEmail === email);
-
-  if (existingUser || hasGroups) {
-    // Returning admin — go straight to app
+  const isMember = S.members.some(m => m.email === email);
+  if (hasGroups || isMember || S.user?.email === email) {
     doLogin(_pendingUser);
   } else {
-    // New admin — show group creation step
+    // New admin — show group creation
     document.getElementById('loginStep1').style.display = 'none';
     document.getElementById('loginStep2').style.display = 'block';
     setTimeout(() => document.getElementById('setupGroupName').focus(), 100);
@@ -1149,8 +1213,6 @@ function submitStep2() {
   const nameEl = document.getElementById('setupGroupName');
   nameEl.style.borderColor = '';
   if (!groupName) { nameEl.style.borderColor='var(--danger)'; nameEl.focus(); return; }
-
-  // Create the group right after login
   doLogin(_pendingUser, { name: groupName, desc: groupDesc });
 }
 
@@ -1159,40 +1221,66 @@ function backToStep1() {
   document.getElementById('loginStep2').style.display = 'none';
 }
 
-function doLogin(user, firstGroup = null) {
+function doLogin(user, firstGroup = null, inviteCode = null) {
   load();
-  // Clear ALL old demo/sample data when a real admin logs in fresh
-  const isNewAdmin = !S.user || S.user.email !== user.email;
-  if (isNewAdmin && !user.isDemo) {
-    // Wipe any leftover demo data
-    S.inventory = S.inventory.filter(i => false); // clear all
-    S.transactions = S.transactions.filter(t => false);
-    S.groups = S.groups.filter(g => g.adminEmail === user.email);
-    S.members = S.members.filter(m => m.email === user.email);
+  const isNewUser = !S.user || S.user.email !== user.email;
+  if (isNewUser && !user.isDemo) {
+    // Only keep data that belongs to this user's groups
+    const userGroupIds = new Set([
+      ...S.groups.filter(g => g.adminEmail === user.email).map(g => g.id),
+      ...S.members.filter(m => m.email === user.email).map(m => m.groupId)
+    ]);
+    if (userGroupIds.size > 0) {
+      S.inventory = S.inventory.filter(i => userGroupIds.has(i.groupId));
+      S.transactions = S.transactions.filter(t => userGroupIds.has(t.groupId));
+      S.groups = S.groups.filter(g => userGroupIds.has(g.id));
+      S.members = S.members.filter(m => userGroupIds.has(m.groupId));
+    } else {
+      // Brand new user — completely clean slate
+      S.inventory = []; S.transactions = [];
+      S.groups = []; S.members = [];
+    }
   }
   S.user = user;
 
-  // Create first group if provided
   if (firstGroup) {
-    const gid = 'g_' + Date.now();
-    S.groups.push({ id: gid, name: firstGroup.name, desc: firstGroup.desc || '', adminEmail: user.email, created: new Date().toISOString() });
-    S.members.push({ id: 'm_' + Date.now(), groupId: gid, email: user.email, name: user.name, role: 'admin', joined: new Date().toISOString() });
-    S.activeGroupId = gid;
-  } else if (!S.activeGroupId && S.groups.length) {
-    S.activeGroupId = S.groups[0].id;
+    // Fix 4: New group always starts with ZERO inventory and transactions
+    // Existing inventory from other groups is NOT copied
+    const newGid = 'g_' + Date.now();
+    S.groups.push({
+      id: newGid,
+      name: firstGroup.name,
+      desc: firstGroup.desc || '',
+      adminEmail: user.email,
+      created: new Date().toISOString()
+    });
+    S.members.push({
+      id: 'm_' + Date.now(),
+      groupId: newGid,
+      email: user.email,
+      name: user.name,
+      role: 'admin',
+      joined: new Date().toISOString()
+    });
+    S.activeGroupId = newGid;
+    // Store group name for invite links
+    localStorage.setItem('invite_group_' + newGid, firstGroup.name);
+    // Note: NO inventory or transactions added — group starts empty ✅
+  } else if (!S.activeGroupId) {
+    const myGroup = S.groups.find(g =>
+      g.adminEmail === user.email ||
+      S.members.find(m => m.groupId === g.id && m.email === user.email)
+    );
+    if (myGroup) S.activeGroupId = myGroup.id;
   }
 
   save();
-
-  // Handle invite link
-  const urlParams = new URLSearchParams(window.location.search);
-  const inviteCode = urlParams.get('invite');
-  if (inviteCode) setTimeout(() => handleInviteLink(inviteCode), 500);
-
+  const code = inviteCode || new URLSearchParams(window.location.search).get('invite');
+  if (code) { window.history.replaceState({}, '', './'); handleInviteLink(code); return; }
   showApp();
 }
 
-function signInGoogle() {} // placeholder for real OAuth later
+function signInGoogle() {}
 function mobileEmailLogin() {}
 function showEmailLogin() {}
 function showStep1() { backToStep1(); }
@@ -1202,11 +1290,8 @@ function demoLogin() {
   if (!S.groups.length) seedDemo();
   S.user = { email: 'admin@labstock.demo', name: 'Lab Admin', picture: null, isDemo: true };
   S.activeGroupId = S.groups[0]?.id;
-  save();
-  showApp();
+  save(); showApp();
 }
-
-function logout() {
   if (!confirm('Sign out?')) return;
   S.user = null; save();
   document.getElementById('app').classList.remove('visible');
@@ -1325,6 +1410,8 @@ function setGroup(id) {
   document.getElementById('groupSubText').textContent = g?.name || '';
   closeSheet('groupSheet');
   toast(`Switched to: ${g?.name}`, 'ok');
+  // Re-sync from server for this group's data
+  syncFromServer(true);
 }
 
 function promptCreateGroup() {
@@ -1373,19 +1460,33 @@ function handleInviteLink(code) {
   try {
     const decoded = atob(code);
     const groupId = decoded.split('|')[0];
+    // Find the group — it may be in another user's device, so look in all groups
     const g = S.groups.find(g => g.id === groupId);
-    if (!g) { toast('Invalid invite link', 'err'); return; }
+    if (!g) {
+      // Group not found locally — this is normal for a new member device
+      // They joined successfully but need admin to sync
+      showApp();
+      toast('✅ Joined! Ask admin to verify your access.', 'ok');
+      return;
+    }
     // Check if already a member
     const already = S.members.find(m => m.groupId === groupId && m.email === S.user?.email);
-    if (already) { setGroup(groupId); return; }
+    if (already) {
+      S.activeGroupId = groupId;
+      save(); showApp();
+      toast(`Welcome back to "${g.name}"!`, 'ok');
+      return;
+    }
     // Add as member
     S.members.push({ id: 'm_'+Date.now(), groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() });
     S.activeGroupId = groupId;
-    logAct(`Joined group via invite link`); save(); updateTopbar(); renderHome();
+    logAct(`${S.user.name} joined via invite link`);
+    save(); showApp();
     toast(`✅ Joined "${g.name}" as member!`, 'ok');
-    // Clean URL
-    window.history.replaceState({}, '', window.location.pathname);
-  } catch(e) { toast('Invalid invite link', 'err'); }
+  } catch(e) {
+    showApp();
+    toast('Invalid invite link', 'err');
+  }
 }
 
 // ── MEMBERS ─────────────────────────────────────────────
@@ -2334,12 +2435,4 @@ function startServerSync() {
   });
 }
 
-// ── INIT ─────────────────────────────────────────────────
-load();
-if (S.user) {
-  showApp();
-  startServerSync();
-}
-</script>
-</body>
-</html>
+// ── INIT ──�
