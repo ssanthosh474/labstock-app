@@ -545,6 +545,7 @@ select.form-input { cursor: pointer; }
         <button class="google-btn" onclick="submitStep1()" style="background:var(--accent);color:white;border-color:var(--accent)">
           Continue &#8594;
         </button>
+          <div id="gSignInBtn" style="display:none"></div>
       </div>
     </div>
 
@@ -1303,9 +1304,9 @@ function signInGoogle() {
   // ── REAL GOOGLE OAUTH ──
   // Replace 'YOUR_CLIENT_ID' with your actual Client ID from Google Cloud Console
   // See Google-OAuth-Setup.md for full instructions
-  const CLIENT_ID = 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com';
+  const CLIENT_ID = '629944900273-5ub8581429gkmg3b4uce1t41hfbpoat4.apps.googleusercontent.com.apps.googleusercontent.com';
 
-  if (CLIENT_ID.startsWith('YOUR_CLIENT_ID')) {
+  if (CLIENT_ID.startsWith('629944900273-5ub8581429gkmg3b4uce1t41hfbpoat4.apps.googleusercontent.com')) {
     // OAuth not configured yet — show email login form
     showEmailLogin();
     return;
@@ -1318,7 +1319,7 @@ function signInGoogle() {
   }
 
   google.accounts.id.initialize({
-    client_id: CLIENT_ID,
+    client_id: 629944900273-5ub8581429gkmg3b4uce1t41hfbpoat4.apps.googleusercontent.com,
     callback: function(response) {
       try {
         const parts = response.credential.split('.');
