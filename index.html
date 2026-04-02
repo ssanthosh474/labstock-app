@@ -11,7 +11,204 @@
 <meta name="apple-mobile-web-app-title" content="LabStock">
 <meta name="theme-color" content="#2d6a4f">
 <meta name="description" content="Lab inventory management with Telegram bot integration">
+<script>
+   // ── AUTH ─────────────────────────────────────────────────
+let _pendingUser = null;
+let _pendingInvite = null;
 
+function detectInviteOnLoad() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const inviteCode = urlParams.get('invite');
+  if (!inviteCode) return;
+  _pendingInvite = inviteCode;
+  try {
+    const decoded = atob(inviteCode);
+    const groupId = decoded.split('|')[0];
+    // Try to find group name from stored groups
+    load();
+    const g = S.groups.find(g => g.id === groupId);
+    const groupName = g?.name || localStorage.getItem('invite_group_' + groupId) || 'your lab group';
+
+    // Fix 3: Show MEMBER login UI — no group creation step
+    document.getElementById('loginStep1').innerHTML = `
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:32px;margin-bottom:8px">👋</div>
+        <div style="font-size:15px;font-weight:700">You're invited!</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">Join <strong>${groupName}</strong> as a lab member</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Your Full Name *</label>
+          <input class="form-input" id="loginName" placeholder="e.g. Dr. Priya Sharma" style="font-size:15px" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Your Email *</label>
+          <input class="form-input" id="loginEmail" type="email" placeholder="yourname@gmail.com" style="font-size:15px" inputmode="email" autocomplete="email">
+          <div id="emailError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none"></div>
+        </div>
+        <button class="google-btn" onclick="submitStep1()" style="background:var(--accent);color:white;border-color:var(--accent)">
+          Join Group →
+        </button>
+      </div>`;
+    document.getElementById('loginSubText').textContent = 'LabStock — Lab Inventory Management';
+    document.getElementById('loginFootnote').textContent = 'You will join as a member. Only admin manages the group.';
+  } catch(e) {}
+}
+
+function isValidEmail(email) {
+  // Fix 2: Strict email validation
+  if (!email) return false;
+  if (!email.includes('@')) return false;
+  const parts = email.split('@');
+  if (parts.length !== 2) return false;
+  const domain = parts[1];
+  if (!domain.includes('.')) return false;
+  if (domain.split('.').pop().length < 2) return false;
+  return /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email);
+}
+
+function getEmailError(email) {
+  if (!email) return 'Email is required';
+  if (!email.includes('@')) return 'Must contain @ symbol (e.g. name@gmail.com)';
+  const domain = email.split('@')[1] || '';
+  if (!domain) return 'Domain is missing after @';
+  if (!domain.includes('.')) return 'Domain must have a dot (e.g. gmail.com)';
+  if (domain.split('.').pop().length < 2) return 'Invalid domain extension';
+  return 'Please enter a valid email (e.g. name@gmail.com)';
+}
+
+function submitStep1() {
+  const name = document.getElementById('loginName').value.trim();
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const nameEl = document.getElementById('loginName');
+  const emailEl = document.getElementById('loginEmail');
+  const emailErr = document.getElementById('emailError');
+  nameEl.style.borderColor = ''; emailEl.style.borderColor = '';
+  if (emailErr) emailErr.style.display = 'none';
+  if (!name) { nameEl.style.borderColor='var(--danger)'; nameEl.focus(); return; }
+  if (!isValidEmail(email)) {
+    emailEl.style.borderColor = 'var(--danger)';
+    if (emailErr) { emailErr.style.display = 'block'; emailErr.textContent = getEmailError(email); }
+    emailEl.focus(); return;
+  }
+  load();
+  _pendingUser = { email, name, picture: null };
+  if (_pendingInvite) { doLogin(_pendingUser, null, _pendingInvite); return; }
+  const hasGroups = S.groups.some(g => g.adminEmail === email);
+  const isMember = S.members.some(m => m.email === email);
+  if (hasGroups || isMember || S.user?.email === email) {
+    doLogin(_pendingUser);
+  } else {
+    // New admin — show group creation
+    document.getElementById('loginStep1').style.display = 'none';
+    document.getElementById('loginStep2').style.display = 'block';
+    setTimeout(() => document.getElementById('setupGroupName').focus(), 100);
+  }
+}
+
+function submitStep2() {
+  const groupName = document.getElementById('setupGroupName').value.trim();
+  const groupDesc = document.getElementById('setupGroupDesc').value.trim();
+  const nameEl = document.getElementById('setupGroupName');
+  nameEl.style.borderColor = '';
+  if (!groupName) { nameEl.style.borderColor='var(--danger)'; nameEl.focus(); return; }
+  doLogin(_pendingUser, { name: groupName, desc: groupDesc });
+}
+
+function backToStep1() {
+  document.getElementById('loginStep1').style.display = 'block';
+  document.getElementById('loginStep2').style.display = 'none';
+}
+
+function doLogin(user, firstGroup = null, inviteCode = null) {
+  load();
+  const isNewUser = !S.user || S.user.email !== user.email;
+  if (isNewUser && !user.isDemo) {
+    // Only keep data that belongs to this user's groups
+    const userGroupIds = new Set([
+      ...S.groups.filter(g => g.adminEmail === user.email).map(g => g.id),
+      ...S.members.filter(m => m.email === user.email).map(m => m.groupId)
+    ]);
+    if (userGroupIds.size > 0) {
+      S.inventory = S.inventory.filter(i => userGroupIds.has(i.groupId));
+      S.transactions = S.transactions.filter(t => userGroupIds.has(t.groupId));
+      S.groups = S.groups.filter(g => userGroupIds.has(g.id));
+      S.members = S.members.filter(m => userGroupIds.has(m.groupId));
+    } else {
+      // Brand new user — completely clean slate
+      S.inventory = []; S.transactions = [];
+      S.groups = []; S.members = [];
+    }
+  }
+  S.user = user;
+
+  if (firstGroup) {
+    // Fix 4: New group always starts with ZERO inventory and transactions
+    // Existing inventory from other groups is NOT copied
+    const newGid = 'g_' + Date.now();
+    S.groups.push({
+      id: newGid,
+      name: firstGroup.name,
+      desc: firstGroup.desc || '',
+      adminEmail: user.email,
+      created: new Date().toISOString()
+    });
+    S.members.push({
+      id: 'm_' + Date.now(),
+      groupId: newGid,
+      email: user.email,
+      name: user.name,
+      role: 'admin',
+      joined: new Date().toISOString()
+    });
+    S.activeGroupId = newGid;
+    // Store group name for invite links
+    localStorage.setItem('invite_group_' + newGid, firstGroup.name);
+    // Note: NO inventory or transactions added — group starts empty ✅
+  } else if (!S.activeGroupId) {
+    const myGroup = S.groups.find(g =>
+      g.adminEmail === user.email ||
+      S.members.find(m => m.groupId === g.id && m.email === user.email)
+    );
+    if (myGroup) S.activeGroupId = myGroup.id;
+  }
+
+  save();
+  const code = inviteCode || new URLSearchParams(window.location.search).get('invite');
+  if (code) { window.history.replaceState({}, '', './'); handleInviteLink(code); return; }
+  showApp();
+}
+
+function signInGoogle() {}
+function mobileEmailLogin() {}
+function showEmailLogin() {}
+function showStep1() { backToStep1(); }
+function submitEmailLogin() { submitStep1(); }
+function demoLogin() {
+  load();
+  if (!S.groups.length) seedDemo();
+  S.user = { email: 'admin@labstock.demo', name: 'Lab Admin', picture: null, isDemo: true };
+  S.activeGroupId = S.groups[0]?.id;
+  save(); showApp();
+}
+  if (!confirm('Sign out?')) return;
+  S.user = null; save();
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('loginScreen').style.display = 'flex';
+  closeSheet('profileSheet');
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  updateTopbar();
+  loadSettings();
+  renderHome();
+  updateAlertBadge();
+  // Start syncing from Railway server
+  setTimeout(startServerSync, 1000);
+}
+</script>
 <title>LabStock</title>
 
 <!-- PWA Manifest -->
