@@ -1369,7 +1369,7 @@ function demoLogin() {
   S.activeGroupId = S.groups[0]?.id;
   save(); showApp();
 }
-  if (!confirm('Sign out?')) return;
+  if (!confirm('Sign out?')) { return;
   S.user = null; save();
   document.getElementById('app').classList.remove('visible');
   document.getElementById('loginScreen').style.display = 'flex';
