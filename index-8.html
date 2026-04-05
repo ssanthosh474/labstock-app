@@ -1,0 +1,3788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://accounts.google.com; font-src https://fonts.gstatic.com; connect-src *; img-src 'self' data: https:; frame-src https://accounts.google.com;">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LabStock">
+<meta name="theme-color" content="#2d6a4f">
+<meta name="description" content="Lab inventory management with Telegram bot integration">
+
+<title>LabStock</title>
+
+<!-- PWA Manifest -->
+<link rel="manifest" href="manifest.json">
+
+<!-- Apple Touch Icons (inline SVG as base64 for single-file deployment) -->
+<link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj48cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjM0IiBmaWxsPSIjMmQ2YTRmIi8+PHRleHQgeD0iOTYiIHk9IjEyNSIgZm9udC1zaXplPSI5NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiPvCfpqY8L3RleHQ+PC9zdmc+">
+
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Mono:wght@400;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+// ── Minimal XLSX reader (no CDN needed) ──────────────────
+// Reads simple flat .xlsx files (no formulas, no merged cells needed)
+const MiniXLSX = (() => {
+  // Unzip: find a file by name in a ZIP ArrayBuffer, return its Uint8Array
+  function unzip(ab, target) {
+    const v = new DataView(ab);
+    const u = new Uint8Array(ab);
+    let i = ab.byteLength - 22;
+    // Find end-of-central-directory
+    while (i >= 0 && !(v.getUint32(i, true) === 0x06054b50)) i--;
+    const cdOffset = v.getUint32(i + 16, true);
+    const cdCount  = v.getUint16(i + 8,  true);
+    let pos = cdOffset;
+    for (let n = 0; n < cdCount; n++) {
+      const fnLen  = v.getUint16(pos + 28, true);
+      const exLen  = v.getUint16(pos + 30, true);
+      const cmLen  = v.getUint16(pos + 32, true);
+      const lhOff  = v.getUint32(pos + 42, true);
+      const fname  = new TextDecoder().decode(u.subarray(pos + 46, pos + 46 + fnLen));
+      if (fname === target) {
+        const lhExLen = v.getUint16(lhOff + 28, true);
+        const lhFnLen = v.getUint16(lhOff + 26, true);
+        const dataOff = lhOff + 30 + lhFnLen + lhExLen;
+        const compSize = v.getUint32(pos + 20, true);
+        const comp     = v.getUint16(pos + 10, true);
+        const raw = u.subarray(dataOff, dataOff + compSize);
+        if (comp === 0) return raw; // stored
+        if (comp === 8) return inflate(raw); // deflate
+        return null;
+      }
+      pos += 46 + fnLen + exLen + cmLen;
+    }
+    return null;
+  }
+
+  // Tiny inflate (deflate decompression) for XLSX zip entries
+  function inflate(data) {
+    // Use DecompressionStream if available (Chrome 80+, Firefox 113+)
+    // Fallback handled in caller
+    return data; // placeholder — replaced below
+  }
+
+  function inflateSync(compressed) {
+    try {
+      // Use pako-style raw inflate via DecompressionStream
+      const ds = new DecompressionStream('deflate-raw');
+      const writer = ds.writable.getWriter();
+      const reader = ds.readable.getReader();
+      writer.write(compressed);
+      writer.close();
+      const chunks = [];
+      let done = false;
+      // Read synchronously via async trick — not truly sync, so we do it async below
+      return null; // signal to use async path
+    } catch(e) { return null; }
+  }
+
+  async function inflateAsync(compressed) {
+    const ds = new DecompressionStream('deflate-raw');
+    const writer = ds.writable.getWriter();
+    const reader = ds.readable.getReader();
+    writer.write(compressed);
+    writer.close();
+    const chunks = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    let total = 0; chunks.forEach(c => total += c.length);
+    const out = new Uint8Array(total); let off = 0;
+    chunks.forEach(c => { out.set(c, off); off += c.length; });
+    return out;
+  }
+
+  async function unzipAsync(ab, target) {
+    const v = new DataView(ab);
+    const u = new Uint8Array(ab);
+    let i = ab.byteLength - 22;
+    while (i >= 0 && !(v.getUint32(i, true) === 0x06054b50)) i--;
+    const cdOffset = v.getUint32(i + 16, true);
+    const cdCount  = v.getUint16(i + 8,  true);
+    let pos = cdOffset;
+    for (let n = 0; n < cdCount; n++) {
+      const fnLen  = v.getUint16(pos + 28, true);
+      const exLen  = v.getUint16(pos + 30, true);
+      const cmLen  = v.getUint16(pos + 32, true);
+      const lhOff  = v.getUint32(pos + 42, true);
+      const fname  = new TextDecoder().decode(u.subarray(pos + 46, pos + 46 + fnLen));
+      if (fname === target) {
+        const lhExLen = v.getUint16(lhOff + 28, true);
+        const lhFnLen = v.getUint16(lhOff + 26, true);
+        const dataOff = lhOff + 30 + lhFnLen + lhExLen;
+        const compSize = v.getUint32(pos + 20, true);
+        const comp     = v.getUint16(pos + 10, true);
+        const raw = u.subarray(dataOff, dataOff + compSize);
+        if (comp === 0) return raw;
+        if (comp === 8) return await inflateAsync(raw);
+        return null;
+      }
+      pos += 46 + fnLen + exLen + cmLen;
+    }
+    return null;
+  }
+
+  function parseXML(text) {
+    return new DOMParser().parseFromString(text, 'text/xml');
+  }
+
+  function cellValue(c, sharedStrings) {
+    const t = c.getAttribute('t');
+    const v = c.querySelector('v');
+    if (!v) return '';
+    if (t === 's') return sharedStrings[parseInt(v.textContent)] || '';
+    if (t === 'b') return v.textContent === '1' ? 'TRUE' : 'FALSE';
+    return v.textContent;
+  }
+
+  function colIndex(ref) {
+    const m = ref.match(/^([A-Z]+)/);
+    if (!m) return 0;
+    let n = 0;
+    for (const ch of m[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
+    return n - 1;
+  }
+
+  async function read(arrayBuffer) {
+    const dec = new TextDecoder();
+
+    // Shared strings
+    const ssRaw = await unzipAsync(arrayBuffer, 'xl/sharedStrings.xml');
+    const sharedStrings = [];
+    if (ssRaw) {
+      const ssXml = parseXML(dec.decode(ssRaw));
+      ssXml.querySelectorAll('si').forEach(si => {
+        // Concatenate all <t> text
+        const ts = si.querySelectorAll('t');
+        sharedStrings.push([...ts].map(t => t.textContent).join(''));
+      });
+    }
+
+    // Sheet1
+    const wsRaw = await unzipAsync(arrayBuffer, 'xl/worksheets/sheet1.xml');
+    if (!wsRaw) throw new Error('No sheet1.xml');
+    const wsXml = parseXML(dec.decode(wsRaw));
+
+    const rows = [];
+    wsXml.querySelectorAll('row').forEach(row => {
+      const cells = row.querySelectorAll('c');
+      const rowArr = [];
+      let maxCol = 0;
+      cells.forEach(c => {
+        const ref = c.getAttribute('r') || '';
+        const ci = colIndex(ref);
+        maxCol = Math.max(maxCol, ci);
+        while (rowArr.length <= ci) rowArr.push('');
+        rowArr[ci] = cellValue(c, sharedStrings);
+      });
+      rows.push(rowArr);
+    });
+
+    return rows; // array of arrays
+  }
+
+  return { read };
+})();
+</script>
+
+<style>
+/* ════════════════════════════════════════
+   CSS VARIABLES & RESET
+════════════════════════════════════════ */
+:root {
+  --bg: #f5f3ee;
+  --surface: #ffffff;
+  --surface2: #f0ede7;
+  --border: #e2ddd6;
+  --accent: #2d6a4f;
+  --accent-l: #52b788;
+  --accent-bg: #d8f3dc;
+  --danger: #c1121f;
+  --danger-bg: #ffe5e7;
+  --warn: #e07a00;
+  --warn-bg: #fff3cd;
+  --text: #1a1a1a;
+  --text2: #555;
+  --muted: #999;
+  --shadow: 0 2px 16px rgba(0,0,0,0.09);
+  --shadow-lg: 0 8px 40px rgba(0,0,0,0.16);
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Syne', sans-serif;
+  --body: 'Outfit', sans-serif;
+  --r: 14px;
+  --r-sm: 9px;
+  --bottom-nav-h: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html { height: 100%; overscroll-behavior: none; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ════════════════════════════════════════
+   INSTALL BANNER
+════════════════════════════════════════ */
+#installBanner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 500;
+  background: var(--accent);
+  color: white;
+  padding: 12px 16px;
+  padding-top: calc(12px + var(--safe-top));
+  display: none;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow);
+  animation: slideDown .3s ease;
+}
+@keyframes slideDown { from{transform:translateY(-100%)} to{transform:translateY(0)} }
+#installBanner.show { display: flex; }
+.install-text { flex: 1; font-size: 13px; font-weight: 500; }
+.install-text strong { display: block; font-size: 14px; }
+.install-btn {
+  background: white; color: var(--accent);
+  border: none; border-radius: 20px;
+  padding: 7px 16px; font-size: 13px; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+}
+.install-dismiss { background: none; border: none; color: rgba(255,255,255,.7); font-size: 20px; cursor: pointer; padding: 4px; }
+
+/* ════════════════════════════════════════
+   OFFLINE BANNER
+════════════════════════════════════════ */
+#offlineBanner {
+  position: fixed; bottom: calc(var(--bottom-nav-h) + var(--safe-bottom)); left: 0; right: 0;
+  background: var(--warn); color: white;
+  padding: 10px 16px; text-align: center;
+  font-size: 13px; font-weight: 600;
+  display: none; z-index: 400;
+}
+#offlineBanner.show { display: block; }
+
+/* ════════════════════════════════════════
+   LOGIN SCREEN
+════════════════════════════════════════ */
+#loginScreen {
+  position: fixed; inset: 0; z-index: 300;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 24px;
+  padding-top: calc(24px + var(--safe-top));
+}
+
+.login-hero {
+  text-align: center; margin-bottom: 40px;
+}
+.login-icon {
+  width: 80px; height: 80px;
+  background: var(--accent); border-radius: 24px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 42px; margin: 0 auto 20px;
+  box-shadow: 0 8px 32px rgba(45,106,79,.35);
+}
+.login-title { font-family: var(--display); font-size: 30px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+.login-sub { font-size: 15px; color: var(--text2); line-height: 1.5; }
+
+.login-card {
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 28px 24px;
+  width: 100%; max-width: 360px;
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 15px; border-radius: var(--r);
+  background: var(--surface); border: 1.5px solid var(--border);
+  font-family: var(--body); font-size: 15px; font-weight: 600; color: var(--text);
+  cursor: pointer; transition: all .2s; width: 100%;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.google-btn:active { background: var(--surface2); transform: scale(.98); }
+
+.divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.demo-btn {
+  padding: 15px; border-radius: var(--r);
+  background: var(--accent-bg); border: 1.5px solid var(--accent-l);
+  color: var(--accent); font-family: var(--body);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: all .2s; width: 100%;
+}
+.demo-btn:active { background: var(--accent); color: white; transform: scale(.98); }
+
+/* ════════════════════════════════════════
+   APP SHELL
+════════════════════════════════════════ */
+#app {
+  display: none;
+  position: fixed; inset: 0;
+  flex-direction: column;
+}
+#app.visible { display: flex; }
+
+/* Top bar */
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  padding-top: calc(12px + var(--safe-top));
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0; z-index: 10;
+}
+.topbar-left { display: flex; align-items: center; gap: 10px; }
+.topbar-logo { font-family: var(--display); font-size: 20px; font-weight: 800; color: var(--accent); }
+.topbar-group {
+  font-size: 11px; color: var(--muted);
+  background: var(--surface2); border-radius: 20px;
+  padding: 3px 10px; font-family: var(--mono);
+  max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+.topbar-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--accent); color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; cursor: pointer; overflow: hidden;
+  flex-shrink: 0;
+}
+.topbar-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Page scroll area */
+.page-scroll {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
+}
+
+/* Bottom navigation */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  height: calc(var(--bottom-nav-h) + var(--safe-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: flex-start;
+  padding-top: 8px;
+  padding-bottom: var(--safe-bottom);
+  z-index: 10;
+  box-shadow: 0 -4px 20px rgba(0,0,0,.06);
+}
+.nav-tab {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; gap: 3px;
+  padding: 4px 0;
+  cursor: pointer; transition: all .15s;
+  position: relative;
+}
+.nav-tab:active { transform: scale(.9); }
+.nav-icon { font-size: 22px; line-height: 1; }
+.nav-label { font-size: 10px; font-weight: 500; color: var(--muted); }
+.nav-tab.active .nav-label { color: var(--accent); font-weight: 700; }
+.nav-tab.active .nav-icon { transform: translateY(-2px); }
+.nav-badge {
+  position: absolute; top: 0; right: calc(50% - 18px);
+  background: var(--danger); color: white;
+  font-size: 9px; font-weight: 800;
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--surface);
+}
+
+/* FAB */
+.fab {
+  position: fixed;
+  bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
+  right: 20px;
+  width: 56px; height: 56px;
+  background: var(--accent); color: white;
+  border-radius: 18px; border: none;
+  font-size: 26px; cursor: pointer;
+  box-shadow: 0 4px 20px rgba(45,106,79,.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9; transition: all .2s;
+}
+.fab:active { transform: scale(.92); }
+
+/* ════════════════════════════════════════
+   PAGES
+════════════════════════════════════════ */
+.page { display: none; animation: pageIn .22s ease; }
+.page.active { display: block; }
+@keyframes pageIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+.page-pad { padding: 16px; }
+
+/* Section headers */
+.section-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.section-title { font-family: var(--display); font-size: 16px; font-weight: 700; }
+
+/* ── Cards ── */
+.card {
+  background: var(--surface);
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.card-hd {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.card-title { font-family: var(--display); font-size: 14px; font-weight: 700; }
+
+/* ── KPI row ── */
+.kpi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.kpi {
+  background: var(--surface); border-radius: var(--r); border: 1px solid var(--border);
+  padding: 16px 14px;
+}
+.kpi-label { font-size: 10px; font-family: var(--mono); color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+.kpi-val { font-family: var(--display); font-size: 28px; font-weight: 800; line-height: 1; }
+.kpi-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.kpi.c-accent .kpi-val { color: var(--accent); }
+.kpi.c-danger .kpi-val { color: var(--danger); }
+.kpi.c-warn .kpi-val { color: var(--warn); }
+.kpi.c-info .kpi-val { color: #1d6fa4; }
+
+/* ── List rows ── */
+.list-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--border);
+}
+.list-row:last-child { border-bottom: none; }
+.list-row:active { background: var(--surface2); }
+
+.row-icon {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.row-icon.in { background: var(--accent-bg); }
+.row-icon.out { background: var(--danger-bg); }
+.row-icon.warn { background: var(--warn-bg); }
+.row-icon.info { background: #e0f0fb; }
+
+.row-body { flex: 1; min-width: 0; }
+.row-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.row-right { text-align: right; flex-shrink: 0; }
+.row-val { font-family: var(--display); font-size: 18px; font-weight: 800; }
+.row-val.in { color: var(--accent); }
+.row-val.out { color: var(--danger); }
+.row-val.warn { color: var(--warn); }
+
+/* ── Stock bar ── */
+.stock-wrap { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.stock-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; max-width: 80px; }
+.stock-fill { height: 100%; border-radius: 2px; }
+.stock-num { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+
+/* ── Badges ── */
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 20px;
+  font-size: 10px; font-weight: 700; letter-spacing: .3px;
+}
+.bg-green { background: var(--accent-bg); color: var(--accent); }
+.bg-red { background: var(--danger-bg); color: var(--danger); }
+.bg-warn { background: var(--warn-bg); color: var(--warn); }
+.bg-gray { background: var(--surface2); color: var(--muted); }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 12px 20px; border-radius: var(--r-sm);
+  font-family: var(--body); font-size: 14px; font-weight: 600;
+  border: none; cursor: pointer; transition: all .15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: scale(.96); }
+.btn-primary { background: var(--accent); color: white; }
+.btn-ghost { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+.btn-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #ffc9cb; }
+.btn-full { width: 100%; }
+.btn-sm { padding: 8px 14px; font-size: 13px; }
+
+/* ════════════════════════════════════════
+   BOTTOM SHEET (Modal for mobile)
+════════════════════════════════════════ */
+.sheet-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,.45); backdrop-filter: blur(4px);
+  display: none; align-items: flex-end;
+}
+.sheet-overlay.open { display: flex; animation: fadeIn .18s; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+.sheet {
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+  width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  padding-bottom: calc(20px + var(--safe-bottom));
+  animation: sheetUp .25s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+
+.sheet-handle {
+  width: 40px; height: 4px; background: var(--border);
+  border-radius: 2px; margin: 12px auto 0;
+}
+.sheet-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.sheet-title { font-family: var(--display); font-size: 17px; font-weight: 700; }
+.sheet-close { background: none; border: none; font-size: 22px; color: var(--muted); cursor: pointer; padding: 2px; }
+.sheet-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.sheet-footer { padding: 12px 20px 0; display: flex; flex-direction: column; gap: 10px; }
+
+/* ── Form ── */
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: 1px; text-transform: uppercase; }
+.form-input {
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--r-sm); padding: 13px 14px;
+  font-family: var(--body); font-size: 15px; color: var(--text);
+  outline: none; transition: border-color .2s; width: 100%;
+  -webkit-appearance: none; appearance: none;
+}
+.form-input:focus { border-color: var(--accent); background: white; }
+.form-input::placeholder { color: var(--muted); }
+select.form-input { cursor: pointer; }
+
+/* Type toggle */
+.type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.type-btn {
+  padding: 13px; border-radius: var(--r-sm); border: 1.5px solid var(--border);
+  background: var(--surface2); font-family: var(--body);
+  font-size: 14px; font-weight: 700; cursor: pointer; transition: all .15s; color: var(--muted);
+}
+.type-btn.in-on { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-l); }
+.type-btn.out-on { background: var(--danger-bg); color: var(--danger); border-color: #ffc9cb; }
+
+/* ── Search ── */
+.search-wrap {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 40px; padding: 10px 14px; margin: 12px 16px 0;
+}
+.search-wrap input {
+  flex: 1; border: none; background: none; outline: none;
+  font-family: var(--body); font-size: 14px; color: var(--text);
+}
+.search-wrap input::placeholder { color: var(--muted); }
+
+/* ── Empty state ── */
+.empty { text-align: center; padding: 48px 20px; color: var(--muted); }
+.empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .3; }
+.empty p { font-size: 13px; }
+
+/* ── Info box ── */
+.info-box {
+  background: var(--accent-bg); border: 1px solid var(--accent-l);
+  border-radius: var(--r-sm); padding: 12px 14px;
+  font-size: 13px; color: #1e5c3f; line-height: 1.5;
+}
+
+/* ── Slack code box ── */
+.code-box {
+  background: #1a1d21; color: #abb2bf;
+  border-radius: var(--r-sm); padding: 14px 16px;
+  font-family: var(--mono); font-size: 13px; line-height: 1.8;
+}
+.code-box .k { color: #61afef; }
+.code-box .v { color: #98c379; }
+.code-box .c { color: #5c6370; font-style: italic; }
+
+/* ── Profile sheet ── */
+.profile-hero {
+  text-align: center; padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.profile-avatar {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--accent); color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; font-weight: 700; margin: 0 auto 12px; overflow: hidden;
+}
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.profile-name { font-family: var(--display); font-size: 18px; font-weight: 700; }
+.profile-email { font-size: 13px; color: var(--muted); margin-top: 3px; }
+.profile-role { margin-top: 8px; }
+
+/* ── Members ── */
+.member-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+.member-row:last-child { border-bottom: none; }
+.m-av { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
+.m-info { flex: 1; min-width: 0; }
+.m-name { font-weight: 600; font-size: 14px; }
+.m-email { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ════════════════════════════════════════
+   PRODUCT DETAIL PAGE
+════════════════════════════════════════ */
+#productPage {
+  position: fixed; inset: 0; z-index: 150;
+  background: var(--bg);
+  display: none; flex-direction: column;
+  transform: translateX(100%);
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
+}
+#productPage.open {
+  display: flex;
+  transform: translateX(0);
+}
+.product-topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  padding-top: calc(12px + var(--safe-top));
+  display: flex; align-items: center; gap: 12px;
+  flex-shrink: 0; z-index: 10;
+}
+.product-back {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; cursor: pointer; flex-shrink: 0;
+}
+.product-scroll {
+  flex: 1; overflow-y: auto;
+  padding-bottom: calc(100px + var(--safe-bottom));
+}
+.product-photo-wrap {
+  position: relative;
+  background: var(--surface2);
+  width: 100%; height: 220px;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.product-photo-wrap img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.product-photo-placeholder {
+  font-size: 72px; opacity: .25;
+}
+.product-photo-actions {
+  position: absolute; bottom: 10px; right: 10px;
+  display: flex; gap: 8px;
+}
+.photo-action-btn {
+  background: rgba(0,0,0,.55); color: white;
+  border: none; border-radius: 10px;
+  padding: 7px 12px; font-size: 12px; font-weight: 600;
+  cursor: pointer; backdrop-filter: blur(4px);
+  display: flex; align-items: center; gap: 5px;
+}
+.product-info { padding: 20px 16px 0; }
+.product-name {
+  font-family: var(--display); font-size: 22px; font-weight: 800;
+  line-height: 1.2; margin-bottom: 6px;
+}
+.product-code-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.product-meta-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; margin-bottom: 20px;
+}
+.product-meta-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 12px 14px;
+}
+.product-meta-label {
+  font-size: 10px; font-family: var(--mono); color: var(--muted);
+  letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px;
+}
+.product-meta-val { font-weight: 700; font-size: 15px; }
+.product-stock-big {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.product-stock-num {
+  font-family: var(--display); font-size: 42px; font-weight: 800; line-height: 1;
+}
+.product-stock-unit { font-size: 14px; color: var(--muted); margin-top: 4px; }
+.product-action-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  padding-bottom: calc(12px + var(--safe-bottom));
+  display: flex; gap: 10px; z-index: 10;
+}
+.btn-in {
+  flex: 1; padding: 16px;
+  background: #1b7a47; color: white;
+  border: none; border-radius: var(--r);
+  font-family: var(--body); font-size: 16px; font-weight: 700;
+  cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-in:active { transform: scale(.96); background: #155c36; }
+.btn-out {
+  flex: 1; padding: 16px;
+  background: #1565c0; color: white;
+  border: none; border-radius: var(--r);
+  font-family: var(--body); font-size: 16px; font-weight: 700;
+  cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-out:active { transform: scale(.96); background: #0d47a1; }
+.product-recent { padding: 0 16px; }
+.product-recent-title {
+  font-family: var(--display); font-size: 14px; font-weight: 700;
+  margin-bottom: 10px;
+}
+
+/* ── Toast ── */
+#toast {
+  position: fixed; top: calc(70px + var(--safe-top)); left: 16px; right: 16px;
+  background: var(--text); color: white; border-radius: var(--r);
+  padding: 13px 16px; font-size: 14px; font-weight: 500;
+  z-index: 999; box-shadow: var(--shadow-lg);
+  transform: translateY(-20px); opacity: 0;
+  transition: all .28s cubic-bezier(.34,1.56,.64,1);
+  display: flex; align-items: center; gap: 10px;
+}
+#toast.show { transform: translateY(0); opacity: 1; }
+#toast.ok { border-left: 4px solid var(--accent-l); }
+#toast.err { border-left: 4px solid var(--danger); }
+#toast.wrn { border-left: 4px solid var(--warn); }
+</style>
+</head>
+<body>
+
+<!-- ════════ INSTALL BANNER ════════ -->
+<div id="installBanner">
+  <span style="font-size:24px">🧪</span>
+  <div class="install-text">
+    <strong>Install LabStock</strong>
+    Add to home screen for app experience
+  </div>
+  <button class="install-btn" onclick="installApp()">Install</button>
+  <button class="install-dismiss" onclick="dismissInstall()">✕</button>
+</div>
+
+<!-- ════════ OFFLINE BANNER ════════ -->
+<div id="offlineBanner">📡 You're offline — changes saved locally</div>
+
+<!-- ════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════ -->
+<div id="loginScreen">
+  <div class="login-hero">
+    <div class="login-icon">&#x1F9EA;</div>
+    <div class="login-title">LabStock</div>
+    <div class="login-sub" id="loginSubText">Smart lab inventory &mdash; automated with Telegram</div>
+  </div>
+  <div class="login-card">
+
+    <!-- STEP 1: Sign In options -->
+    <div id="loginStep1">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px;text-align:center">Sign In</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px;text-align:center">All lab members sign in here</div>
+      <button class="google-btn" onclick="signInGoogle()">
+        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Sign in with Google
+      </button>
+      <div id="gSignInBtn" style="display:none"></div>
+      <div class="divider" style="margin:12px 0">or</div>
+      <button class="demo-btn" onclick="showEmailLogin()" style="font-size:14px">✉️ Sign in with Email</button>
+    </div>
+
+    <!-- STEP 1B: Email login (any user) -->
+    <div id="loginStep2Email" style="display:none">
+      <button onclick="document.getElementById('loginStep1').style.display='block';this.parentElement.style.display='none';" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:12px;padding:0">&#8592; Back</button>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">Sign In with Email</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Enter your details to continue</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Your Full Name *</label>
+          <input class="form-input" id="loginName" placeholder="e.g. Dr. Ravi Kumar" style="font-size:15px" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address *</label>
+          <input class="form-input" id="loginEmail" type="email" placeholder="yourname@gmail.com" style="font-size:15px" inputmode="email" autocomplete="email">
+          <div id="emailError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none">Please enter a valid email</div>
+        </div>
+        <button class="google-btn" onclick="submitStep1()" style="background:var(--accent);color:white;border-color:var(--accent)">
+          Continue &#8594;
+        </button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Create first group (first-time admin only) -->
+    <div id="loginStep2" style="display:none">
+      <button onclick="backToStep1()" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:12px;padding:0">&#8592; Back</button>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">Create Your Lab Group</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Set up your group — members can join after</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Group Name *</label>
+          <input class="form-input" id="setupGroupName" placeholder="e.g. Biochemistry Lab" style="font-size:15px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description (optional)</label>
+          <input class="form-input" id="setupGroupDesc" placeholder="e.g. Main research lab, Floor 3" style="font-size:15px">
+        </div>
+        <button class="google-btn" onclick="submitStep2()" style="background:var(--accent);color:white;border-color:var(--accent)">
+          &#x1F680; Create Group and Start
+        </button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Waiting room (user logged in but no group yet) -->
+    <div id="loginStepWaiting" style="display:none">
+      <div style="text-align:center;padding:8px 0 16px">
+        <div style="font-size:36px;margin-bottom:10px">⏳</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px">Waiting for access</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.6">You're signed in but not yet in a lab group.<br>Ask your admin to add you, or enter an invite code below.</div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label class="form-label">Have an invite code?</label>
+        <input class="form-input" id="manualInviteCode" placeholder="Paste invite link or code here" style="font-size:14px">
+      </div>
+      <button class="google-btn" onclick="applyManualInvite()" style="background:var(--accent);color:white;border-color:var(--accent);margin-bottom:10px">
+        Join Group &#8594;
+      </button>
+      <button style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;width:100%;text-align:center;padding:4px" onclick="logout()">Sign out</button>
+    </div>
+
+  </div>
+  <p style="font-size:11px;color:var(--muted);margin-top:16px;text-align:center;padding:0 20px" id="loginFootnote">
+    Sign in with Google or email. Members join via invite link.
+  </p>
+</div>
+
+<!-- ════════════════════════════════════
+     APP
+════════════════════════════════════ -->
+<div id="app">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">🧪 LabStock</div>
+      <div class="topbar-group" id="topbarGroup">No Group</div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-avatar" id="topbarAvatar" onclick="openSheet('profileSheet')">?</div>
+    </div>
+  </div>
+
+  <!-- Scrollable page area -->
+  <div class="page-scroll" id="pageScroll">
+
+    <!-- ══ HOME ══ -->
+    <div class="page active" id="pg-home">
+      <div class="page-pad">
+        <div class="kpi-row">
+          <div class="kpi c-accent"><div class="kpi-label">Items</div><div class="kpi-val" id="kpiItems">—</div><div class="kpi-sub">total</div></div>
+          <div class="kpi c-danger"><div class="kpi-label">Low Stock</div><div class="kpi-val" id="kpiLow">—</div><div class="kpi-sub">reorder</div></div>
+          <div class="kpi c-accent"><div class="kpi-label">In Today</div><div class="kpi-val" id="kpiIn">—</div><div class="kpi-sub">received</div></div>
+          <div class="kpi c-warn"><div class="kpi-label">Out Today</div><div class="kpi-val" id="kpiOut">—</div><div class="kpi-sub">issued</div></div>
+        </div>
+
+        <div class="section-hd">
+          <div class="section-title">Recent Activity</div>
+          <button class="btn btn-ghost btn-sm" onclick="switchTab('log')">See all</button>
+        </div>
+        <div class="card" id="homeRecent"></div>
+      </div>
+    </div>
+
+    <!-- ══ INVENTORY ══ -->
+    <div class="page" id="pg-inv">
+      <div class="search-wrap">
+        <span>🔍</span>
+        <input id="invSearch" placeholder="Search items..." oninput="renderInv()">
+      </div>
+      <div class="page-pad" style="padding-top:12px">
+        <div class="section-hd">
+          <div class="section-title">All Items</div>
+          <button class="btn btn-ghost btn-sm" onclick="openSheet('bulkSheet')">📥 Bulk</button>
+          <button class="btn btn-primary btn-sm" onclick="openSheet('addItemSheet')" id="btnAddItem">+ Add</button>
+        </div>
+        <div class="card" id="invList"></div>
+      </div>
+    </div>
+
+    <!-- ══ LOG ══ -->
+    <div class="page" id="pg-log">
+      <div class="search-wrap">
+        <span>🔍</span>
+        <input id="logSearch" placeholder="Search transactions..." oninput="renderLog()">
+      </div>
+      <div class="page-pad" style="padding-top:12px">
+        <div class="section-hd">
+          <div class="section-title">Transaction Log</div>
+          <button class="btn btn-ghost btn-sm" onclick="openSheet('exportSheet')" id="btnExport">⬇ Export</button>
+        </div>
+        <div class="card" id="logList"></div>
+      </div>
+    </div>
+
+    <!-- ══ SLACK ══ -->
+    <div class="page" id="pg-slack">
+      <div class="page-pad">
+        <div class="section-title" style="margin-bottom:12px">🤖 Telegram Bot Sync</div>
+        <div class="info-box" style="margin-bottom:14px">
+          Your Telegram bot is <strong>automatically syncing</strong> stock every 30 seconds. Team members just send messages to the bot — no manual action needed!
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-hd"><div class="card-title">✅ Live Sync Status</div></div>
+          <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px;font-size:14px">
+              <span style="width:10px;height:10px;background:var(--accent-l);border-radius:50%;display:inline-block;animation:pulse 2s infinite"></span>
+              Auto-syncing from Railway server every 30 seconds
+            </div>
+            <button class="btn btn-primary btn-full" onclick="syncFromServer();toast('Syncing now...','ok')">🔄 Sync Now</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-hd"><div class="card-title">📋 Message Format</div></div>
+          <div style="padding:14px">
+            <p style="font-size:13px;color:var(--text2);margin-bottom:10px">Share this format with your team on Telegram:</p>
+            <div class="code-box">
+              <span class="k">ITEM:</span> <span class="v">Ethanol 95%</span><br>
+              <span class="k">CATEGORY:</span> <span class="v">Chemicals</span><br>
+              <span class="k">COUNT:</span> <span class="v">50</span><br>
+              <span class="k">TYPE:</span> <span class="v">INWARD</span> <span class="c">or OUTWARD</span><br>
+              <span class="k">BY:</span> <span class="v">Dr. Ravi</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-hd"><div class="card-title">👥 How to add team members</div></div>
+          <div style="padding:14px;font-size:13px;color:var(--text2);line-height:1.8">
+            1. Open Telegram → Create a group<br>
+            2. Add all 30+ lab members<br>
+            3. Add your bot to the group<br>
+            4. Anyone can now post stock updates!<br><br>
+            <strong>Bot commands:</strong><br>
+            /start — Show format<br>
+            /stock — View current stock
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px">
+          <label class="form-label">Manual Paste (backup)</label>
+          <textarea class="form-input" id="slackPaste" rows="6"
+            placeholder="ITEM: Sodium Chloride&#10;CATEGORY: Chemicals&#10;COUNT: 100&#10;TYPE: INWARD&#10;BY: Dr. Priya"
+            style="font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
+        </div>
+        <div id="slackPreview" style="display:none;margin-bottom:12px"></div>
+        <button class="btn btn-ghost btn-full" onclick="parseSlack()" style="margin-bottom:8px">🔍 Parse & Apply Manually</button>
+        <button class="btn btn-primary btn-full" id="applySlackBtn" onclick="applySlack()" style="display:none">✅ Apply to Stock</button>
+      </div>
+    </div>
+
+    <!-- ══ MORE ══ -->
+    <div class="page" id="pg-more">
+      <div class="page-pad">
+        <div class="section-title" style="margin-bottom:14px">More</div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="list-row" onclick="openSheet('groupSheet')">
+            <div class="row-icon info">👥</div>
+            <div class="row-body"><div class="row-title">Groups</div><div class="row-sub" id="groupSubText">Manage your groups</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
+          <div class="list-row" onclick="openSheet('membersSheet')">
+            <div class="row-icon info">🧑‍🔬</div>
+            <div class="row-body"><div class="row-title">Members</div><div class="row-sub" id="membersSubText">Manage team</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
+          <div class="list-row" id="activityRow" onclick="openSheet('activitySheet')">
+            <div class="row-icon info">📋</div>
+            <div class="row-body"><div class="row-title">Activity Log</div><div class="row-sub">Admin only</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
+          <div class="list-row" onclick="openSheet('settingsSheet')">
+            <div class="row-icon info">⚙️</div>
+            <div class="row-body"><div class="row-title">Settings</div><div class="row-sub">Alerts & preferences</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="list-row" onclick="showInstallInstructions()">
+            <div class="row-icon in">📲</div>
+            <div class="row-body"><div class="row-title">Install as App</div><div class="row-sub">Add to home screen</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
+          <div class="list-row" onclick="exportCSV()">
+            <div class="row-icon in">⬇️</div>
+            <div class="row-body"><div class="row-title">Export CSV</div><div class="row-sub">Download transaction log</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end page-scroll -->
+
+  <!-- Bottom Nav -->
+  <div class="bottom-nav">
+    <div class="nav-tab active" id="tab-home" onclick="switchTab('home')">
+      <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+    </div>
+    <div class="nav-tab" id="tab-inv" onclick="switchTab('inv')">
+      <span class="nav-icon">📦</span><span class="nav-label">Stock</span>
+    </div>
+    <div class="nav-tab" id="tab-log" onclick="switchTab('log')">
+      <span class="nav-icon">↕️</span><span class="nav-label">Log</span>
+    </div>
+    <div class="nav-tab" id="tab-slack" onclick="switchTab('slack')">
+      <span class="nav-icon">🤖</span><span class="nav-label">Telegram</span>
+    </div>
+    <div class="nav-tab" id="tab-more" onclick="switchTab('more')">
+      <span class="nav-icon">⋯</span><span class="nav-label">More</span>
+    </div>
+  </div>
+
+  <!-- FAB -->
+  <button class="fab" onclick="openSheet('txSheet')" id="fab">+</button>
+
+<!-- Quick Edit Sheet (location, code, min stock) -->
+<div class="sheet-overlay" id="quickEditSheet" onclick="sheetBgClose(event,'quickEditSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Quick Edit</div>
+      <button class="sheet-close" onclick="closeSheet('quickEditSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <input class="form-input" id="qeLocation" placeholder="e.g. Shelf A3, Fridge 2, Cabinet B">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Item Code</label>
+        <input class="form-input" id="qeCode" placeholder="e.g. ELE-001" style="font-family:var(--mono)">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Min Stock (Alert Level)</label>
+        <input class="form-input" type="number" id="qeMin" placeholder="10" min="0" inputmode="numeric">
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" onclick="saveQuickEdit()">✅ Save Changes</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('quickEditSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end app -->
+
+<!-- ════════════════════════════════════
+     PRODUCT DETAIL PAGE
+════════════════════════════════════ -->
+<div id="productPage">
+  <div class="product-topbar">
+    <div class="product-back" onclick="closeProductPage()">←</div>
+    <div style="flex:1;font-family:var(--display);font-size:16px;font-weight:700" id="productPageTitle">Item</div>
+    <button class="btn btn-ghost btn-sm" onclick="openQuickEdit()" style="margin-right:6px">📍 Edit</button>
+    <button class="btn btn-ghost btn-sm" onclick="editItemFromProduct()" id="productEditBtn">⚙️ Full</button>
+  </div>
+  <div class="product-scroll">
+    <!-- Photo -->
+    <div class="product-photo-wrap" id="productPhotoWrap">
+      <div class="product-photo-placeholder" id="productPhotoPlaceholder">📦</div>
+      <img id="productPhoto" style="display:none" alt="Stock photo">
+      <div class="product-photo-actions">
+        <label class="photo-action-btn" for="photoFileInput">📷 Photo</label>
+        <button class="photo-action-btn" id="photoDeleteBtn" onclick="deleteProductPhoto()" style="display:none">🗑 Remove</button>
+      </div>
+    </div>
+    <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoUpload(event)">
+
+    <!-- Info -->
+    <div class="product-info">
+      <div class="product-name" id="productName">—</div>
+      <div class="product-code-row">
+        <span class="badge bg-gray" id="productCode" style="font-family:var(--mono);font-size:12px"></span>
+        <span class="badge" id="productStockBadge"></span>
+      </div>
+
+      <!-- Stock big display -->
+      <div class="product-stock-big">
+        <div>
+          <div class="product-stock-num" id="productStockNum">—</div>
+          <div class="product-stock-unit" id="productStockUnit">units</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;margin-bottom:4px">MIN LEVEL</div>
+          <div style="font-weight:700;font-size:16px" id="productMinStock">—</div>
+        </div>
+      </div>
+
+      <!-- Meta grid -->
+      <div class="product-meta-grid">
+        <div class="product-meta-item">
+          <div class="product-meta-label">Category</div>
+          <div class="product-meta-val" id="productCategory">—</div>
+        </div>
+        <div class="product-meta-item">
+          <div class="product-meta-label">Location</div>
+          <div class="product-meta-val" id="productLocation">—</div>
+        </div>
+      </div>
+
+      <!-- Recent transactions for this item -->
+      <div class="product-recent">
+        <div class="product-recent-title">Recent Activity</div>
+        <div class="card" id="productRecentList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fixed action bar -->
+  <div class="product-action-bar">
+    <button class="btn-in" onclick="productTx('IN')">▲ IN</button>
+    <button class="btn-out" onclick="productTx('OUT')">▼ OUT</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     BOTTOM SHEETS
+════════════════════════════════════ -->
+
+<!-- Transaction Sheet -->
+<div class="sheet-overlay" id="txSheet" onclick="sheetBgClose(event,'txSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Log Transaction</div>
+      <button class="sheet-close" onclick="closeSheet('txSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="type-toggle">
+        <button class="type-btn in-on" id="txIn" onclick="setTxType('IN')">▲ INWARD</button>
+        <button class="type-btn" id="txOut" onclick="setTxType('OUT')">▼ OUTWARD</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Item *</label>
+        <select class="form-input" id="txItem"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Quantity *</label>
+        <input class="form-input" type="number" id="txQty" placeholder="0" min="1" inputmode="numeric">
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="txByLabel">Given By *</label>
+        <input class="form-input" id="txPerson" placeholder="Person name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date *</label>
+        <input class="form-input" type="date" id="txDate">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <input class="form-input" id="txNotes" placeholder="Optional...">
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" onclick="submitTx()">Submit Transaction</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('txSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Item Sheet -->
+<div class="sheet-overlay" id="addItemSheet" onclick="sheetBgClose(event,'addItemSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="itemSheetTitle">Add Item</div>
+      <button class="sheet-close" onclick="closeSheet('addItemSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <input type="hidden" id="editId">
+      <div class="form-group">
+        <label class="form-label">Item Name *</label>
+        <input class="form-input" id="iName" placeholder="e.g. Ethanol 95%">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Unique Code</label>
+        <input class="form-input" id="iCode" placeholder="e.g. CHM-001, SKU123">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category *</label>
+        <input class="form-input" id="iCat" placeholder="e.g. Chemicals" list="catDL">
+        <datalist id="catDL"></datalist>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <input class="form-input" id="iLoc" placeholder="e.g. Shelf A3, Cabinet 2, Fridge">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Current Stock</label>
+        <input class="form-input" type="number" id="iStock" placeholder="0" min="0" inputmode="numeric">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Unit *</label>
+        <input class="form-input" id="iUnit" placeholder="e.g. mL, pcs, kg, box">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Min Stock (Alert Level)</label>
+        <input class="form-input" type="number" id="iMin" placeholder="10" min="0" inputmode="numeric">
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" onclick="saveItem()">Save Item</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('addItemSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Upload Sheet -->
+<div class="sheet-overlay" id="bulkSheet" onclick="sheetBgClose(event,'bulkSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Bulk Upload Items</div>
+      <button class="sheet-close" onclick="closeSheet('bulkSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="info-box" style="font-size:12px;margin-bottom:4px">
+        Upload a CSV or Excel file. Required columns:<br>
+        <strong>Item Name, Category, Unit, Stock</strong><br>
+        Optional: Unique Code, Location, Min Stock
+      </div>
+      <button class="btn btn-ghost btn-full btn-sm" onclick="downloadTemplate()" style="margin-bottom:4px">⬇ Download Template CSV</button>
+      <div class="form-group">
+        <label class="form-label">Upload File (.csv or .xlsx)</label>
+        <input type="file" class="form-input" id="bulkFile" accept=".csv,.xlsx,.xls" onchange="previewBulk(event)" style="padding:10px">
+      </div>
+      <div id="bulkPreview" style="display:none"></div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" id="bulkImportBtn" onclick="importBulk()" style="display:none">✅ Import Items</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('bulkSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export Sheet -->
+<div class="sheet-overlay" id="exportSheet" onclick="sheetBgClose(event,'exportSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Export</div>
+      <button class="sheet-close" onclick="closeSheet('exportSheet')">✕</button>
+    </div>
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 20px">
+      <button id="etab-tx" onclick="switchExportTab('tx')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-weight:700;font-size:13px;cursor:pointer">Transaction Log</button>
+      <button id="etab-stock" onclick="switchExportTab('stock')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-weight:500;font-size:13px;cursor:pointer">📦 Stock Report</button>
+    </div>
+
+    <!-- Transaction log export -->
+    <div id="epanel-tx" class="sheet-body">
+      <div class="form-group">
+        <label class="form-label">Filter by Type</label>
+        <select class="form-input" id="exportFilter">
+          <option value="ALL">Both Inward & Outward</option>
+          <option value="IN">Inward only</option>
+          <option value="OUT">Outward only</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date Range</label>
+        <select class="form-input" id="exportRange">
+          <option value="ALL">All time</option>
+          <option value="TODAY">Today</option>
+          <option value="WEEK">This week</option>
+          <option value="MONTH">This month</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Format</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+          <button class="btn btn-ghost" onclick="doExport('csv')" style="flex-direction:column;gap:4px;padding:14px">
+            <span style="font-size:22px">📊</span><span style="font-size:12px">CSV</span>
+          </button>
+          <button class="btn btn-ghost" onclick="doExport('txt')" style="flex-direction:column;gap:4px;padding:14px">
+            <span style="font-size:22px">📄</span><span style="font-size:12px">Text Doc</span>
+          </button>
+          <button class="btn btn-ghost" onclick="doExport('html')" style="flex-direction:column;gap:4px;padding:14px">
+            <span style="font-size:22px">🌐</span><span style="font-size:12px">Spreadsheet</span>
+          </button>
+          <button class="btn btn-ghost" onclick="doExport('print')" style="flex-direction:column;gap:4px;padding:14px">
+            <span style="font-size:22px">🖨️</span><span style="font-size:12px">Print / PDF</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stock report export -->
+    <div id="epanel-stock" class="sheet-body" style="display:none">
+      <div class="info-box" style="font-size:12px;margin-bottom:4px">
+        Items sorted by priority level:<br>
+        🔴 <strong>P0</strong> — Critical: Stock at or below minimum<br>
+        🟡 <strong>P1</strong> — Moderate: Stock between 1×–2× minimum<br>
+        🟢 <strong>P2</strong> — Balanced: Stock above 2× minimum
+      </div>
+      <div class="form-group">
+        <label class="form-label">Show Priorities</label>
+        <select class="form-input" id="stockPriorityFilter">
+          <option value="ALL">All — P0 + P1 + P2</option>
+          <option value="P0">P0 only — Critical</option>
+          <option value="P01">P0 + P1 — Needs attention</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Format</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+          <button class="btn btn-ghost" onclick="doStockExport('csv')" style="flex-direction:column;gap:4px;padding:14px">
+            <span style="font-size:22px">📊</span><span style="font-size:12px">CSV / Excel</span>
+          </button>
+          <button class="btn btn-ghost" onclick="doStockExport('print')" style="flex-direction:column;gap:4px;padding:14px">
+            <span style="font-size:22px">🖨️</span><span style="font-size:12px">Print / PDF</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Profile Sheet -->
+<div class="sheet-overlay" id="profileSheet" onclick="sheetBgClose(event,'profileSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="profile-hero">
+      <div class="profile-avatar" id="profileAv">?</div>
+      <div class="profile-name" id="profileName">—</div>
+      <div class="profile-email" id="profileEmail">—</div>
+      <div class="profile-role"><span class="badge" id="profileRole">member</span></div>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+      <button class="btn btn-danger btn-full" onclick="logout()">Sign Out</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('profileSheet')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Group Sheet -->
+<div class="sheet-overlay" id="groupSheet" onclick="sheetBgClose(event,'groupSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Groups</div>
+      <button class="sheet-close" onclick="closeSheet('groupSheet')">✕</button>
+    </div>
+    <div id="groupSheetBody" style="padding:16px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:55vh"></div>
+    <div style="padding:0 16px 12px">
+      <button class="btn btn-primary btn-full" onclick="showGroupForm()">+ Create Group</button>
+    </div>
+  </div>
+</div>
+
+<!-- Group Create / Edit Form Sheet -->
+<div class="sheet-overlay" id="groupFormSheet" onclick="sheetBgClose(event,'groupFormSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="groupFormTitle">New Group</div>
+      <button class="sheet-close" onclick="closeSheet('groupFormSheet')">✕</button>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;max-height:72vh">
+
+      <div class="form-group">
+        <label class="form-label">Group Name *</label>
+        <input class="form-input" id="gfName" placeholder="e.g. Biochemistry Lab" autocomplete="off">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input class="form-input" id="gfDesc" placeholder="e.g. Main research lab, Floor 3" autocomplete="off">
+      </div>
+
+      <!-- Telegram linking -->
+      <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">🤖 Telegram Chat Link</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+          Each group can have its own Telegram chat. Send <code style="background:var(--bg);padding:1px 5px;border-radius:4px;font-family:var(--mono)">/whoami</code> in your Telegram group to get the Chat ID.
+        </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label class="form-label">Telegram Chat ID</label>
+          <input class="form-input" id="gfChatId" placeholder="e.g. -1003513959136" autocomplete="off" inputmode="numeric" style="font-family:var(--mono);font-size:14px;letter-spacing:.5px">
+        </div>
+        <div id="gfTelegramStatus" style="display:none;font-size:12px;padding:7px 10px;border-radius:6px;margin-top:2px"></div>
+        <button id="gfUnlinkBtn" style="display:none;margin-top:10px;font-size:12px;padding:6px 14px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;cursor:pointer;width:100%" onclick="unlinkTelegramFromForm()">🔗 Unlink Telegram Chat</button>
+      </div>
+
+      <button class="btn btn-primary btn-full" onclick="saveGroupForm()">💾 Save Group</button>
+
+      <button id="gfDeleteBtn" style="display:none;background:transparent;border:1.5px solid var(--danger);color:var(--danger);padding:11px;border-radius:var(--r);font-size:14px;font-weight:600;cursor:pointer;width:100%" onclick="deleteGroupFromForm()">🗑️ Delete This Group</button>
+    </div>
+  </div>
+</div>
+
+<!-- Members Sheet -->
+<div class="sheet-overlay" id="membersSheet" onclick="sheetBgClose(event,'membersSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Members</div>
+      <button class="sheet-close" onclick="closeSheet('membersSheet')">✕</button>
+    </div>
+    <!-- Tab bar -->
+    <div style="display:flex;border-bottom:1px solid var(--border);margin:0 16px" id="memTabBar">
+      <button id="memTab-list" onclick="switchMemTab('list')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-weight:700;font-size:13px;cursor:pointer">👥 Members</button>
+      <button id="memTab-pending" onclick="switchMemTab('pending')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-weight:500;font-size:13px;cursor:pointer;display:none">⏳ Pending</button>
+      <button id="memTab-add" onclick="switchMemTab('add')" style="flex:1;padding:10px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-weight:500;font-size:13px;cursor:pointer;display:none">+ Add</button>
+    </div>
+    <!-- Members list -->
+    <div id="memPanel-list" style="max-height:60vh;overflow-y:auto">
+      <div id="membersSheetBody"></div>
+    </div>
+    <!-- Pending invites -->
+    <div id="memPanel-pending" style="display:none;max-height:60vh;overflow-y:auto">
+      <div id="pendingSheetBody"></div>
+    </div>
+    <!-- Add member panel -->
+    <div id="memPanel-add" style="display:none">
+      <div class="sheet-body" style="gap:12px">
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:4px">
+          Add a member by email — they'll see a join request next time they log in. Or share an invite link they can click directly.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Full Name *</label>
+          <input class="form-input" id="addMemName" placeholder="e.g. Dr. Priya Sharma">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address *</label>
+          <input class="form-input" id="addMemEmail" type="email" placeholder="priya@lab.com" inputmode="email">
+          <div id="addMemError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <button id="roleBtn-member" onclick="selectRole('member')" class="type-btn in-on" style="padding:12px;border-radius:var(--r-sm);border:1.5px solid var(--accent-l);background:var(--accent-bg);color:var(--accent);font-family:var(--body);font-size:13px;font-weight:700;cursor:pointer">🧑‍🔬 Member</button>
+            <button id="roleBtn-admin" onclick="selectRole('admin')" class="type-btn" style="padding:12px;border-radius:var(--r-sm);border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-family:var(--body);font-size:13px;font-weight:700;cursor:pointer">⚙️ Admin</button>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="addMemberByEmail()">✅ Add Member</button>
+        <div style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>or<div style="flex:1;height:1px;background:var(--border)"></div>
+        </div>
+        <button class="btn btn-ghost btn-full" onclick="shareInviteLink()">🔗 Share Invite Link</button>
+      </div>
+    </div>
+    <div style="padding:12px 16px 6px" id="inviteWrap">
+      <button class="btn btn-primary btn-full" onclick="switchMemTab('add')" id="showAddMemBtn">+ Add Member</button>
+    </div>
+  </div>
+</div>
+
+<!-- Activity Sheet -->
+<div class="sheet-overlay" id="activitySheet" onclick="sheetBgClose(event,'activitySheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Activity Log</div>
+      <button class="sheet-close" onclick="closeSheet('activitySheet')">✕</button>
+    </div>
+    <div id="activityBody" style="max-height:60vh;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- Settings Sheet -->
+<div class="sheet-overlay" id="settingsSheet" onclick="sheetBgClose(event,'settingsSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Settings</div>
+      <button class="sheet-close" onclick="closeSheet('settingsSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-group">
+        <label class="form-label">Low Stock Threshold</label>
+        <input class="form-input" type="number" id="sThreshold" value="10" inputmode="numeric" oninput="saveSetting()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Item Code Prefix (Admin)</label>
+        <input class="form-input" id="sCodePrefix" placeholder="e.g. CHM, LAB, BIO" maxlength="5" oninput="saveSetting()" style="text-transform:uppercase">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Codes will be: PREFIX-001, PREFIX-002...</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Telegram Bot Name</label>
+        <input class="form-input" id="sChannel" placeholder="@labstock_yourlab_bot" oninput="saveSetting()">
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer">
+        <input type="checkbox" id="sNotifyLow" checked onchange="saveSetting()" style="accent-color:var(--accent);width:18px;height:18px">
+        Alert when stock goes below threshold
+      </label>
+    </div>
+    <div style="padding:0 20px 8px;display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('settingsSheet')">Done</button>
+      <button class="btn btn-danger btn-full" onclick="resetData()">⚠ Reset All Data</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════ -->
+<script>
+// ── STATE ──────────────────────────────────────────────
+let S = {
+  user: null, activeGroupId: null,
+  groups: [], inventory: [], transactions: [], members: [],
+  pendingInvites: [],
+  settings: { threshold: 10, channel: '#lab-inventory', webhook: '', notifyLow: true },
+  txType: 'IN', slackParsed: null
+};
+
+function save() { localStorage.setItem('ls2', JSON.stringify(S)); }
+function load() { const d = localStorage.getItem('ls2'); if (d) Object.assign(S, JSON.parse(d)); }
+
+// ── SERVICE WORKER ──────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      console.log('[PWA] SW registered');
+    }).catch(err => console.log('[PWA] SW failed:', err));
+  });
+}
+
+// ── PWA INSTALL ─────────────────────────────────────────
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if (!localStorage.getItem('installDismissed')) {
+    document.getElementById('installBanner').classList.add('show');
+  }
+});
+
+function installApp() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(() => {
+      deferredInstallPrompt = null;
+      document.getElementById('installBanner').classList.remove('show');
+    });
+  }
+}
+function dismissInstall() {
+  localStorage.setItem('installDismissed', '1');
+  document.getElementById('installBanner').classList.remove('show');
+}
+
+function showInstallInstructions() {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isAndroid = /android/i.test(navigator.userAgent);
+  if (isIOS) {
+    toast('Tap the Share button (⬆) → "Add to Home Screen"', 'ok');
+  } else if (isAndroid) {
+    if (deferredInstallPrompt) installApp();
+    else toast('Tap browser menu (⋮) → "Add to Home Screen"', 'ok');
+  } else {
+    toast('Open this page on your phone to install', 'ok');
+  }
+}
+
+// ── ONLINE/OFFLINE ──────────────────────────────────────
+window.addEventListener('offline', () => document.getElementById('offlineBanner').classList.add('show'));
+window.addEventListener('online', () => document.getElementById('offlineBanner').classList.remove('show'));
+
+// ── AUTH ─────────────────────────────────────────────────
+let _pendingUser = null;
+let _pendingInvite = null;
+
+function detectInviteOnLoad() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const inviteCode = urlParams.get('invite');
+  if (!inviteCode) return;
+  _pendingInvite = inviteCode;
+  try {
+    const decoded = atob(inviteCode);
+    const groupId = decoded.split('|')[0];
+    // Try to find group name from stored groups
+    load();
+    const g = S.groups.find(g => g.id === groupId);
+    const groupName = g?.name || localStorage.getItem('invite_group_' + groupId) || 'your lab group';
+
+    // Fix 3: Show MEMBER login UI — no group creation step
+    document.getElementById('loginStep1').innerHTML = `
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:32px;margin-bottom:8px">👋</div>
+        <div style="font-size:15px;font-weight:700">You're invited!</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px">Join <strong>${groupName}</strong> as a lab member</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Your Full Name *</label>
+          <input class="form-input" id="loginName" placeholder="e.g. Dr. Priya Sharma" style="font-size:15px" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Your Email *</label>
+          <input class="form-input" id="loginEmail" type="email" placeholder="yourname@gmail.com" style="font-size:15px" inputmode="email" autocomplete="email">
+          <div id="emailError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none"></div>
+        </div>
+        <button class="google-btn" onclick="submitStep1()" style="background:var(--accent);color:white;border-color:var(--accent)">
+          Join Group →
+        </button>
+      </div>`;
+    document.getElementById('loginSubText').textContent = 'LabStock — Lab Inventory Management';
+    document.getElementById('loginFootnote').textContent = 'You will join as a member. Only admin manages the group.';
+  } catch(e) {}
+}
+
+function isValidEmail(email) {
+  // Fix 2: Strict email validation
+  if (!email) return false;
+  if (!email.includes('@')) return false;
+  const parts = email.split('@');
+  if (parts.length !== 2) return false;
+  const domain = parts[1];
+  if (!domain.includes('.')) return false;
+  if (domain.split('.').pop().length < 2) return false;
+  return /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/.test(email);
+}
+
+function getEmailError(email) {
+  if (!email) return 'Email is required';
+  if (!email.includes('@')) return 'Must contain @ symbol (e.g. name@gmail.com)';
+  const domain = email.split('@')[1] || '';
+  if (!domain) return 'Domain is missing after @';
+  if (!domain.includes('.')) return 'Domain must have a dot (e.g. gmail.com)';
+  if (domain.split('.').pop().length < 2) return 'Invalid domain extension';
+  return 'Please enter a valid email (e.g. name@gmail.com)';
+}
+
+function submitStep1() {
+  const name = document.getElementById('loginName').value.trim();
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const nameEl = document.getElementById('loginName');
+  const emailEl = document.getElementById('loginEmail');
+  const emailErr = document.getElementById('emailError');
+  nameEl.style.borderColor = ''; emailEl.style.borderColor = '';
+  if (emailErr) emailErr.style.display = 'none';
+  if (!name) { nameEl.style.borderColor='var(--danger)'; nameEl.focus(); return; }
+  if (!isValidEmail(email)) {
+    emailEl.style.borderColor = 'var(--danger)';
+    if (emailErr) { emailErr.style.display = 'block'; emailErr.textContent = getEmailError(email); }
+    emailEl.focus(); return;
+  }
+  load();
+  _pendingUser = { email, name, picture: null };
+  if (_pendingInvite) { doLogin(_pendingUser, null, _pendingInvite); return; }
+  // Everyone can log in — doLogin figures out what to show
+  doLogin(_pendingUser);
+}
+
+function submitStep2() {
+  const groupName = document.getElementById('setupGroupName').value.trim();
+  const groupDesc = document.getElementById('setupGroupDesc').value.trim();
+  const nameEl = document.getElementById('setupGroupName');
+  nameEl.style.borderColor = '';
+  if (!groupName) { nameEl.style.borderColor='var(--danger)'; nameEl.focus(); return; }
+  doLogin(_pendingUser, { name: groupName, desc: groupDesc });
+}
+
+function backToStep1() {
+  document.getElementById('loginStep1').style.display = 'block';
+  document.getElementById('loginStep2').style.display = 'none';
+}
+
+async function doLogin(user, firstGroup = null, inviteCode = null) {
+  load();
+  S.user = user;
+
+  if (!user.isDemo) {
+    // ── Sync groups with server (bidirectional) ──────────────────
+    try {
+      const res = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
+      if (res.ok) {
+        const serverGroups = await res.json();
+        const serverGroupIds = new Set(serverGroups.map(g => g.id));
+
+        // 1. Upload any local groups the server doesn't know about yet
+        //    (handles first login after update, or offline-created groups)
+        const localAdminGroups = S.groups.filter(g => g.adminEmail === user.email);
+        for (const lg of localAdminGroups) {
+          if (!serverGroupIds.has(lg.id)) {
+            // Server doesn't know this group — push it up
+            await fetch(`${RAILWAY_URL}/api/lab-groups`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: lg.id, name: lg.name, desc: lg.desc||'', adminEmail: lg.adminEmail, adminName: user.name, created: lg.created||new Date().toISOString() })
+            }).catch(() => {});
+            // Push members for this group
+            const groupMembers = S.members.filter(m => m.groupId === lg.id);
+            for (const m of groupMembers) {
+              await fetch(`${RAILWAY_URL}/api/lab-members`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: m.id, groupId: m.groupId, email: m.email, name: m.name, role: m.role||'member', joined: m.joined||new Date().toISOString() })
+              }).catch(() => {});
+            }
+            // Push Telegram binding if exists
+            if (lg.telegramChatId) {
+              fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(lg.id)}/telegram`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId: lg.telegramChatId })
+              }).catch(() => {});
+            }
+          }
+        }
+
+        // 2. Re-fetch after upload so we have the full merged list
+        const res2 = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
+        const allServerGroups = res2.ok ? await res2.json() : serverGroups;
+
+        // 3. Merge server groups into local state
+        allServerGroups.forEach(sg => {
+          const existing = S.groups.find(g => g.id === sg.id);
+          if (!existing) {
+            S.groups.push({ id: sg.id, name: sg.name, desc: sg.desc, adminEmail: sg.adminEmail, telegramChatId: sg.telegramChatId, created: sg.created });
+          } else {
+            existing.name = sg.name; existing.desc = sg.desc; existing.telegramChatId = sg.telegramChatId;
+          }
+          sg.members.forEach(sm => {
+            if (!S.members.find(m => m.groupId === sm.groupId && m.email === sm.email)) {
+              S.members.push(sm);
+            }
+          });
+        });
+
+        // 4. Keep only groups the server knows about (removes stale local-only groups)
+        if (allServerGroups.length > 0) {
+          const validIds = new Set(allServerGroups.map(g => g.id));
+          S.groups = S.groups.filter(g => validIds.has(g.id));
+          S.members = S.members.filter(m => validIds.has(m.groupId));
+          S.inventory = S.inventory.filter(i => validIds.has(i.groupId));
+          S.transactions = S.transactions.filter(t => validIds.has(t.groupId));
+        }
+      }
+    } catch(e) { /* server unreachable — use local cache */ }
+  }
+
+  if (firstGroup) {
+    const newGid = 'g_' + Date.now();
+    const now = new Date().toISOString();
+    const newG = { id: newGid, name: firstGroup.name, desc: firstGroup.desc || '', adminEmail: user.email, telegramChatId: null, created: now };
+    S.groups.push(newG);
+    S.members.push({ id: 'm_' + Date.now(), groupId: newGid, email: user.email, name: user.name, role: 'admin', joined: now });
+    S.activeGroupId = newGid;
+    // Push new group to server
+    fetch(`${RAILWAY_URL}/api/lab-groups`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: newGid, name: firstGroup.name, desc: firstGroup.desc||'', adminEmail: user.email, adminName: user.name, created: now })
+    }).catch(() => {});
+  } else if (!S.activeGroupId || !S.groups.find(g => g.id === S.activeGroupId)) {
+    const myGroup = S.groups.find(g =>
+      g.adminEmail === user.email ||
+      S.members.find(m => m.groupId === g.id && m.email === user.email)
+    );
+    if (myGroup) S.activeGroupId = myGroup.id;
+  }
+
+  save();
+
+  // Handle invite code in URL
+  const code = inviteCode || new URLSearchParams(window.location.search).get('invite');
+  if (code) { window.history.replaceState({}, '', './'); handleInviteLink(code); return; }
+
+  // Check Railway server for pending invite for this email
+  try {
+    const res = await fetch(`${RAILWAY_URL}/api/invites/${encodeURIComponent(user.email)}`);
+    if (res.ok) {
+      const inv = await res.json();
+      fetch(`${RAILWAY_URL}/api/invites/${encodeURIComponent(user.email)}`, { method: 'DELETE' }).catch(()=>{});
+      acceptPendingInvite(inv);
+      return;
+    }
+  } catch(e) {}
+
+  const hasGroup = S.groups.some(g => g.adminEmail === user.email) ||
+                   S.members.some(m => m.email === user.email);
+  if (hasGroup) {
+    showApp();
+  } else {
+    showWaitingRoom();
+  }
+}
+
+function showWaitingRoom() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  ['loginStep1','loginStep2','loginStep2Email'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  document.getElementById('loginStepWaiting').style.display = 'block';
+  document.getElementById('loginFootnote').textContent = `Signed in as ${S.user?.name || S.user?.email}`;
+}
+
+function applyManualInvite() {
+  const raw = document.getElementById('manualInviteCode').value.trim();
+  if (!raw) { toast('Paste an invite link or code', 'err'); return; }
+  // Extract code from full URL or bare code
+  let code = raw;
+  try {
+    const url = new URL(raw);
+    code = url.searchParams.get('invite') || raw;
+  } catch(e) {}
+  handleInviteLink(code);
+}
+
+function acceptPendingInvite(inv) {
+  // inv = { groupId, groupName, groupDesc, adminEmail, role }
+  let g = S.groups.find(g => g.id === inv.groupId);
+  if (!g) {
+    g = { id: inv.groupId, name: inv.groupName, desc: inv.groupDesc || '', adminEmail: inv.adminEmail, created: new Date().toISOString() };
+    S.groups.push(g);
+  }
+  const already = S.members.find(m => m.groupId === inv.groupId && m.email === S.user.email);
+  if (!already) {
+    S.members.push({
+      id: 'm_'+Date.now(),
+      groupId: inv.groupId,
+      email: S.user.email,
+      name: S.user.name || inv.name || S.user.email,
+      role: inv.role || 'member',
+      joined: new Date().toISOString()
+    });
+  }
+  // Remove from admin's pending list if on same device
+  S.pendingInvites = (S.pendingInvites||[]).filter(p => !(p.groupId===inv.groupId && p.email===S.user.email));
+  S.activeGroupId = inv.groupId;
+  save();
+  // Push member join to server
+  fetch(`${RAILWAY_URL}/api/lab-members`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupId: inv.groupId, email: S.user.email, name: S.user.name||inv.name||S.user.email, role: inv.role||'member', joined: new Date().toISOString() })
+  }).catch(() => {});
+  showApp();
+  setTimeout(() => syncFromServer(true), 800);
+  toast(`✅ Joined "${inv.groupName}"! Welcome to the group.`, 'ok');
+}
+
+function signInGoogle() {
+  const CLIENT_ID = '629944900273-5ub8581429gkmg3b4uce1t41hfbpoat4.apps.googleusercontent.com';
+
+  if (typeof google === 'undefined') {
+    toast('Google unavailable. Check connection.', 'err');
+    showEmailLogin();
+    return;
+  }
+
+  // Hide the custom button — GSI will render its own
+  const customBtn = document.querySelector('.google-btn');
+  if (customBtn) customBtn.style.display = 'none';
+
+  google.accounts.id.initialize({
+    client_id: CLIENT_ID,
+    callback: function(response) {
+      try {
+        const parts = response.credential.split('.');
+        const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
+        doLogin({
+          email: payload.email,
+          name: payload.name,
+          picture: payload.picture,
+          googleId: payload.sub
+        });
+      } catch(e) {
+        toast('Login error. Try again.', 'err');
+        if (customBtn) customBtn.style.display = '';
+      }
+    },
+    auto_select: true,
+    cancel_on_tap_outside: true
+  });
+
+  // Always render the button (don't rely on prompt alone)
+  const btn = document.getElementById('gSignInBtn');
+  if (btn) {
+    btn.style.display = 'flex';
+    btn.style.justifyContent = 'center';
+    google.accounts.id.renderButton(btn, {
+      theme: 'outline', size: 'large',
+      text: 'signin_with', width: 300
+    });
+  }
+
+  google.accounts.id.prompt();
+}
+
+function showEmailLogin() {
+  // Fallback email login (used until Google OAuth Client ID is configured)
+  document.getElementById('loginStep1').style.display = 'none';
+  document.getElementById('loginStep2Email').style.display = 'block';
+}
+
+function mobileEmailLogin() { showEmailLogin(); }
+function showStep1() { backToStep1(); }
+function submitEmailLogin() { submitStep1(); }
+function demoLogin() {
+  load();
+  if (!S.groups.length) seedDemo();
+  S.user = { email: 'admin@labstock.demo', name: 'Lab Admin', picture: null, isDemo: true };
+  S.activeGroupId = S.groups[0]?.id;
+  save(); showApp();
+}
+
+function logout() {
+  if (!confirm('Sign out?')) return;
+  S.user = null; save();
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('loginScreen').style.display = 'flex';
+  ['loginStep2','loginStep2Email','loginStepWaiting'].forEach(id => document.getElementById(id).style.display='none');
+  document.getElementById('loginStep1').style.display = 'block';
+  document.getElementById('loginFootnote').textContent = 'Sign in with Google or email. Members join via invite link.';
+  closeSheet('profileSheet');
+}
+
+function showApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  updateTopbar();
+  loadSettings();
+  renderHome();
+  updateAlertBadge();
+  // Start syncing from Railway server
+  setTimeout(startServerSync, 1000);
+}
+
+// ── TOPBAR ──────────────────────────────────────────────
+function updateTopbar() {
+  const u = S.user; if (!u) return;
+  const av = document.getElementById('topbarAvatar');
+  if (u.picture) av.innerHTML = `<img src="${u.picture}">`;
+  else av.textContent = (u.name||u.email)[0].toUpperCase();
+  const g = S.groups.find(g => g.id === S.activeGroupId);
+  document.getElementById('topbarGroup').textContent = g ? g.name : 'No Group';
+  // Profile sheet
+  document.getElementById('profileAv').textContent = (u.name||u.email)[0].toUpperCase();
+  document.getElementById('profileName').textContent = u.name || u.email;
+  document.getElementById('profileEmail').textContent = u.email;
+  const role = getRole();
+  const el = document.getElementById('profileRole');
+  el.textContent = role; el.className = `badge ${role === 'admin' ? 'bg-green' : 'bg-gray'}`;
+  // Hide admin-only items for members
+  document.getElementById('activityRow').style.display = role === 'admin' ? '' : 'none';
+  document.getElementById('btnExport').style.display = role === 'admin' ? '' : 'none';
+}
+
+function getRole() {
+  if (!S.activeGroupId || !S.user) return 'member';
+  const g = S.groups.find(g => g.id === S.activeGroupId);
+  // Group creator is always admin regardless of member record
+  if (g?.adminEmail === S.user.email) return 'admin';
+  return S.members.find(m => m.groupId === S.activeGroupId && m.email === S.user.email)?.role || 'member';
+}
+function isAdmin() { return getRole() === 'admin'; }
+
+// ── TABS ────────────────────────────────────────────────
+let curTab = 'home';
+function switchTab(tab) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('pg-' + tab)?.classList.add('active');
+  document.getElementById('tab-' + tab)?.classList.add('active');
+  document.getElementById('pageScroll').scrollTop = 0;
+  curTab = tab;
+  const fab = document.getElementById('fab');
+  fab.style.display = ['home','inv','log'].includes(tab) ? '' : 'none';
+  if (tab === 'home') renderHome();
+  if (tab === 'inv') renderInv();
+  if (tab === 'log') renderLog();
+}
+
+// ── SHEETS ──────────────────────────────────────────────
+function openSheet(id) {
+  if (id === 'txSheet') {
+    const sel = document.getElementById('txItem');
+    sel.innerHTML = '<option value="">Select item…</option>' + getItems().map(i => `<option value="${i.id}">${i.name} (${i.stock} ${i.unit})</option>`).join('');
+    document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('txPerson').value = S.user?.name || '';
+    setTxType('IN');
+  }
+  if (id === 'addItemSheet') {
+    document.getElementById('itemSheetTitle').textContent = 'Add Item';
+    document.getElementById('editId').value = '';
+    ['iName','iCat','iUnit'].forEach(x => document.getElementById(x).value = '');
+    document.getElementById('iStock').value = 0;
+    document.getElementById('iMin').value = S.settings.threshold;
+    const cats = [...new Set(getItems().map(i => i.category))];
+    document.getElementById('catDL').innerHTML = cats.map(c => `<option value="${c}">`).join('');
+  }
+  if (id === 'groupSheet') renderGroupSheet();
+  if (id === 'membersSheet') { switchMemTab('list'); renderMembersSheet(); return document.getElementById(id).classList.add('open'); }
+  if (id === 'activitySheet') renderActivity();
+  if (id === 'settingsSheet') loadSettings();
+  document.getElementById(id).classList.add('open');
+}
+
+function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
+function sheetBgClose(e, id) { if (e.target === e.currentTarget) closeSheet(id); }
+
+// ── GROUPS ──────────────────────────────────────────────
+
+function renderGroupSheet() {
+  const el = document.getElementById('groupSheetBody');
+  if (!S.groups.length) {
+    el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:13px;padding:24px 12px">No groups yet.<br>Tap <strong>+ Create Group</strong> below.</p>';
+    return;
+  }
+  el.innerHTML = S.groups.map(g => {
+    const active  = g.id === S.activeGroupId;
+    const count   = S.members.filter(m => m.groupId === g.id).length;
+    const isOwner = g.adminEmail === S.user?.email;
+    const hasTG   = !!g.telegramChatId;
+    return `
+    <div style="background:${active?'var(--accent-bg)':'var(--surface2)'};border:1.5px solid ${active?'var(--accent-l)':'var(--border)'};border-radius:var(--r);padding:14px;transition:box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
+        <div onclick="setGroup('${g.id}')" style="font-weight:700;font-size:15px;cursor:pointer;flex:1;line-height:1.3">
+          🧪 ${g.name}
+          ${active?'<span class="badge bg-green" style="font-size:10px;margin-left:5px;vertical-align:middle">Active</span>':''}
+        </div>
+        ${isOwner?`<div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();showGroupForm('${g.id}')">✏️</button>
+          <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteGroup('${g.id}')">🗑️</button>
+        </div>`:''}
+      </div>
+      <div onclick="setGroup('${g.id}')" style="font-size:12px;color:var(--muted);cursor:pointer;margin-bottom:8px">
+        ${g.desc||'No description'} • ${count} member${count!==1?'s':''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${hasTG
+          ?`<span style="font-size:11px;background:#e8f5e9;color:#2d6a4f;padding:2px 8px;border-radius:20px;font-weight:600">🤖 Telegram linked</span>
+            <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${g.telegramChatId}</span>`
+          :`<span style="font-size:11px;background:var(--surface);color:var(--muted);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">🤖 No Telegram</span>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setGroup(id) {
+  S.activeGroupId = id; save();
+  updateTopbar(); renderHome(); updateAlertBadge();
+  const g = S.groups.find(g => g.id === id);
+  document.getElementById('groupSubText').textContent = g?.name || '';
+  closeSheet('groupSheet');
+  toast(`Switched to: ${g?.name}`, 'ok');
+  syncFromServer(true);
+}
+
+// ── GROUP FORM (create or edit) ──────────────────────────
+let _gfEditId = null;
+
+function showGroupForm(id) {
+  _gfEditId = id || null;
+  const g = id ? S.groups.find(x => x.id === id) : null;
+  document.getElementById('groupFormTitle').textContent = g ? 'Edit Group' : 'New Group';
+  document.getElementById('gfName').value   = g?.name || '';
+  document.getElementById('gfDesc').value   = g?.desc || '';
+  document.getElementById('gfChatId').value = g?.telegramChatId || '';
+  document.getElementById('gfName').style.borderColor = '';
+  const statusEl  = document.getElementById('gfTelegramStatus');
+  const unlinkBtn = document.getElementById('gfUnlinkBtn');
+  const deleteBtn = document.getElementById('gfDeleteBtn');
+  if (g?.telegramChatId) {
+    statusEl.style.cssText  = 'display:block;font-size:12px;padding:7px 10px;border-radius:6px;background:#e8f5e9;color:#2d6a4f';
+    statusEl.textContent    = '✅ Linked to chat: ' + g.telegramChatId;
+    unlinkBtn.style.display = 'block';
+  } else {
+    statusEl.style.display  = 'none';
+    unlinkBtn.style.display = 'none';
+  }
+  deleteBtn.style.display = g ? 'block' : 'none';
+  openSheet('groupFormSheet');
+  setTimeout(() => document.getElementById('gfName').focus(), 320);
+}
+
+async function saveGroupForm() {
+  const name   = document.getElementById('gfName').value.trim();
+  const desc   = document.getElementById('gfDesc').value.trim();
+  const chatId = document.getElementById('gfChatId').value.trim();
+  if (!name) {
+    document.getElementById('gfName').style.borderColor = 'var(--danger)';
+    document.getElementById('gfName').focus();
+    toast('Group name is required', 'err'); return;
+  }
+  document.getElementById('gfName').style.borderColor = '';
+
+  if (_gfEditId) {
+    // Edit mode
+    const g = S.groups.find(x => x.id === _gfEditId); if (!g) return;
+    g.name = name; g.desc = desc;
+    const oldChatId = g.telegramChatId || '';
+    if (chatId && chatId !== oldChatId) {
+      const ok = await _linkTG(_gfEditId, chatId);
+      if (ok) { g.telegramChatId = chatId; toast('Telegram linked ✅', 'ok'); }
+    } else if (!chatId && oldChatId) {
+      await _unlinkTG(_gfEditId);
+      g.telegramChatId = null;
+      toast('Telegram unlinked', 'wrn');
+    }
+    logAct(`Edited group: ${g.name}`); save();
+    renderGroupSheet(); updateTopbar();
+    // Sync updated group to server
+    fetch(`${RAILWAY_URL}/api/lab-groups`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: _gfEditId, name: g.name, desc: g.desc, adminEmail: g.adminEmail, adminName: S.user.name, created: g.created })
+    }).catch(() => {});
+    toast('Group updated!', 'ok');
+  } else {
+    // Create mode
+    const id = 'g_' + Date.now();
+    const now = new Date().toISOString();
+    const newG = { id, name, desc, adminEmail: S.user.email, created: now, telegramChatId: null };
+    S.groups.push(newG);
+    S.members.push({ id: 'm_' + Date.now(), groupId: id, email: S.user.email, name: S.user.name, role: 'admin', joined: now });
+    S.activeGroupId = id;
+    if (chatId) {
+      const ok = await _linkTG(id, chatId);
+      if (ok) newG.telegramChatId = chatId;
+    }
+    save(); renderGroupSheet(); updateTopbar();
+    // Push to server so other devices see it
+    fetch(`${RAILWAY_URL}/api/lab-groups`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name, desc, adminEmail: S.user.email, adminName: S.user.name, created: now })
+    }).catch(() => {});
+    toast(`"${name}" created!`, 'ok');
+  }
+  closeSheet('groupFormSheet');
+}
+
+async function unlinkTelegramFromForm() {
+  if (!_gfEditId) return;
+  const g = S.groups.find(x => x.id === _gfEditId); if (!g) return;
+  if (!confirm(`Unlink Telegram chat from "${g.name}"?`)) return;
+  await _unlinkTG(_gfEditId);
+  g.telegramChatId = null; save();
+  document.getElementById('gfChatId').value = '';
+  document.getElementById('gfTelegramStatus').style.display = 'none';
+  document.getElementById('gfUnlinkBtn').style.display = 'none';
+  renderGroupSheet();
+  toast('Telegram unlinked', 'wrn');
+}
+
+async function _linkTG(groupId, chatId) {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(groupId)}/telegram`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ chatId: chatId.toString() })
+    });
+    if (!r.ok) throw new Error();
+    return true;
+  } catch { toast('Server error linking Telegram — check Chat ID', 'err'); return false; }
+}
+
+async function _unlinkTG(groupId) {
+  try {
+    await fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(groupId)}/telegram`, { method: 'DELETE' });
+  } catch {}
+}
+
+function deleteGroupFromForm() { deleteGroup(_gfEditId); }
+
+function deleteGroup(id) {
+  const g = S.groups.find(g => g.id === id); if (!g) return;
+  if (!confirm(`Delete "${g.name}"?\n\nThis removes all members and inventory. Cannot be undone.`)) return;
+  if (g.telegramChatId) _unlinkTG(id);
+  S.groups       = S.groups.filter(x => x.id !== id);
+  S.members      = S.members.filter(m => m.groupId !== id);
+  S.inventory    = S.inventory.filter(i => i.groupId !== id);
+  S.transactions = S.transactions.filter(t => t.groupId !== id);
+  if (S.activeGroupId === id) S.activeGroupId = S.groups[0]?.id || null;
+  save(); closeSheet('groupFormSheet'); renderGroupSheet(); updateTopbar(); renderHome();
+  // Push delete to server
+  fetch(`${RAILWAY_URL}/api/lab-groups/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+  toast('Group deleted', 'wrn');
+}
+
+// Keep old name working (called from onboarding)
+function promptCreateGroup() { showGroupForm(); }
+
+// ── INVITE LINK ──────────────────────────────────────────
+function generateInviteLink(groupId) {
+  const base = window.location.origin + window.location.pathname;
+  const g = S.groups.find(g => g.id === groupId);
+  // Encode groupId, group name, and a snapshot of inventory names so member device can bootstrap
+  const payload = {
+    gid: groupId,
+    name: g?.name || 'Lab Group',
+    desc: g?.desc || '',
+    adminEmail: g?.adminEmail || '',
+    t: Date.now()
+  };
+  const code = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+  return `${base}?invite=${code}`;
+}
+
+function handleInviteLink(code) {
+  try {
+    // Try new JSON format first
+    let groupId, groupName, groupDesc, adminEmail;
+    try {
+      const payload = JSON.parse(decodeURIComponent(escape(atob(code))));
+      groupId = payload.gid;
+      groupName = payload.name;
+      groupDesc = payload.desc || '';
+      adminEmail = payload.adminEmail || '';
+    } catch(e) {
+      // Fallback: old format "groupId|timestamp"
+      const decoded = atob(code);
+      groupId = decoded.split('|')[0];
+      groupName = localStorage.getItem('invite_group_' + groupId) || 'Lab Group';
+      groupDesc = '';
+      adminEmail = '';
+    }
+
+    // Bootstrap group on this device if not present
+    let g = S.groups.find(g => g.id === groupId);
+    if (!g) {
+      g = { id: groupId, name: groupName, desc: groupDesc, adminEmail, created: new Date().toISOString() };
+      S.groups.push(g);
+    }
+
+    // Check if already a member
+    const already = S.members.find(m => m.groupId === groupId && m.email === S.user?.email);
+    if (!already) {
+      S.members.push({
+        id: 'm_' + Date.now(),
+        groupId,
+        email: S.user.email,
+        name: S.user.name,
+        role: 'member',
+        joined: new Date().toISOString()
+      });
+    }
+
+    S.activeGroupId = groupId;
+    save();
+    showApp();
+    // Immediately sync inventory from server so member sees the group's stock
+    setTimeout(() => syncFromServer(true), 800);
+    toast(`✅ Joined "${groupName}"! Loading inventory...`, 'ok');
+  } catch(e) {
+    showApp();
+    toast('Invalid invite link', 'err');
+  }
+}
+
+// ── MEMBERS ─────────────────────────────────────────────
+let _selectedRole = 'member';
+
+function switchMemTab(tab) {
+  // Non-admins can only see the list tab
+  if (!isAdmin() && tab !== 'list') return;
+  ['list','pending','add'].forEach(t => {
+    document.getElementById('memPanel-'+t).style.display = t===tab ? 'block' : 'none';
+    const btn = document.getElementById('memTab-'+t);
+    if (btn) {
+      btn.style.borderBottomColor = t===tab ? 'var(--accent)' : 'transparent';
+      btn.style.color = t===tab ? 'var(--accent)' : 'var(--muted)';
+      btn.style.fontWeight = t===tab ? '700' : '500';
+    }
+  });
+  document.getElementById('inviteWrap').style.display = (tab==='list' && isAdmin()) ? '' : 'none';
+  if (tab==='pending') renderPendingSheet();
+  if (tab==='list') renderMembersSheet();
+}
+
+function selectRole(role) {
+  _selectedRole = role;
+  ['member','admin'].forEach(r => {
+    const btn = document.getElementById('roleBtn-'+r);
+    if (r===role) {
+      btn.style.background='var(--accent-bg)'; btn.style.color='var(--accent)';
+      btn.style.borderColor='var(--accent-l)';
+    } else {
+      btn.style.background='var(--surface2)'; btn.style.color='var(--muted)';
+      btn.style.borderColor='var(--border)';
+    }
+  });
+}
+
+function renderMembersSheet() {
+  const el = document.getElementById('membersSheetBody');
+  const wrap = document.getElementById('inviteWrap');
+  const showAddBtn = document.getElementById('showAddMemBtn');
+  const isAdm = isAdmin();
+
+  // Show/hide admin-only tabs and buttons
+  document.getElementById('memTab-pending').style.display = isAdm ? '' : 'none';
+  document.getElementById('memTab-add').style.display = isAdm ? '' : 'none';
+  wrap.style.display = isAdm ? '' : 'none';
+  if (showAddBtn) showAddBtn.style.display = isAdm ? '' : 'none';
+
+  // Also hide add/pending panels if not admin (safety)
+  if (!isAdm) {
+    document.getElementById('memPanel-add').style.display = 'none';
+    document.getElementById('memPanel-pending').style.display = 'none';
+    document.getElementById('memPanel-list').style.display = 'block';
+  }
+
+  // Update pending badge count
+  const pendingCount = (S.pendingInvites||[]).filter(p => p.groupId===S.activeGroupId).length;
+  const pendingTab = document.getElementById('memTab-pending');
+  if (pendingTab) pendingTab.textContent = pendingCount > 0 ? `⏳ Pending (${pendingCount})` : '⏳ Pending';
+
+  const mems = S.members.filter(m => m.groupId === S.activeGroupId);
+  if (!mems.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🧑‍🔬</div><p>No members yet.<br>Tap + Add Member to invite someone.</p></div>'; return; }
+  el.innerHTML = mems.map(m => {
+    const init = (m.name||m.email||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?';
+    const isSelf = m.email === S.user?.email;
+    // Determine role — also check if this email is the group admin
+    const g = S.groups.find(g => g.id === S.activeGroupId);
+    const effectiveRole = (g && g.adminEmail === m.email) ? 'admin' : (m.role || 'member');
+    const isAdmMem = effectiveRole === 'admin';
+    const canEdit = isAdm && !isSelf;
+    return `<div class="member-row" style="align-items:flex-start;padding:14px 16px">
+      <div class="m-av" style="margin-top:2px;background:${isAdmMem?'var(--accent)':'#888'}">${init}</div>
+      <div class="m-info" style="flex:1">
+        <div class="m-name">${m.name||m.email} ${isSelf?'<span class="badge bg-gray" style="font-size:9px">You</span>':''}</div>
+        <div class="m-email">${m.email}</div>
+        ${canEdit ? `<div style="display:flex;gap:6px;margin-top:8px">
+          <button onclick="changeRole('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 10px">
+            ${isAdmMem?'⬇ Make Member':'⬆ Make Admin'}
+          </button>
+          <button onclick="confirmRemoveMem('${m.id}')" class="btn btn-danger btn-sm" style="font-size:11px;padding:5px 10px">
+            🗑 Remove
+          </button>
+        </div>` : ''}
+      </div>
+      <span class="badge ${isAdmMem?'bg-green':'bg-gray'}" style="margin-top:2px">${effectiveRole}</span>
+    </div>`;
+  }).join('');
+}
+
+async function renderPendingSheet() {
+  const el = document.getElementById('pendingSheetBody');
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">Loading...</div>';
+
+  // Sync pending invites from server for this group
+  try {
+    const res = await fetch(`${RAILWAY_URL}/api/invites/group/${S.activeGroupId}`);
+    if (res.ok) {
+      const serverInvites = await res.json();
+      // Merge server invites into local state
+      if (!S.pendingInvites) S.pendingInvites = [];
+      serverInvites.forEach(si => {
+        if (!S.pendingInvites.find(p => p.email === si.email && p.groupId === si.groupId)) {
+          S.pendingInvites.push({ id: 'inv_srv_'+Date.now()+Math.random(), ...si });
+        }
+      });
+      save();
+    }
+  } catch(e) {}
+
+  const pending = (S.pendingInvites||[]).filter(p => p.groupId===S.activeGroupId);
+  if (!pending.length) {
+    el.innerHTML = '<div class="empty" style="padding:32px 20px"><div class="empty-icon">📭</div><p>No pending invites.<br>Add a member and they\'ll appear here.</p></div>';
+    return;
+  }
+  el.innerHTML = pending.map(p => `
+    <div class="member-row" style="align-items:flex-start;padding:14px 16px">
+      <div class="m-av" style="background:var(--warn);margin-top:2px">${(p.name||p.email)[0].toUpperCase()}</div>
+      <div class="m-info" style="flex:1">
+        <div class="m-name">${p.name||'Unknown'}</div>
+        <div class="m-email">${p.email}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px">Invited ${new Date(p.created).toLocaleDateString()} • ${p.role}</div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button onclick="resendInvite('${p.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 10px">🔗 Resend Link</button>
+          <button onclick="cancelInvite('${p.id}')" class="btn btn-danger btn-sm" style="font-size:11px;padding:5px 10px">✕ Cancel</button>
+        </div>
+      </div>
+      <span class="badge bg-warn">pending</span>
+    </div>`).join('');
+}
+
+async function addMemberByEmail() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  const name = document.getElementById('addMemName').value.trim();
+  const email = document.getElementById('addMemEmail').value.trim().toLowerCase();
+  const errEl = document.getElementById('addMemError');
+  errEl.style.display = 'none';
+
+  if (!name) { errEl.textContent='Name is required'; errEl.style.display='block'; return; }
+  if (!isValidEmail(email)) { errEl.textContent='Enter a valid email address'; errEl.style.display='block'; return; }
+  if (S.members.find(m => m.groupId===S.activeGroupId && m.email===email)) {
+    errEl.textContent='This person is already a member'; errEl.style.display='block'; return;
+  }
+  if ((S.pendingInvites||[]).find(p => p.groupId===S.activeGroupId && p.email===email)) {
+    errEl.textContent='Already invited — check Pending tab'; errEl.style.display='block'; return;
+  }
+
+  const g = S.groups.find(g => g.id === S.activeGroupId);
+  const inviteId = 'inv_' + Date.now();
+  const inviteData = {
+    id: inviteId,
+    groupId: S.activeGroupId,
+    groupName: g?.name || '',
+    groupDesc: g?.desc || '',
+    adminEmail: S.user.email,
+    email, name,
+    role: _selectedRole,
+    created: new Date().toISOString()
+  };
+
+  // Store locally for admin's pending tab
+  if (!S.pendingInvites) S.pendingInvites = [];
+  S.pendingInvites.push(inviteData);
+  save();
+
+  // Push to Railway server so member's device can find it on login
+  try {
+    await fetch(`${RAILWAY_URL}/api/invites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(inviteData)
+    });
+  } catch(e) {
+    toast('⚠️ Saved locally but server unreachable — share invite link as backup', 'wrn');
+  }
+
+  logAct(`Invited ${email} as ${_selectedRole}`);
+  toast(`✅ ${name} added — they'll join on next login`, 'ok');
+  document.getElementById('addMemName').value = '';
+  document.getElementById('addMemEmail').value = '';
+  selectRole('member');
+  switchMemTab('pending');
+  renderMembersSheet();
+}
+
+function shareInviteLink() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  if (!S.activeGroupId) { toast('Select a group first', 'wrn'); return; }
+  const link = generateInviteLink(S.activeGroupId);
+  if (navigator.share) {
+    navigator.share({ title: 'Join LabStock', text: 'Join our lab inventory group:', url: link });
+  } else {
+    navigator.clipboard.writeText(link).then(() => {
+      toast('📋 Invite link copied! Send it to your team.', 'ok');
+    }).catch(() => { prompt('Copy this invite link:', link); });
+  }
+}
+
+function resendInvite(invId) {
+  const inv = (S.pendingInvites||[]).find(p => p.id===invId);
+  if (!inv) return;
+  const invKey = 'pending_invite_' + inv.email.replace(/[^a-z0-9]/gi,'_');
+  localStorage.setItem(invKey, JSON.stringify({
+    groupId: inv.groupId, groupName: inv.groupName,
+    groupDesc: inv.groupDesc, adminEmail: inv.adminEmail, role: inv.role
+  }));
+  const link = generateInviteLink(inv.groupId);
+  if (navigator.share) {
+    navigator.share({ title: 'Join LabStock', text: `Join our lab group as ${inv.role}:`, url: link });
+  } else {
+    navigator.clipboard.writeText(link).then(() => toast('📋 Invite link copied!','ok')).catch(() => prompt('Invite link:', link));
+  }
+}
+
+function cancelInvite(invId) {
+  const inv = (S.pendingInvites||[]).find(p => p.id===invId);
+  S.pendingInvites = (S.pendingInvites||[]).filter(p => p.id!==invId);
+  save();
+  // Remove from server too
+  if (inv?.email) {
+    fetch(`${RAILWAY_URL}/api/invites/${encodeURIComponent(inv.email)}`, { method: 'DELETE' }).catch(()=>{});
+  }
+  renderPendingSheet(); renderMembersSheet();
+  toast('Invite cancelled', 'wrn');
+}
+
+function changeRole(memId) {
+  const m = S.members.find(m => m.id===memId);
+  if (!m) return;
+  const newRole = m.role==='admin' ? 'member' : 'admin';
+  m.role = newRole;
+  logAct(`Changed ${m.name} to ${newRole}`); save(); renderMembersSheet();
+  toast(`${m.name} is now ${newRole}`, 'ok');
+}
+
+function confirmRemoveMem(memId) {
+  const m = S.members.find(m => m.id===memId);
+  if (!m) return;
+  // Show in-sheet confirmation instead of browser confirm()
+  const el = document.getElementById('membersSheetBody');
+  const existing = el.querySelector(`[data-confirm="${memId}"]`);
+  if (existing) { existing.remove(); renderMembersSheet(); return; }
+  const conf = document.createElement('div');
+  conf.setAttribute('data-confirm', memId);
+  conf.style.cssText = 'background:var(--danger-bg);border:1px solid #ffc9cb;border-radius:10px;padding:14px 16px;margin:8px 16px;';
+  conf.innerHTML = `<div style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:8px">Remove ${m.name}?</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">They will lose access to this group immediately.</div>
+    <div style="display:flex;gap:8px">
+      <button onclick="removeMem('${memId}')" class="btn btn-danger btn-full">Yes, Remove</button>
+      <button onclick="this.closest('[data-confirm]').remove()" class="btn btn-ghost btn-full">Cancel</button>
+    </div>`;
+  el.prepend(conf);
+}
+
+function removeMem(id) {
+  const m = S.members.find(m => m.id === id);
+  if (!m) return;
+  S.members = S.members.filter(m => m.id !== id);
+  logAct(`Removed ${m.email}`); save(); renderMembersSheet();
+  toast(`${m.name} removed`, 'wrn');
+}
+
+function promptInvite() { switchMemTab('add'); }
+
+// ── INVENTORY ───────────────────────────────────────────
+function gid() { return S.activeGroupId; }
+function getItems() { return S.inventory.filter(i => i.groupId === gid()); }
+
+function saveItem() {
+  const name = document.getElementById('iName').value.trim();
+  let code = document.getElementById('iCode').value.trim();
+  const cat = document.getElementById('iCat').value.trim();
+  const loc = document.getElementById('iLoc').value.trim();
+  const stock = parseFloat(document.getElementById('iStock').value)||0;
+  const unit = document.getElementById('iUnit').value.trim();
+  const min = parseFloat(document.getElementById('iMin').value)||10;
+  if (!name||!cat||!unit) { toast('Fill required fields', 'err'); return; }
+  const eid = document.getElementById('editId').value;
+  if (eid) {
+    const item = S.inventory.find(i=>i.id===eid);
+    // Check code uniqueness if changed
+    if (code && code !== item.code) {
+      const duplicate = getItems().find(i => i.id !== eid && i.code === code);
+      if (duplicate) { toast(`Code "${code}" already used by ${duplicate.name}`, 'err'); return; }
+    }
+    Object.assign(item, {name, code, category:cat, location:loc, stock, unit, minStock:min});
+    logAct(`Edited: ${name}`); toast('Item updated','ok');
+  } else {
+    // Auto-generate code if not provided
+    if (!code) code = generateItemCode(cat);
+    // Ensure uniqueness
+    const duplicate = getItems().find(i => i.code === code);
+    if (duplicate) code = generateItemCode(cat) + '_' + Date.now().toString().slice(-3);
+    S.inventory.push({id:'i_'+Date.now(), groupId:gid(), name, code, category:cat, location:loc, stock, unit, minStock:min});
+    logAct(`Added: ${name} [${code}]`);
+    toast(`✅ Item added! Code: ${code}`,'ok');
+  }
+  save(); closeSheet('addItemSheet'); renderInv(); updateAlertBadge();
+  fetch(`${RAILWAY_URL}/api/inventory`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupId: S.activeGroupId, name, code, category: cat, location: loc, stock, unit, minStock: min })
+  }).catch(() => {});
+}
+
+function editItem(id) {
+  const item = S.inventory.find(i=>i.id===id); if (!item) return;
+  document.getElementById('itemSheetTitle').textContent = 'Edit Item';
+  document.getElementById('editId').value = id;
+  document.getElementById('iName').value = item.name;
+  document.getElementById('iCode').value = item.code||'';
+  document.getElementById('iCat').value = item.category;
+  document.getElementById('iLoc').value = item.location||'';
+  document.getElementById('iStock').value = item.stock;
+  document.getElementById('iUnit').value = item.unit;
+  document.getElementById('iMin').value = item.minStock;
+  const cats = [...new Set(getItems().map(i => i.category))];
+  document.getElementById('catDL').innerHTML = cats.map(c => `<option value="${c}">`).join('');
+  openSheet('addItemSheet');
+}
+
+function deleteItem(id) {
+  const item = S.inventory.find(i=>i.id===id); if (!item) return;
+  if (!confirm(`Delete "${item.name}"?`)) return;
+  S.inventory = S.inventory.filter(i=>i.id!==id);
+  logAct(`Deleted: ${item.name}`); save(); renderInv(); updateAlertBadge();
+  toast('Item deleted','wrn');
+  // Push delete to server so Telegram users see it gone too
+  fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(item.name)}?groupId=${encodeURIComponent(S.activeGroupId||'')}`, { method: 'DELETE' })
+    .catch(() => {});
+}
+
+function renderInv() {
+  const q = document.getElementById('invSearch')?.value?.toLowerCase()||'';
+  const items = getItems().filter(i => !q || i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
+  const el = document.getElementById('invList');
+  if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items found.</p></div>'; return; }
+  const adminBtns = isAdmin();
+  el.innerHTML = items.map(item => {
+    const pct = Math.min(100,(item.stock/Math.max(item.minStock*3,1))*100);
+    const low = item.stock <= item.minStock;
+    const watch = item.stock <= item.minStock*1.5;
+    const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
+    const badge = low ? '<span class="badge bg-red">LOW</span>' : watch ? '<span class="badge bg-warn">WATCH</span>' : '';
+    return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
+      <div class="row-icon ${low?'warn':'in'}">${low?'⚠️':'📦'}</div>
+      <div class="row-body">
+        <div class="row-title">${item.name} ${badge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
+        <div class="row-sub">${item.category}${item.location?' • 📍'+item.location:''}</div>
+        <div class="stock-wrap">
+          <div class="stock-bar"><div class="stock-fill" style="width:${pct}%;background:${color}"></div></div>
+          <span class="stock-num" style="color:${color}">${item.stock} ${item.unit}</span>
+        </div>
+      </div>
+      <span style="color:var(--muted);font-size:20px">›</span>
+    </div>`;
+  }).join('');
+}
+
+function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ document.getElementById('txItem').value=id; setTxType(type); },80); }
+
+// ── TRANSACTIONS ────────────────────────────────────────
+let txTypeState = 'IN';
+function setTxType(t) {
+  txTypeState = t;
+  document.getElementById('txIn').className = 'type-btn' + (t==='IN'?' in-on':'');
+  document.getElementById('txOut').className = 'type-btn' + (t==='OUT'?' out-on':'');
+  document.getElementById('txByLabel').textContent = t==='IN'?'Given By *':'Taken By *';
+}
+
+function generateItemCode(category) {
+  const g = S.groups.find(g => g.id === gid());
+  const prefix = g?.codePrefix || category?.slice(0,3).toUpperCase() || 'ITM';
+  const existing = getItems().filter(i => i.code?.startsWith(prefix));
+  const nums = existing.map(i => parseInt(i.code?.replace(prefix+'-','')) || 0);
+  const next = Math.max(0, ...nums) + 1;
+  return `${prefix}-${String(next).padStart(3,'0')}`;
+}
+
+function submitTx(override=null) {
+  const d = override || {
+    itemId: document.getElementById('txItem').value,
+    qty: parseFloat(document.getElementById('txQty').value),
+    person: document.getElementById('txPerson').value.trim(),
+    date: document.getElementById('txDate').value,
+    notes: document.getElementById('txNotes').value.trim(),
+    type: txTypeState, source:'APP',
+    labMember: S.user?.name || S.user?.email || ''
+  };
+  if (!d.itemId||!d.qty||!d.person||!d.date) { toast('Fill all required fields','err'); return false; }
+  const item = S.inventory.find(i=>i.id===d.itemId); if (!item) return false;
+  if (d.type==='OUT'&&d.qty>item.stock) { toast(`Only ${item.stock} ${item.unit} available`,'err'); return false; }
+  if (d.type==='IN') item.stock+=d.qty; else item.stock-=d.qty;
+  S.transactions.unshift({
+    id:'tx_'+Date.now(), groupId:gid(), ...d,
+    itemName:item.name, itemCode:item.code||'',
+    category:item.category, unit:item.unit,
+    labMember: d.labMember || S.user?.name || '',
+    timestamp:new Date().toISOString()
+  });
+  logAct(`${d.type}: ${d.qty} ${item.unit} of ${item.name} by ${d.person}`);
+  save();
+  if (!override) { closeSheet('txSheet'); ['txQty','txNotes'].forEach(x=>document.getElementById(x).value=''); }
+  toast(`${d.type==='IN'?'▲ Inward':'▼ Outward'}: ${d.qty} ${item.unit} of ${item.name}`,'ok');
+  if (item.stock<=item.minStock) setTimeout(()=>toast(`⚠ Low stock: ${item.name} (${item.stock} left)`,'wrn'),2000);
+  renderHome(); renderInv(); updateAlertBadge();
+  // Refresh product page if open
+  if (_currentProductId && document.getElementById('productPage')?.classList.contains('open')) {
+    setTimeout(() => openProductPage(_currentProductId), 320);
+  }
+  return true;
+}
+
+function renderLog() {
+  const q = document.getElementById('logSearch')?.value?.toLowerCase()||'';
+  const txs = S.transactions.filter(t=>t.groupId===gid()&&!t._act&&(!q||t.itemName?.toLowerCase().includes(q)||t.person?.toLowerCase().includes(q)));
+  const el = document.getElementById('logList');
+  if (!txs.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">↕️</div><p>No transactions yet.</p></div>'; return; }
+  el.innerHTML = txs.map(t => {
+    const isIn = t.type==='IN';
+    return `<div class="list-row">
+      <div class="row-icon ${isIn?'in':'out'}">${isIn?'📦':'🔻'}</div>
+      <div class="row-body">
+        <div class="row-title">${t.itemName||t.name||'Unknown Item'} ${t.source==='SLACK'?'<span class="badge bg-gray">Slack</span>':t.source==='TELEGRAM'?'<span class="badge bg-gray">Telegram</span>':''}</div>
+        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'Unknown'}</div>
+      </div>
+      <div class="row-val ${isIn?'in':'out'}">${isIn?'+':'−'}${t.qty} ${t.unit}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── HOME ────────────────────────────────────────────────
+function renderHome() {
+  const today = new Date().toISOString().split('T')[0];
+  const items = getItems();
+  const todayTx = S.transactions.filter(t=>t.groupId===gid()&&t.date===today&&!t._act);
+  document.getElementById('kpiItems').textContent = items.length;
+  document.getElementById('kpiLow').textContent = items.filter(i=>i.stock<=i.minStock).length;
+  document.getElementById('kpiIn').textContent = todayTx.filter(t=>t.type==='IN').reduce((s,t)=>s+t.qty,0);
+  document.getElementById('kpiOut').textContent = todayTx.filter(t=>t.type==='OUT').reduce((s,t)=>s+t.qty,0);
+  const recent = S.transactions.filter(t=>t.groupId===gid()&&!t._act).slice(0,6);
+  const el = document.getElementById('homeRecent');
+  if (!recent.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>No transactions yet. Tap + to log one!</p></div>'; return; }
+  el.innerHTML = recent.map(t => {
+    const isIn = t.type==='IN';
+    return `<div class="list-row">
+      <div class="row-icon ${isIn?'in':'out'}">${isIn?'📦':'🔻'}</div>
+      <div class="row-body">
+        <div class="row-title">${t.itemName||t.name||'Unknown Item'}</div>
+        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'Unknown'}</div>
+      </div>
+      <div class="row-val ${isIn?'in':'out'}">${isIn?'+':'−'}${t.qty}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── ALERTS ──────────────────────────────────────────────
+function updateAlertBadge() {
+  const count = getItems().filter(i=>i.stock<=i.minStock).length;
+  const tab = document.getElementById('tab-inv');
+  const existing = tab.querySelector('.nav-badge');
+  if (existing) existing.remove();
+  if (count) tab.innerHTML += `<span class="nav-badge">${count}</span>`;
+  document.getElementById('membersSubText').textContent = `${S.members.filter(m=>m.groupId===S.activeGroupId).length} members`;
+}
+
+// ── SLACK PARSE ─────────────────────────────────────────
+function parseSlack() {
+  const raw = document.getElementById('slackPaste').value;
+  if (!raw.trim()) { toast('Paste a message first','wrn'); return; }
+  const get = k => { const m = raw.match(new RegExp(k+'\\s*:\\s*(.+)','i')); return m?m[1].trim():null; };
+  const p = { itemName:get('ITEM'), category:get('CATEGORY'), qty:parseFloat(get('COUNT')||0), type:get('TYPE')?.toUpperCase().includes('OUT')?'OUT':'IN', person:get('BY'), notes:get('NOTES')||'' };
+  if (!p.itemName||!p.qty||!p.person) { toast('Could not parse — check format','err'); return; }
+  S.slackParsed = p;
+  const item = getItems().find(i=>i.name.toLowerCase()===p.itemName.toLowerCase());
+  const prev = document.getElementById('slackPreview');
+  prev.style.display='block';
+  prev.innerHTML = `<div class="info-box"><strong>Parsed ✅</strong><br>📦 ${p.itemName} ${item?'<span class="badge bg-green">Found</span>':'<span class="badge bg-warn">New</span>'}<br>${p.type==='IN'?'▲ INWARD':'▼ OUTWARD'}: ${p.qty} units • By: ${p.person}</div>`;
+  document.getElementById('applySlackBtn').style.display='';
+  toast('Parsed! Review and apply.','ok');
+}
+
+function applySlack() {
+  const p = S.slackParsed; if (!p) return;
+  let item = getItems().find(i=>i.name.toLowerCase()===p.itemName.toLowerCase());
+  if (!item) {
+    item = {id:'i_'+Date.now(),groupId:gid(),name:p.itemName,category:p.category||'Uncategorized',stock:0,unit:'units',minStock:S.settings.threshold};
+    S.inventory.push(item);
+  }
+  const ok = submitTx({itemId:item.id,qty:p.qty,person:p.person,date:new Date().toISOString().split('T')[0],notes:p.notes||'Manual entry',type:p.type,source:'MANUAL'});
+  if (ok) {
+    document.getElementById('slackPaste').value='';
+    document.getElementById('slackPreview').style.display='none';
+    document.getElementById('applySlackBtn').style.display='none';
+    S.slackParsed=null;
+  }
+}
+
+// ── ACTIVITY ────────────────────────────────────────────
+function logAct(action) {
+  if (!S.user) return;
+  S.transactions.unshift({id:'a_'+Date.now(),groupId:gid(),_act:true,user:S.user.name||S.user.email,action,timestamp:new Date().toISOString()});
+}
+function renderActivity() {
+  const logs = S.transactions.filter(t=>t.groupId===gid()&&t._act);
+  const el = document.getElementById('activityBody');
+  if (!logs.length) { el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><p>No activity yet.</p></div>'; return; }
+  el.innerHTML = logs.map(l=>`<div class="list-row">
+    <div class="row-icon info">📋</div>
+    <div class="row-body"><div class="row-title">${l.action}</div><div class="row-sub">👤 ${l.user} • ${new Date(l.timestamp).toLocaleString()}</div></div>
+  </div>`).join('');
+}
+
+// ── SETTINGS ────────────────────────────────────────────
+function loadSettings() {
+  if (document.getElementById('sThreshold')) document.getElementById('sThreshold').value = S.settings.threshold;
+  if (document.getElementById('sChannel')) document.getElementById('sChannel').value = S.settings.channel||'';
+  if (document.getElementById('sWebhook')) document.getElementById('sWebhook').value = S.settings.webhook||'';
+  if (document.getElementById('sNotifyLow')) document.getElementById('sNotifyLow').checked = S.settings.notifyLow!==false;
+  // Load code prefix from active group
+  const g = S.groups.find(g => g.id === gid());
+  if (document.getElementById('sCodePrefix')) document.getElementById('sCodePrefix').value = g?.codePrefix || '';
+}
+function saveSetting() {
+  S.settings = {
+    threshold: parseInt(document.getElementById('sThreshold')?.value)||10,
+    channel: document.getElementById('sChannel')?.value||'#lab-inventory',
+    webhook: document.getElementById('sWebhook')?.value||'',
+    notifyLow: document.getElementById('sNotifyLow')?.checked
+  };
+  // Save code prefix to active group
+  const g = S.groups.find(g => g.id === gid());
+  if (g && document.getElementById('sCodePrefix')) {
+    g.codePrefix = document.getElementById('sCodePrefix').value.toUpperCase().trim() || null;
+  }
+  save();
+}
+
+// ── EXPORT ──────────────────────────────────────────────
+function exportCSV() { openSheet('exportSheet'); }
+
+function getFilteredTx() {
+  const filter = document.getElementById('exportFilter')?.value || 'ALL';
+  const range = document.getElementById('exportRange')?.value || 'ALL';
+  const today = new Date().toISOString().split('T')[0];
+  const weekAgo = new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0];
+  const monthAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];
+  return S.transactions.filter(t => {
+    if (t.groupId !== gid() || t._act) return false;
+    if (filter !== 'ALL' && t.type !== filter) return false;
+    if (range === 'TODAY' && t.date !== today) return false;
+    if (range === 'WEEK' && t.date < weekAgo) return false;
+    if (range === 'MONTH' && t.date < monthAgo) return false;
+    return true;
+  });
+}
+
+function doExport(format) {
+  if (!isAdmin()) { toast('Admin only','err'); return; }
+  const txs = getFilteredTx();
+  if (!txs.length) { toast('No transactions to export','wrn'); return; }
+  const g = S.groups.find(g => g.id === gid());
+  const today = new Date().toLocaleDateString();
+  const fname = `labstock_${new Date().toISOString().split('T')[0]}`;
+
+  if (format === 'csv') {
+    const rows = [['Date','Type','Item','Code','Category','Location','Qty','Unit','By','Lab Member','Notes','Source']];
+    txs.forEach(t => {
+      const item = S.inventory.find(i => i.id === t.itemId || i.name === t.itemName);
+      rows.push([t.date, t.type, t.itemName||'', t.itemCode||item?.code||'', t.category||'', item?.location||t.location||'', t.qty, t.unit||'', t.person||'', t.labMember||t.person||'', t.notes||'', t.source||'APP']);
+    });
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    dlFile(`${fname}.csv`, 'text/csv', csv);
+    toast('📊 CSV downloaded!','ok');
+
+  } else if (format === 'txt') {
+    const filter = document.getElementById('exportFilter').value;
+    let txt = `LABSTOCK TRANSACTION REPORT\n`;
+    txt += `Group: ${g?.name || ''}\n`;
+    txt += `Filter: ${filter === 'ALL' ? 'All Transactions' : filter}\n`;
+    txt += `Exported: ${today}\n`;
+    txt += `${'─'.repeat(50)}\n\n`;
+    txs.forEach(t => {
+      txt += `${t.type === 'IN' ? '▲ INWARD' : '▼ OUTWARD'}\n`;
+      txt += `  Item    : ${t.itemName||''}\n`;
+      txt += `  Date    : ${t.date}\n`;
+      txt += `  Qty     : ${t.qty} ${t.unit||''}\n`;
+      txt += `  By      : ${t.person||''}\n`;
+      if (t.notes) txt += `  Notes   : ${t.notes}\n`;
+      txt += `\n`;
+    });
+    dlFile(`${fname}.txt`, 'text/plain', txt);
+    toast('📄 Text document downloaded!','ok');
+
+  } else if (format === 'html') {
+    const filter = document.getElementById('exportFilter').value;
+    const rows = txs.map(t => {
+      const item = S.inventory.find(i => i.id === t.itemId);
+      return `<tr>
+        <td>${t.date}</td>
+        <td style="color:${t.type==='IN'?'green':'red'};font-weight:600">${t.type}</td>
+        <td>${t.itemName||''}</td>
+        <td>${t.itemCode||item?.code||''}</td>
+        <td>${t.category||''}</td>
+        <td>${item?.location||t.location||''}</td>
+        <td>${t.qty} ${t.unit||''}</td>
+        <td>${t.person||''}</td>
+        <td>${t.labMember||t.person||''}</td>
+        <td>${t.notes||''}</td>
+      </tr>`;
+    }).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>LabStock Report</title>
+    <style>body{font-family:Arial;padding:20px}h1{color:#2d6a4f}table{width:100%;border-collapse:collapse}
+    th{background:#2d6a4f;color:white;padding:8px;text-align:left}td{padding:8px;border-bottom:1px solid #eee}
+    tr:nth-child(even){background:#f9f9f9}</style></head>
+    <body><h1>🧪 LabStock Transaction Report</h1>
+    <p>Group: <b>${g?.name||''}</b> | Filter: ${filter} | Exported: ${today}</p>
+    <table><thead><tr><th>Date</th><th>Type</th><th>Item</th><th>Code</th><th>Category</th><th>Location</th><th>Qty</th><th>By</th><th>Lab Member</th><th>Notes</th></tr></thead>
+    <tbody>${rows}</tbody></table></body></html>`;
+    dlFile(`${fname}.html`, 'text/html', html);
+    toast('🌐 Spreadsheet downloaded!','ok');
+
+  } else if (format === 'print') {
+    const filter = document.getElementById('exportFilter').value;
+    const rows = txs.map(t => `<tr>
+      <td>${t.date}</td>
+      <td style="color:${t.type==='IN'?'green':'red'};font-weight:bold">${t.type}</td>
+      <td>${t.itemName||''}</td>
+      <td>${t.itemCode||''}</td>
+      <td>${t.qty} ${t.unit||''}</td>
+      <td>${t.person||''}</td>
+      <td>${t.labMember||t.person||''}</td>
+      <td>${t.notes||''}</td>
+    </tr>`).join('');
+    const win = window.open('','_blank');
+    win.document.write(`<!DOCTYPE html><html><head><title>LabStock Report</title>
+    <style>body{font-family:Arial;padding:20px}h2{color:#2d6a4f}table{width:100%;border-collapse:collapse}
+    th{background:#2d6a4f;color:white;padding:8px}td{padding:7px;border:1px solid #ddd}
+    @media print{button{display:none}}</style></head>
+    <body><h2>🧪 LabStock — ${g?.name||''}</h2>
+    <p>Filter: ${filter} | Date: ${today} | Total: ${txs.length} transactions</p>
+    <button onclick="window.print()" style="background:#2d6a4f;color:white;padding:10px 20px;border:none;border-radius:6px;cursor:pointer;margin-bottom:16px">🖨️ Print / Save as PDF</button>
+    <table><thead><tr><th>Date</th><th>Type</th><th>Item</th><th>Code</th><th>Qty</th><th>By</th><th>Lab Member</th><th>Notes</th></tr></thead>
+    <tbody>${rows}</tbody></table></body></html>`);
+    win.document.close();
+    toast('🖨️ Print window opened!','ok');
+  }
+  closeSheet('exportSheet');
+}
+
+function switchExportTab(tab) {
+  document.getElementById('epanel-tx').style.display = tab === 'tx' ? 'flex' : 'none';
+  document.getElementById('epanel-stock').style.display = tab === 'stock' ? 'flex' : 'none';
+  document.getElementById('etab-tx').style.cssText = `flex:1;padding:10px;background:none;border:none;border-bottom:2px solid ${tab==='tx'?'var(--accent)':'transparent'};color:${tab==='tx'?'var(--accent)':'var(--muted)'};font-weight:${tab==='tx'?700:500};font-size:13px;cursor:pointer`;
+  document.getElementById('etab-stock').style.cssText = `flex:1;padding:10px;background:none;border:none;border-bottom:2px solid ${tab==='stock'?'var(--accent)':'transparent'};color:${tab==='stock'?'var(--accent)':'var(--muted)'};font-weight:${tab==='stock'?700:500};font-size:13px;cursor:pointer`;
+}
+
+// ── PRIORITY CLASSIFICATION ───────────────────────────────
+function getPriority(item) {
+  const ratio = item.minStock > 0 ? item.stock / item.minStock : item.stock;
+  if (item.stock <= item.minStock) return { level: 'P0', label: 'CRITICAL', color: '#c1121f', bg: '#ffe5e7', emoji: '🔴' };
+  if (ratio <= 2) return { level: 'P1', label: 'MODERATE', color: '#e07a00', bg: '#fff3cd', emoji: '🟡' };
+  return { level: 'P2', label: 'BALANCED', color: '#2d6a4f', bg: '#d8f3dc', emoji: '🟢' };
+}
+
+function getStockItems(priorityFilter) {
+  const items = getItems().map(i => ({ ...i, priority: getPriority(i) }));
+  // Sort: P0 first, then P1, then P2, then by name within each group
+  items.sort((a, b) => {
+    const order = { P0: 0, P1: 1, P2: 2 };
+    if (order[a.priority.level] !== order[b.priority.level]) return order[a.priority.level] - order[b.priority.level];
+    return a.name.localeCompare(b.name);
+  });
+  if (priorityFilter === 'P0') return items.filter(i => i.priority.level === 'P0');
+  if (priorityFilter === 'P01') return items.filter(i => i.priority.level === 'P0' || i.priority.level === 'P1');
+  return items;
+}
+
+function doStockExport(format) {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  const pf = document.getElementById('stockPriorityFilter')?.value || 'ALL';
+  const items = getStockItems(pf);
+  if (!items.length) { toast('No items to export', 'wrn'); return; }
+  const g = S.groups.find(g => g.id === gid());
+  const today = new Date().toLocaleDateString('en-IN');
+  const fname = `labstock_stock_${new Date().toISOString().split('T')[0]}`;
+
+  const p0 = items.filter(i => i.priority.level === 'P0');
+  const p1 = items.filter(i => i.priority.level === 'P1');
+  const p2 = items.filter(i => i.priority.level === 'P2');
+
+  if (format === 'csv') {
+    const rows = [['Priority', 'Level', 'Item Name', 'Code', 'Category', 'Location', 'Current Stock', 'Unit', 'Min Stock', 'Status']];
+    items.forEach(i => {
+      rows.push([
+        i.priority.level,
+        i.priority.label,
+        i.name,
+        i.code || '',
+        i.category,
+        i.location || '',
+        i.stock,
+        i.unit,
+        i.minStock,
+        i.priority.emoji + ' ' + i.priority.label
+      ]);
+    });
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+    dlFile(`${fname}.csv`, 'text/csv', csv);
+    toast('📊 Stock report CSV downloaded!', 'ok');
+
+  } else if (format === 'print') {
+    const buildSection = (sectionItems, priority) => {
+      if (!sectionItems.length) return '';
+      const { level, label, color, bg, emoji } = sectionItems[0].priority;
+      const rows = sectionItems.map(i => `
+        <tr>
+          <td>${i.name}</td>
+          <td style="color:#666;font-size:12px">${i.code||'—'}</td>
+          <td>${i.category}</td>
+          <td style="color:#666;font-size:12px">${i.location||'—'}</td>
+          <td style="font-weight:700;color:${color};font-size:15px">${i.stock} ${i.unit}</td>
+          <td style="color:#999;font-size:12px">${i.minStock} ${i.unit}</td>
+        </tr>`).join('');
+      return `
+        <div style="margin-bottom:28px">
+          <div style="background:${bg};border-left:5px solid ${color};padding:12px 16px;border-radius:8px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+            <span style="font-size:24px">${emoji}</span>
+            <div>
+              <div style="font-size:18px;font-weight:800;color:${color}">${level} — ${label}</div>
+              <div style="font-size:13px;color:#666">${sectionItems.length} item${sectionItems.length!==1?'s':''} ${level==='P0'?'• Immediate reorder required':level==='P1'?'• Monitor closely':'• Sufficient stock'}</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr style="background:${color}">
+                <th style="color:white">Item Name</th>
+                <th style="color:white">Code</th>
+                <th style="color:white">Category</th>
+                <th style="color:white">Location</th>
+                <th style="color:white">Stock</th>
+                <th style="color:white">Min Level</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    };
+
+    const filterLabel = pf === 'P0' ? 'P0 Critical only' : pf === 'P01' ? 'P0 + P1' : 'All priorities';
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>LabStock Stock Report</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: Arial, sans-serif; padding: 24px; color: #1a1a1a; }
+      .header { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #eee; }
+      .header h1 { font-size: 22px; color: #2d6a4f; margin-bottom: 4px; }
+      .meta { font-size: 13px; color: #666; display: flex; gap: 20px; margin-top: 8px; flex-wrap: wrap; }
+      .meta span { background: #f5f5f5; padding: 4px 10px; border-radius: 20px; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th { padding: 9px 12px; text-align: left; font-size: 11px; letter-spacing: 0.5px; }
+      td { padding: 9px 12px; border-bottom: 1px solid #f0f0f0; }
+      tr:last-child td { border-bottom: none; }
+      tr:nth-child(even) td { background: #fafafa; }
+      .summary { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+      .stat { flex: 1; min-width: 100px; padding: 14px; border-radius: 10px; text-align: center; }
+      .stat-num { font-size: 28px; font-weight: 800; }
+      .stat-lbl { font-size: 11px; margin-top: 4px; }
+      button { background: #2d6a4f; color: white; border: none; padding: 10px 24px; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 20px; }
+      @media print { button { display: none; } body { padding: 12px; } }
+    </style></head>
+    <body>
+      <div class="header">
+        <h1>🧪 LabStock — Stock Priority Report</h1>
+        <div class="meta">
+          <span>📂 ${g?.name || 'Lab'}</span>
+          <span>📅 ${today}</span>
+          <span>🔍 ${filterLabel}</span>
+          <span>📦 ${items.length} items</span>
+        </div>
+      </div>
+      <button onclick="window.print()">🖨️ Print / Save as PDF</button>
+      <div class="summary">
+        ${p0.length ? `<div class="stat" style="background:#ffe5e7"><div class="stat-num" style="color:#c1121f">${p0.length}</div><div class="stat-lbl" style="color:#c1121f">🔴 P0 CRITICAL</div></div>` : ''}
+        ${p1.length ? `<div class="stat" style="background:#fff3cd"><div class="stat-num" style="color:#e07a00">${p1.length}</div><div class="stat-lbl" style="color:#e07a00">🟡 P1 MODERATE</div></div>` : ''}
+        ${p2.length && pf === 'ALL' ? `<div class="stat" style="background:#d8f3dc"><div class="stat-num" style="color:#2d6a4f">${p2.length}</div><div class="stat-lbl" style="color:#2d6a4f">🟢 P2 BALANCED</div></div>` : ''}
+      </div>
+      ${buildSection(p0, 'P0')}
+      ${buildSection(p1, 'P1')}
+      ${pf === 'ALL' ? buildSection(p2, 'P2') : ''}
+    </body></html>`;
+
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+    toast('🖨️ Stock report ready — Print or Save as PDF', 'ok');
+  }
+  closeSheet('exportSheet');
+}
+
+function dlFile(filename, type, content) {
+  const a = document.createElement('a');
+  a.href = 'data:' + type + ';charset=utf-8,' + encodeURIComponent(content);
+  a.download = filename; a.click();
+}
+
+// ── BULK UPLOAD ──────────────────────────────────────────
+function downloadTemplate() {
+  const csv = `Item Name,Unique Code,Category,Location,Unit,Stock,Min Stock
+Ethanol 95%,CHM-001,Chemicals,Shelf A1,L,10,5
+Sodium Chloride,CHM-002,Chemicals,Cabinet B2,g,500,100
+Micropipette Tips,CSM-001,Consumables,Drawer 3,box,20,5
+Petri Dishes,GLS-001,Glassware,Shelf C1,pcs,50,10`;
+  dlFile('labstock_template.csv', 'text/csv', csv);
+  toast('📥 Template downloaded!','ok');
+}
+
+let _bulkData = [];
+
+function previewBulk(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const isXLSX = file.name.match(/\.xlsx?$/i);
+  const reader = new FileReader();
+
+  function parseRows(rows) {
+    // rows[0] = header row, rows[1..] = data
+    _bulkData = [];
+    const errors = [];
+    if (!rows || rows.length < 2) { errors.push('File appears empty'); return errors; }
+
+    // Normalise headers
+    const headers = rows[0].map(h => String(h||'').trim().toLowerCase());
+
+    for (let i = 1; i < rows.length; i++) {
+      const cols = rows[i];
+      if (!cols || cols.every(c => !c && c !== 0)) continue; // skip blank rows
+      const row = {};
+      headers.forEach((h, idx) => row[h] = cols[idx] !== undefined ? String(cols[idx]).trim() : '');
+
+      const name = row['item name'] || row['name'] || row['item'];
+      if (!name) { errors.push(`Row ${i+1}: Missing item name`); continue; }
+      const cat  = row['category'] || row['cat'] || 'Uncategorized';
+      const unit = row['unit'] || 'pcs';
+      const stock = parseFloat(row['stock'] || row['count'] || row['qty'] || '0') || 0;
+      const minStock = parseFloat(row['min stock'] || row['min'] || '10') || 10;
+      _bulkData.push({
+        name,
+        code: row['unique code'] || row['code'] || '',
+        category: cat,
+        location: row['location'] || '',
+        unit, stock, minStock
+      });
+    }
+    return errors;
+  }
+
+  function showPreview(errors) {
+    const prev = document.getElementById('bulkPreview');
+    prev.style.display = 'block';
+    if (!_bulkData.length) {
+      prev.innerHTML = `<div class="info-box" style="font-size:12px;background:var(--danger-bg);border-color:#ffc9cb">
+        ❌ <strong>No items could be read.</strong><br>
+        ${errors.length ? errors.slice(0,3).join('<br>') : ''}<br><br>
+        Make sure your file has these column headers:<br>
+        <strong>Item Name, Category, Unit, Stock</strong>
+      </div>`;
+      document.getElementById('bulkImportBtn').style.display = 'none';
+    } else {
+      prev.innerHTML = `<div class="info-box" style="font-size:12px">
+        ✅ <strong>${_bulkData.length} items</strong> ready to import
+        ${errors.length ? `<br>⚠️ ${errors.length} rows skipped` : ''}
+        <br><br>${_bulkData.slice(0,3).map(d=>`• ${d.name} (${d.category}) — ${d.stock} ${d.unit}`).join('<br>')}
+        ${_bulkData.length > 3 ? `<br>...and ${_bulkData.length-3} more` : ''}
+      </div>`;
+      document.getElementById('bulkImportBtn').style.display = '';
+    }
+  }
+
+  if (isXLSX) {
+    // ── XLSX: use built-in MiniXLSX (no CDN) ──
+    reader.onload = async (e) => {
+      try {
+        const raw = await MiniXLSX.read(e.target.result);
+        const errors = parseRows(raw);
+        showPreview(errors);
+      } catch(err) {
+        console.error('XLSX parse error:', err);
+        toast('Could not read XLSX — try saving as CSV', 'err');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    // ── CSV: plain text parse ──
+    reader.onload = (e) => {
+      const lines = e.target.result.split('\n').filter(l => l.trim());
+      const raw = lines.map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
+      const errors = parseRows(raw);
+      showPreview(errors);
+    };
+    reader.readAsText(file);
+  }
+}
+
+function importBulk() {
+  if (!_bulkData.length) return;
+  let added = 0, updated = 0;
+  _bulkData.forEach(d => {
+    const existing = getItems().find(i => i.name.toLowerCase() === d.name.toLowerCase());
+    if (existing) {
+      Object.assign(existing, { code: d.code, category: d.category, location: d.location, unit: d.unit, minStock: d.minStock });
+      if (d.stock > 0) existing.stock = d.stock;
+      updated++;
+    } else {
+      S.inventory.push({ id: 'i_'+Date.now()+Math.random(), groupId: gid(), ...d });
+      added++;
+    }
+  });
+  logAct(`Bulk imported: ${added} added, ${updated} updated`);
+  save(); closeSheet('bulkSheet'); renderInv(); updateAlertBadge();
+
+  // Push bulk to server with groupId
+  if (S.activeGroupId) {
+    fetch(`${RAILWAY_URL}/api/inventory/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId: S.activeGroupId, items: _bulkData })
+    }).catch(() => {});
+  }
+
+  _bulkData = [];
+  document.getElementById('bulkFile').value = '';
+  document.getElementById('bulkPreview').style.display = 'none';
+  document.getElementById('bulkImportBtn').style.display = 'none';
+  toast(`✅ ${added} added, ${updated} updated!`,'ok');
+}
+
+function resetData() {
+  if (!confirm('Delete ALL data? Cannot undo.')) return;
+  localStorage.removeItem('ls2'); location.reload();
+}
+
+// ── TOAST ────────────────────────────────────────────────
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `show ${type}`;
+  clearTimeout(window._t);
+  window._t = setTimeout(()=>el.classList.remove('show'), 3200);
+}
+
+// ── SEED ─────────────────────────────────────────────────
+function seedDemo() {
+  const id='g_demo';
+  S.groups=[{id,name:'Biochemistry Lab',desc:'Main research lab',adminEmail:S.user.email,created:new Date().toISOString()}];
+  S.activeGroupId=id;
+  S.members=[
+    {id:'m1',groupId:id,email:S.user.email,name:S.user.name,role:'admin',joined:new Date().toISOString()},
+    {id:'m2',groupId:id,email:'ravi@lab.com',name:'Dr. Ravi Kumar',role:'member',joined:new Date().toISOString()},
+    {id:'m3',groupId:id,email:'priya@lab.com',name:'Dr. Priya Sharma',role:'member',joined:new Date().toISOString()},
+  ];
+  S.inventory=[
+    {id:'i1',groupId:id,name:'Ethanol 95%',category:'Chemicals',stock:5,unit:'L',minStock:10},
+    {id:'i2',groupId:id,name:'Sodium Chloride',category:'Chemicals',stock:200,unit:'g',minStock:50},
+    {id:'i3',groupId:id,name:'Micropipette Tips',category:'Consumables',stock:8,unit:'box',minStock:20},
+    {id:'i4',groupId:id,name:'Petri Dishes',category:'Glassware',stock:45,unit:'pcs',minStock:20},
+    {id:'i5',groupId:id,name:'Nitrile Gloves M',category:'Safety',stock:3,unit:'box',minStock:10},
+    {id:'i6',groupId:id,name:'Agar Powder',category:'Reagents',stock:500,unit:'g',minStock:100},
+    {id:'i7',groupId:id,name:'Centrifuge Tubes',category:'Consumables',stock:80,unit:'pcs',minStock:50},
+    {id:'i8',groupId:id,name:'Buffer PBS',category:'Reagents',stock:12,unit:'L',minStock:5},
+  ];
+  const today=new Date().toISOString().split('T')[0];
+  S.transactions=[
+    {id:'t1',groupId:id,type:'IN',source:'APP',itemId:'i2',itemName:'Sodium Chloride',category:'Chemicals',qty:500,unit:'g',person:'Dr. Ravi Kumar',date:today,notes:'Restock',timestamp:new Date().toISOString()},
+    {id:'t2',groupId:id,type:'OUT',source:'TELEGRAM',itemId:'i6',itemName:'Agar Powder',category:'Reagents',qty:50,unit:'g',person:'Dr. Priya Sharma',date:today,notes:'Batch #7',timestamp:new Date().toISOString()},
+  ];
+}
+
+// ── RAILWAY SERVER SYNC ──────────────────────────────────
+const RAILWAY_URL = 'https://labstockserver-production.up.railway.app';
+let syncInterval = null;
+let sseConnection = null;
+let sseReconnectTimer = null;
+let lastSyncTime = 0;
+
+async function syncFromServer(force = false) {
+  // Debounce — don't sync more than once every 3 seconds
+  const now = Date.now();
+  if (!force && now - lastSyncTime < 3000) return;
+  lastSyncTime = now;
+
+  try {
+    if (!S.activeGroupId) return;
+    const gid = encodeURIComponent(S.activeGroupId);
+    const [invRes, txRes] = await Promise.all([
+      fetch(`${RAILWAY_URL}/api/inventory?groupId=${gid}`),
+      fetch(`${RAILWAY_URL}/api/transactions?groupId=${gid}&limit=100`)
+    ]);
+    const serverItems = await invRes.json();
+    const serverTx = await txRes.json();
+    if (!S.activeGroupId) return;
+
+    let changed = false;
+
+    // Build set of server item names for quick lookup
+    const serverItemNames = new Set(serverItems.map(i => i.name?.toLowerCase()).filter(Boolean));
+
+    // Remove items that no longer exist on server (were deleted via Telegram /reset or app)
+    const before = S.inventory.length;
+    S.inventory = S.inventory.filter(i => {
+      if (i.groupId !== S.activeGroupId) return true; // keep other groups
+      if (!i.id.startsWith('srv_') && !i.id.startsWith('i_')) return true; // keep unknown
+      // If item exists on server OR was added locally (not from server), keep it
+      if (i.id.startsWith('i_')) return true; // locally added — admin manages
+      return serverItemNames.has(i.name?.toLowerCase()); // server item — remove if gone
+    });
+    if (S.inventory.length !== before) changed = true;
+
+    // Merge server items into local inventory
+    serverItems.forEach(serverItem => {
+      const key = serverItem.name?.toLowerCase();
+      if (!key) return;
+      const existing = S.inventory.find(i =>
+        i.groupId === S.activeGroupId && i.name?.toLowerCase() === key
+      );
+      if (existing) {
+        if (existing.stock !== serverItem.stock) {
+          existing.stock = serverItem.stock; changed = true;
+        }
+        if (serverItem.code) existing.code = serverItem.code;
+        if (serverItem.location) existing.location = serverItem.location;
+        existing.category = serverItem.category || existing.category;
+      } else {
+        S.inventory.push({
+          id: 'srv_' + Date.now() + Math.random(),
+          groupId: S.activeGroupId,
+          name: serverItem.name,
+          code: serverItem.code || '',
+          category: serverItem.category || 'Uncategorized',
+          location: serverItem.location || '',
+          stock: serverItem.stock,
+          unit: serverItem.unit || 'units',
+          minStock: serverItem.minStock || 10
+        });
+        changed = true;
+      }
+    });
+
+    // Merge server transactions
+    serverTx.forEach(tx => {
+      if (!tx.itemName) return;
+      const exists = S.transactions.find(t => String(t.id) === String(tx.id));
+      if (!exists) {
+        S.transactions.unshift({
+          ...tx,
+          id: String(tx.id),
+          groupId: S.activeGroupId,
+          source: tx.source || 'TELEGRAM'
+        });
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      S.transactions.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+      save();
+      refreshCurrentView();
+      updateAlertBadge();
+    }
+  } catch(e) {
+    console.log('Sync failed:', e.message);
+  }
+}
+
+// Apply a single transaction instantly from SSE — no full re-fetch needed
+function applyInstantUpdate(data) {
+  if (!S.activeGroupId) return;
+  let changed = false;
+
+  if (data.type === 'TRANSACTION' && data.transaction && data.item) {
+    const tx = data.transaction;
+    const serverItem = data.item;
+
+    // Update local stock instantly
+    const existing = S.inventory.find(i =>
+      i.groupId === S.activeGroupId &&
+      i.name?.toLowerCase() === serverItem.name?.toLowerCase()
+    );
+    if (existing) {
+      existing.stock = serverItem.stock;
+      if (serverItem.code) existing.code = serverItem.code;
+      if (serverItem.location) existing.location = serverItem.location;
+      changed = true;
+    } else {
+      S.inventory.push({
+        id: 'srv_' + Date.now(),
+        groupId: S.activeGroupId,
+        name: serverItem.name,
+        code: serverItem.code || '',
+        category: serverItem.category || 'Uncategorized',
+        location: serverItem.location || '',
+        stock: serverItem.stock,
+        unit: serverItem.unit || 'units',
+        minStock: serverItem.minStock || 10
+      });
+      changed = true;
+    }
+
+    // Add transaction if not already there
+    const txExists = S.transactions.find(t => String(t.id) === String(tx.id));
+    if (!txExists) {
+      S.transactions.unshift({
+        ...tx,
+        id: String(tx.id),
+        groupId: S.activeGroupId,
+        source: 'TELEGRAM'
+      });
+      changed = true;
+    }
+
+    if (changed) {
+      save();
+      refreshCurrentView();
+      updateAlertBadge();
+      // Show toast with item name and new stock
+      const arrow = tx.type === 'IN' ? '▲' : '▼';
+      toast(`${arrow} ${serverItem.name}: ${serverItem.stock} ${serverItem.unit} (via Telegram)`, 'ok');
+
+      // Low stock warning
+      if (serverItem.stock <= (serverItem.minStock || 10)) {
+        setTimeout(() => toast(`⚠ Low stock: ${serverItem.name}`, 'wrn'), 2500);
+      }
+    }
+  }
+
+  if (data.type === 'CLEARED') {
+    // Set all server-sourced items stock to 0 instantly
+    S.inventory.forEach(i => {
+      if (i.groupId === S.activeGroupId) i.stock = 0;
+    });
+    // Clear all Telegram transactions
+    S.transactions = S.transactions.filter(t =>
+      t.groupId !== S.activeGroupId || t.source === 'APP' || t.source === 'MANUAL'
+    );
+    save(); refreshCurrentView(); updateAlertBadge();
+    toast('🔄 Stock cleared to zero', 'wrn');
+  }
+
+  if (data.type === 'RESET') {
+    // Remove all server-synced items from local inventory instantly
+    S.inventory = S.inventory.filter(i =>
+      i.groupId !== S.activeGroupId || i.id.startsWith('i_') // keep manually added items
+    );
+    // Clear all Telegram transactions for this group
+    S.transactions = S.transactions.filter(t =>
+      t.groupId !== S.activeGroupId || (t.source !== 'TELEGRAM' && t.source !== 'MANUAL')
+    );
+    save(); refreshCurrentView(); updateAlertBadge();
+    toast('🔄 All data reset from Telegram', 'wrn');
+  }
+
+  if (data.type === 'ITEM_DELETED' && data.name) {
+    S.inventory = S.inventory.filter(i =>
+      !(i.groupId === S.activeGroupId && i.name?.toLowerCase() === data.name.toLowerCase())
+    );
+    save(); refreshCurrentView(); updateAlertBadge();
+    toast(`🗑 Item deleted: ${data.name}`, 'wrn');
+  }
+
+  if (data.type === 'BULK_UPDATED') {
+    // Full sync needed for bulk changes
+    syncFromServer(true);
+  }
+}
+
+function refreshCurrentView() {
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'pg-home') renderHome();
+  if (activePage === 'pg-inv') renderInv();
+  if (activePage === 'pg-log') renderLog();
+}
+
+function connectSSE() {
+  if (sseConnection) { sseConnection.close(); sseConnection = null; }
+  clearTimeout(sseReconnectTimer);
+
+  try {
+    sseConnection = new EventSource(`${RAILWAY_URL}/stream?groupId=${encodeURIComponent(S.activeGroupId||'')}`);
+
+    sseConnection.onopen = () => {
+      console.log('[SSE] Connected ✅');
+    };
+
+    sseConnection.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'CONNECTED') {
+          console.log('[SSE] Ready, server has', data.items, 'items');
+          syncFromServer(true); // Full sync on connect
+          return;
+        }
+        // Apply update instantly — no re-fetch
+        applyInstantUpdate(data);
+      } catch(err) {
+        console.log('[SSE] Parse error:', err);
+      }
+    };
+
+    sseConnection.onerror = () => {
+      console.log('[SSE] Disconnected — reconnecting in 5s...');
+      sseConnection.close();
+      sseConnection = null;
+      // Auto-reconnect after 5 seconds
+      sseReconnectTimer = setTimeout(connectSSE, 5000);
+    };
+
+  } catch(e) {
+    console.log('[SSE] Not available, using polling only');
+    sseReconnectTimer = setTimeout(connectSSE, 10000);
+  }
+}
+
+function startServerSync() {
+  // Immediate full sync
+  syncFromServer(true);
+
+  // Faster polling fallback: every 10 seconds (in case SSE misses something)
+  if (syncInterval) clearInterval(syncInterval);
+  syncInterval = setInterval(() => syncFromServer(), 10000);
+
+  // SSE for instant updates
+  connectSSE();
+
+  // Re-sync when tab becomes visible again
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      syncFromServer(true);
+      if (!sseConnection || sseConnection.readyState === EventSource.CLOSED) {
+        connectSSE();
+      }
+    }
+  });
+}
+
+// ── PRODUCT PAGE ─────────────────────────────────────────
+let _currentProductId = null;
+
+function openProductPage(itemId) {
+  const item = S.inventory.find(i => i.id === itemId);
+  if (!item) return;
+  _currentProductId = itemId;
+
+  // Header
+  document.getElementById('productPageTitle').textContent = item.name;
+
+  // Info
+  document.getElementById('productName').textContent = item.name;
+  document.getElementById('productCode').textContent = item.code || 'No Code';
+  document.getElementById('productCategory').textContent = item.category || '—';
+  document.getElementById('productLocation').textContent = item.location || '—';
+  document.getElementById('productStockUnit').textContent = item.unit;
+  document.getElementById('productMinStock').textContent = item.minStock + ' ' + item.unit;
+
+  // Stock number + color
+  const low = item.stock <= item.minStock;
+  const watch = item.stock <= item.minStock * 1.5;
+  const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent)';
+  const stockEl = document.getElementById('productStockNum');
+  stockEl.textContent = item.stock;
+  stockEl.style.color = color;
+
+  // Stock badge
+  const badge = document.getElementById('productStockBadge');
+  if (low) { badge.textContent = 'LOW STOCK'; badge.className = 'badge bg-red'; }
+  else if (watch) { badge.textContent = 'WATCH'; badge.className = 'badge bg-warn'; }
+  else { badge.textContent = 'OK'; badge.className = 'badge bg-green'; }
+
+  // Recent transactions for this item (last 5)
+  const recentTx = S.transactions
+    .filter(t => t.groupId === gid() && !t._act && (t.itemName?.toLowerCase() === item.name.toLowerCase() || t.itemId === itemId))
+    .slice(0, 5);
+  const rList = document.getElementById('productRecentList');
+  if (!recentTx.length) {
+    rList.innerHTML = '<div class="empty" style="padding:24px 16px"><div class="empty-icon" style="font-size:32px">↕️</div><p>No transactions yet</p></div>';
+  } else {
+    rList.innerHTML = recentTx.map(t => {
+      const isIn = t.type === 'IN';
+      return `<div class="list-row">
+        <div class="row-icon ${isIn?'in':'out'}">${isIn?'📦':'🔻'}</div>
+        <div class="row-body">
+          <div class="row-title">${isIn ? '▲ Inward' : '▼ Outward'}: ${t.qty} ${t.unit||item.unit}</div>
+          <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'Unknown'}</div>
+        </div>
+        <div class="row-val ${isIn?'in':'out'}">${isIn?'+':'−'}${t.qty}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Show/hide edit button for admin
+  document.getElementById('productEditBtn').style.display = isAdmin() ? '' : 'none';
+
+  // Open with animation
+  const page = document.getElementById('productPage');
+  page.style.display = 'flex';
+  requestAnimationFrame(() => page.classList.add('open'));
+  document.getElementById('pageScroll').style.overflow = 'hidden';
+
+  // Load photo async (server first, then localStorage)
+  const photo = document.getElementById('productPhoto');
+  const placeholder = document.getElementById('productPhotoPlaceholder');
+  const deleteBtn = document.getElementById('photoDeleteBtn');
+  // Reset first
+  photo.style.display = 'none'; photo.src = '';
+  placeholder.style.display = 'block'; deleteBtn.style.display = 'none';
+  loadProductPhoto(item).then(src => {
+    if (src) {
+      photo.src = src; photo.style.display = 'block';
+      placeholder.style.display = 'none'; deleteBtn.style.display = 'flex';
+    }
+  });
+}
+
+function closeProductPage() {
+  const page = document.getElementById('productPage');
+  page.classList.remove('open');
+  setTimeout(() => { page.style.display = 'none'; }, 300);
+  document.getElementById('pageScroll').style.overflow = '';
+  renderInv();
+  updateAlertBadge();
+}
+
+function editItemFromProduct() {
+  closeProductPage();
+  setTimeout(() => editItem(_currentProductId), 350);
+}
+
+// ── QUICK EDIT (location & code inline from product page) ─
+function openQuickEdit() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+  document.getElementById('qeLocation').value = item.location || '';
+  document.getElementById('qeCode').value = item.code || '';
+  document.getElementById('qeMin').value = item.minStock || 10;
+  document.getElementById('quickEditSheet').classList.add('open');
+}
+
+function saveQuickEdit() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+  const loc = document.getElementById('qeLocation').value.trim();
+  const code = document.getElementById('qeCode').value.trim();
+  const min = parseFloat(document.getElementById('qeMin').value) || 10;
+  // Check code uniqueness
+  if (code && code !== item.code) {
+    const dup = getItems().find(i => i.id !== item.id && i.code === code);
+    if (dup) { toast(`Code "${code}" already used by ${dup.name}`, 'err'); return; }
+  }
+  item.location = loc;
+  item.code = code;
+  item.minStock = min;
+  save();
+  document.getElementById('quickEditSheet').classList.remove('open');
+  // Sync to server
+  fetch(`${RAILWAY_URL}/api/inventory`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupId: S.activeGroupId, name: item.name, code, location: loc, minStock: min })
+  }).catch(() => {});
+  // Refresh product page
+  openProductPage(_currentProductId);
+  toast('✅ Updated!', 'ok');
+}
+
+// ── IN/OUT from product page — direct submit without sheet ─
+function productTx(type) {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+
+  // Populate and open txSheet with item pre-selected
+  const sel = document.getElementById('txItem');
+  sel.innerHTML = '<option value="">Select item…</option>' +
+    getItems().map(i => `<option value="${i.id}">${i.name} (${i.stock} ${i.unit})</option>`).join('');
+  document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('txPerson').value = S.user?.name || '';
+  document.getElementById('txNotes').value = '';
+  document.getElementById('txQty').value = '';
+  setTxType(type);
+
+  // Must set value AFTER options are in DOM
+  sel.value = _currentProductId;
+
+  // If value didn't stick (item not in list), add it manually
+  if (!sel.value) {
+    const opt = document.createElement('option');
+    opt.value = item.id;
+    opt.textContent = `${item.name} (${item.stock} ${item.unit})`;
+    sel.appendChild(opt);
+    sel.value = item.id;
+  }
+
+  document.getElementById('txSheet').classList.add('open');
+}
+
+// ── PHOTOS — store on Railway server so all users see them ─
+async function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file || !_currentProductId) return;
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const img = new Image();
+    img.onload = async () => {
+      // Compress
+      const canvas = document.createElement('canvas');
+      const maxW = 800;
+      const scale = img.width > maxW ? maxW / img.width : 1;
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+
+      // Save locally always (instant feedback)
+      try { localStorage.setItem('photo_' + _currentProductId, dataUrl); } catch(e) {}
+
+      // Try to save to Railway server (so all users see it)
+      try {
+        await fetch(`${RAILWAY_URL}/api/photos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ groupId: S.activeGroupId, itemName: item.name, photo: dataUrl })
+        });
+      } catch(e) {}
+
+      // Show photo
+      const photoEl = document.getElementById('productPhoto');
+      photoEl.src = dataUrl;
+      photoEl.style.display = 'block';
+      document.getElementById('productPhotoPlaceholder').style.display = 'none';
+      document.getElementById('photoDeleteBtn').style.display = 'flex';
+      toast('📷 Photo saved!', 'ok');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+async function loadProductPhoto(item) {
+  // 1. Try server first
+  try {
+    const res = await fetch(`${RAILWAY_URL}/api/photos/${encodeURIComponent(S.activeGroupId||'default')}/${encodeURIComponent(item.name)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.photo) {
+        // Cache locally
+        try { localStorage.setItem('photo_' + item.id, data.photo); } catch(e) {}
+        return data.photo;
+      }
+    }
+  } catch(e) {}
+  // 2. Fall back to localStorage
+  return localStorage.getItem('photo_' + item.id) || null;
+}
+
+function deleteProductPhoto() {
+  if (!_currentProductId) return;
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!confirm('Remove this photo?')) return;
+  localStorage.removeItem('photo_' + _currentProductId);
+  // Delete from server too
+  if (item) {
+    fetch(`${RAILWAY_URL}/api/photos/${encodeURIComponent(S.activeGroupId||'default')}/${encodeURIComponent(item.name)}`, { method: 'DELETE' }).catch(() => {});
+  }
+  document.getElementById('productPhoto').style.display = 'none';
+  document.getElementById('productPhoto').src = '';
+  document.getElementById('productPhotoPlaceholder').style.display = 'block';
+  document.getElementById('photoDeleteBtn').style.display = 'none';
+  toast('Photo removed', 'wrn');
+}
+
+// ── INIT ─────────────────────────────────────────────────
+load();
+// Check for invite link on page load
+detectInviteOnLoad();
+if (S.user) {
+  showApp();
+  startServerSync();
+}
+</script>
+</body>
+</html>
