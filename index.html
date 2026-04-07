@@ -678,12 +678,14 @@ select.form-input { cursor: pointer; }
 .product-photo-wrap {
   position: relative;
   background: var(--surface2);
-  width: 100%; height: 220px;
+  width: 100%;
+  aspect-ratio: 1 / 1;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
 .product-photo-wrap img {
   width: 100%; height: 100%; object-fit: cover;
+  display: block;
 }
 .product-photo-placeholder {
   font-size: 72px; opacity: .25;
@@ -1256,8 +1258,7 @@ select.form-input { cursor: pointer; }
   <div class="product-topbar">
     <div class="product-back" onclick="closeProductPage()">←</div>
     <div style="flex:1;font-family:var(--display);font-size:16px;font-weight:700" id="productPageTitle">Item</div>
-    <button class="btn btn-ghost btn-sm" onclick="openQuickEdit()" style="margin-right:6px">📍 Edit</button>
-    <button class="btn btn-ghost btn-sm" onclick="editItemFromProduct()" id="productEditBtn">⚙️ Full</button>
+    <button class="btn btn-ghost btn-sm" onclick="editItemFromProduct()" id="productEditBtn">✏️ Edit</button>
   </div>
   <div class="product-scroll">
     <!-- Photo -->
@@ -1300,6 +1301,10 @@ select.form-input { cursor: pointer; }
         <div class="product-meta-item">
           <div class="product-meta-label">Location</div>
           <div class="product-meta-val" id="productLocation">—</div>
+        </div>
+        <div class="product-meta-item" id="productExpiryRow" style="display:none">
+          <div class="product-meta-label">Expiry Date</div>
+          <div class="product-meta-val" id="productExpiry" style="font-weight:700">—</div>
         </div>
       </div>
 
@@ -1403,6 +1408,10 @@ select.form-input { cursor: pointer; }
       <div class="form-group">
         <label class="form-label">Min Stock (Alert Level)</label>
         <input class="form-input" type="number" id="iMin" placeholder="10" min="0" inputmode="numeric">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Expiry Date <span style="color:var(--muted);font-size:11px">(optional — for reagents, chemicals)</span></label>
+        <input class="form-input" type="date" id="iExpiry">
       </div>
     </div>
     <div class="sheet-footer">
@@ -1620,33 +1629,27 @@ select.form-input { cursor: pointer; }
     <div id="memPanel-pending" style="display:none;max-height:60vh;overflow-y:auto">
       <div id="pendingSheetBody"></div>
     </div>
-    <!-- Add member panel -->
+    <!-- Add member panel — invite link + group code only -->
     <div id="memPanel-add" style="display:none">
-      <div class="sheet-body" style="gap:12px">
-        <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:4px">
-          Add a member by email — they'll see a join request next time they log in. Or share an invite link they can click directly.
-        </div>
-        <div class="form-group">
-          <label class="form-label">Full Name *</label>
-          <input class="form-input" id="addMemName" placeholder="e.g. Dr. Priya Sharma">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Email Address *</label>
-          <input class="form-input" id="addMemEmail" type="email" placeholder="priya@lab.com" inputmode="email">
-          <div id="addMemError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none"></div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Role</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <button id="roleBtn-member" onclick="selectRole('member')" class="type-btn in-on" style="padding:12px;border-radius:var(--r-sm);border:1.5px solid var(--accent-l);background:var(--accent-bg);color:var(--accent);font-family:var(--body);font-size:13px;font-weight:700;cursor:pointer">🧑‍🔬 Member</button>
-            <button id="roleBtn-admin" onclick="selectRole('admin')" class="type-btn" style="padding:12px;border-radius:var(--r-sm);border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-family:var(--body);font-size:13px;font-weight:700;cursor:pointer">⚙️ Admin</button>
+      <div class="sheet-body" style="gap:14px">
+        <!-- Option 1: Invite Link -->
+        <div style="background:var(--accent-bg);border:1.5px solid var(--accent-l);border-radius:var(--r);padding:16px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔗 Invite Link</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Share this link with your lab member. They click it, sign in, and are automatically added to this group.</div>
+          <div id="inviteLinkDisplay" style="font-size:11px;padding:8px 10px;background:var(--surface2);border-radius:8px;font-family:var(--mono);word-break:break-all;margin-bottom:10px;color:var(--text2)">Generating...</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary" style="flex:1" onclick="copyInviteLink()">📋 Copy Link</button>
+            <button class="btn btn-ghost" style="flex:1" onclick="shareInviteLink()">📤 Share</button>
           </div>
         </div>
-        <button class="btn btn-primary btn-full" onclick="addMemberByEmail()">✅ Add Member</button>
-        <div style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px">
-          <div style="flex:1;height:1px;background:var(--border)"></div>or<div style="flex:1;height:1px;background:var(--border)"></div>
+
+        <!-- Option 2: Group Code -->
+        <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:16px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔢 Group Code</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Share this short code. Members go to LabStock → Join Group → enter this code.</div>
+          <div id="groupCodeDisplay" style="font-size:22px;font-weight:800;font-family:var(--mono);letter-spacing:3px;text-align:center;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:10px;color:var(--accent)">—</div>
+          <button class="btn btn-ghost btn-full" onclick="copyGroupCode()">📋 Copy Code</button>
         </div>
-        <button class="btn btn-ghost btn-full" onclick="shareInviteLink()">🔗 Share Invite Link</button>
       </div>
     </div>
     <div style="padding:12px 16px 6px" id="inviteWrap">
@@ -2509,6 +2512,7 @@ function switchMemTab(tab) {
   document.getElementById('inviteWrap').style.display = (tab==='list' && isAdmin()) ? '' : 'none';
   if (tab==='pending') renderPendingSheet();
   if (tab==='list') renderMembersSheet();
+  if (tab==='add') populateAddMemberPanel();
 }
 
 function selectRole(role) {
@@ -2531,16 +2535,19 @@ function renderMembersSheet() {
   const showAddBtn = document.getElementById('showAddMemBtn');
   const isAdm = isAdmin();
 
-  // Show/hide admin-only tabs and buttons
+  // Members list visible to ALL roles
+  // Add/Pending tabs only for admins
   document.getElementById('memTab-pending').style.display = isAdm ? '' : 'none';
   document.getElementById('memTab-add').style.display = isAdm ? '' : 'none';
   wrap.style.display = isAdm ? '' : 'none';
   if (showAddBtn) showAddBtn.style.display = isAdm ? '' : 'none';
-
-  // Also hide add/pending panels if not admin (safety)
   if (!isAdm) {
     document.getElementById('memPanel-add').style.display = 'none';
     document.getElementById('memPanel-pending').style.display = 'none';
+    document.getElementById('memPanel-list').style.display = 'block';
+  }
+  // Always show the members list panel for all roles
+  if (!document.getElementById('memPanel-list').style.display || document.getElementById('memPanel-list').style.display === 'none') {
     document.getElementById('memPanel-list').style.display = 'block';
   }
 
@@ -2786,6 +2793,7 @@ function saveItem() {
   const stock = parseFloat(document.getElementById('iStock').value)||0;
   const unit = document.getElementById('iUnit').value.trim();
   const min = parseFloat(document.getElementById('iMin').value)||10;
+  const expiry = document.getElementById('iExpiry')?.value || '';
   if (!name||!cat||!unit) { toast('Fill required fields', 'err'); return; }
   const eid = document.getElementById('editId').value;
   if (eid) {
@@ -2795,15 +2803,13 @@ function saveItem() {
       const duplicate = getItems().find(i => i.id !== eid && i.code === code);
       if (duplicate) { toast(`Code "${code}" already used by ${duplicate.name}`, 'err'); return; }
     }
-    Object.assign(item, {name, code, category:cat, location:loc, stock, unit, minStock:min});
+    Object.assign(item, {name, code, category:cat, location:loc, stock, unit, minStock:min, expiry});
     logAct(`Edited: ${name}`); toast('Item updated','ok');
   } else {
-    // Auto-generate code if not provided
     if (!code) code = generateItemCode(cat);
-    // Ensure uniqueness
     const duplicate = getItems().find(i => i.code === code);
     if (duplicate) code = generateItemCode(cat) + '_' + Date.now().toString().slice(-3);
-    S.inventory.push({id:'i_'+Date.now(), groupId:gid(), name, code, category:cat, location:loc, stock, unit, minStock:min});
+    S.inventory.push({id:'i_'+Date.now(), groupId:gid(), name, code, category:cat, location:loc, stock, unit, minStock:min, expiry});
     logAct(`Added: ${name} [${code}]`);
     toast(`✅ Item added! Code: ${code}`,'ok');
   }
@@ -2828,6 +2834,7 @@ function editItem(id) {
   document.getElementById('iStock').value = item.stock;
   document.getElementById('iUnit').value = item.unit;
   document.getElementById('iMin').value = item.minStock;
+  if (document.getElementById('iExpiry')) document.getElementById('iExpiry').value = item.expiry || '';
   document.getElementById('addItemSheet').classList.add('open');
 }
 
@@ -2892,10 +2899,18 @@ function renderInv() {
     const watch = item.stock <= item.minStock*1.5;
     const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
     const badge = low ? '<span class="badge bg-red">LOW</span>' : watch ? '<span class="badge bg-warn">WATCH</span>' : '';
+    // Expiry badge
+    let expiryBadge = '';
+    if (item.expiry) {
+      const today2 = new Date(); today2.setHours(0,0,0,0);
+      const dLeft = Math.ceil((new Date(item.expiry) - today2) / 86400000);
+      if (dLeft < 0) expiryBadge = '<span class="badge bg-red" style="font-size:9px">⛔ EXPIRED</span>';
+      else if (dLeft <= 30) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
+    }
     return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
       <div class="row-icon ${low?'warn':'in'}">${low?'⚠️':'📦'}</div>
       <div class="row-body">
-        <div class="row-title">${item.name} ${badge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
+        <div class="row-title">${item.name} ${badge} ${expiryBadge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
         <div class="row-sub">${item.category}${item.location?' • 📍'+item.location:''}</div>
         <div class="stock-wrap">
           <div class="stock-bar"><div class="stock-fill" style="width:${pct}%;background:${color}"></div></div>
@@ -3816,6 +3831,27 @@ function openProductPage(itemId) {
   document.getElementById('productCode').textContent = item.code || 'No Code';
   document.getElementById('productCategory').textContent = item.category || '—';
   document.getElementById('productLocation').textContent = item.location || '—';
+  // Expiry
+  const expiryRow = document.getElementById('productExpiryRow');
+  const expiryEl  = document.getElementById('productExpiry');
+  if (expiryRow && expiryEl && item.expiry) {
+    expiryRow.style.display = '';
+    const today = new Date(); today.setHours(0,0,0,0);
+    const expDate = new Date(item.expiry);
+    const daysLeft = Math.ceil((expDate - today) / 86400000);
+    if (daysLeft < 0) {
+      expiryEl.textContent = `⛔ Expired (${item.expiry})`;
+      expiryEl.style.color = 'var(--danger)';
+    } else if (daysLeft <= 30) {
+      expiryEl.textContent = `⚠️ ${item.expiry} (${daysLeft}d left)`;
+      expiryEl.style.color = 'var(--warn)';
+    } else {
+      expiryEl.textContent = item.expiry;
+      expiryEl.style.color = 'var(--accent)';
+    }
+  } else if (expiryRow) {
+    expiryRow.style.display = 'none';
+  }
   document.getElementById('productStockUnit').textContent = item.unit;
   document.getElementById('productMinStock').textContent = item.minStock + ' ' + item.unit;
 
@@ -3889,6 +3925,48 @@ function closeProductPage() {
   updateAlertBadge();
 }
 
+// ── SWIPE GESTURES ──────────────────────────────────────────
+(function initSwipeGestures() {
+  let tx = 0, ty = 0, startX = 0, startY = 0;
+  let swipeTarget = null;
+
+  document.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    startX = t.clientX; startY = t.clientY;
+    tx = 0; ty = 0;
+    // Detect which swipeable area was touched
+    const productPage = document.getElementById('productPage');
+    if (productPage && productPage.classList.contains('open')) {
+      swipeTarget = 'product';
+    } else {
+      // Check if any sheet is open
+      const openSheet = document.querySelector('.sheet-overlay.open');
+      swipeTarget = openSheet ? 'sheet:' + openSheet.id : null;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!swipeTarget) return;
+    tx = e.touches[0].clientX - startX;
+    ty = e.touches[0].clientY - startY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (!swipeTarget) return;
+    const absX = Math.abs(tx), absY = Math.abs(ty);
+    // Right swipe: tx > 60, more horizontal than vertical
+    if (tx > 60 && absX > absY * 1.5) {
+      if (swipeTarget === 'product') {
+        closeProductPage();
+      } else if (swipeTarget.startsWith('sheet:')) {
+        const id = swipeTarget.replace('sheet:', '');
+        closeSheet(id);
+      }
+    }
+    swipeTarget = null; tx = 0; ty = 0;
+  }, { passive: true });
+})();
+
 function editItemFromProduct() {
   const id = _currentProductId;
   const item = S.inventory.find(i => i.id === id);
@@ -3903,7 +3981,7 @@ function editItemFromProduct() {
   document.getElementById('iStock').value = item.stock;
   document.getElementById('iUnit').value = item.unit;
   document.getElementById('iMin').value = item.minStock;
-  // Now open — openSheet will skip reset because editId is set
+  if (document.getElementById('iExpiry')) document.getElementById('iExpiry').value = item.expiry || '';
   document.getElementById('addItemSheet').classList.add('open');
 }
 
@@ -4197,6 +4275,7 @@ const QRGen = (() => {
     // Precomputed BCH + XOR mask: for M+mask0 = 100000011001110 (reversed from spec)
     // Correct value for (M=01, mask=0): data=01000, BCH=0100110111, XOR mask=101010000010010
     // Result: 100000011001110 (15 bits)
+    // Format bits for EC=M(01), mask=0(000): precomputed correct value
     const fmt=[1,0,0,0,0,0,0,1,1,0,0,1,1,1,0];
     fmt.forEach((b,i)=>{ setM(...fmtR1[i],b,1); setM(...fmtR2[i],b,1); });
 
@@ -4570,6 +4649,125 @@ function handleQRDeepLink() {
   }, 800);
 }
 
+// ── INVITE PANEL + GROUP CODE ────────────────────────────────
+
+function getGroupCode(groupId) {
+  // Short 6-char code derived from groupId — stable and unique
+  const raw = groupId.replace(/[^a-z0-9]/gi, '').toUpperCase();
+  return raw.slice(-6).padStart(6, '0');
+}
+
+function populateAddMemberPanel() {
+  if (!S.activeGroupId) return;
+  const link = generateInviteLink(S.activeGroupId);
+  const code = getGroupCode(S.activeGroupId);
+  const linkEl = document.getElementById('inviteLinkDisplay');
+  const codeEl = document.getElementById('groupCodeDisplay');
+  if (linkEl) linkEl.textContent = link;
+  if (codeEl) codeEl.textContent = code;
+}
+
+function copyInviteLink() {
+  const link = generateInviteLink(S.activeGroupId);
+  navigator.clipboard.writeText(link)
+    .then(() => toast('📋 Invite link copied!', 'ok'))
+    .catch(() => { prompt('Copy this link:', link); });
+}
+
+function copyGroupCode() {
+  const code = getGroupCode(S.activeGroupId);
+  navigator.clipboard.writeText(code)
+    .then(() => toast('📋 Group code copied: ' + code, 'ok'))
+    .catch(() => { prompt('Group code:', code); });
+}
+
+// ── EXPIRY ALERTS (check on app load) ───────────────────────
+
+function checkExpiryAlerts() {
+  if (!S.activeGroupId) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const items = getItems().filter(i => i.expiry);
+  const expiring = [], expired = [];
+  items.forEach(i => {
+    const d = new Date(i.expiry);
+    const days = Math.ceil((d - today) / 86400000);
+    if (days < 0) expired.push({ ...i, daysLeft: days });
+    else if (days <= 30) expiring.push({ ...i, daysLeft: days });
+  });
+
+  if (expired.length) {
+    toast(`⛔ ${expired.length} item(s) EXPIRED! Check inventory.`, 'err');
+  } else if (expiring.length) {
+    toast(`⚠️ ${expiring.length} item(s) expiring within 30 days`, 'wrn');
+  }
+}
+
+// Show expiry badge in inventory list
+const _origRenderInv = renderInv;
+
+// ── QR FIX: Handle item deep-link on page load ───────────────
+
+function handleQRDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const itemParam = params.get('item');
+  if (!itemParam || !S.user) return;
+  setTimeout(() => {
+    const item = getItems().find(i =>
+      i.code?.toLowerCase() === itemParam.toLowerCase() ||
+      i.name.toLowerCase() === decodeURIComponent(itemParam).toLowerCase()
+    );
+    if (item) {
+      openProductPage(item.id);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, 900);
+}
+
+// ── JOIN BY GROUP CODE ────────────────────────────────────────
+
+function showJoinGroup() {
+  _hideAllLoginSteps();
+  document.getElementById('loginStepJoin').style.display = 'block';
+  setTimeout(() => document.getElementById('manualInviteCode').focus(), 200);
+}
+
+// Override applyManualInvite to also handle 6-char group codes
+const _origApplyManualInvite = applyManualInvite;
+function applyManualInvite() {
+  const raw = document.getElementById('manualInviteCode').value.trim();
+  if (!raw) { toast('Paste an invite link or code', 'err'); return; }
+  // If it looks like a short group code (6 alphanumeric chars), find the group
+  if (/^[A-Z0-9]{6}$/i.test(raw)) {
+    const match = S.groups.find(g => getGroupCode(g.id) === raw.toUpperCase());
+    if (match) {
+      // Generate an invite link from this group and handle it
+      const link = generateInviteLink(match.id);
+      const url = new URL(link);
+      const code = url.searchParams.get('invite');
+      if (code) { handleInviteLink(code); return; }
+    }
+    // Code not found locally — try fetching from server
+    fetch(`${RAILWAY_URL}/api/lab-groups/by-code/${raw.toUpperCase()}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(g => {
+        if (g) {
+          const link = generateInviteLink(g.id);
+          const url = new URL(link);
+          const code = url.searchParams.get('invite');
+          if (code) handleInviteLink(code);
+        } else {
+          toast('Group code not found', 'err');
+        }
+      })
+      .catch(() => toast('Could not find group — try using the full invite link', 'err'));
+    return;
+  }
+  // Otherwise treat as full invite link
+  let code = raw;
+  try { const url = new URL(raw); code = url.searchParams.get('invite') || raw; } catch(e) {}
+  handleInviteLink(code);
+}
+
 // ── INIT ─────────────────────────────────────────────────
 load();
 // Check for invite link on page load
@@ -4579,6 +4777,7 @@ if (S.user) {
   startServerSync();
   handleQRDeepLink();
   updateRequestFlowUI();
+  setTimeout(checkExpiryAlerts, 2000);
 }
 </script>
 </body>
