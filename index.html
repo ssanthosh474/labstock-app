@@ -2488,6 +2488,15 @@ function handleInviteLink(code) {
 
     S.activeGroupId = groupId;
     save();
+    // Push member join to server so other group members see them immediately
+    if (!already) {
+      fetch(`${RAILWAY_URL}/api/lab-members`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() })
+      }).catch(() => {});
+      // Broadcast to other open tabs on same device that members changed
+      try { localStorage.setItem('labstock_members_changed', groupId + '_' + Date.now()); } catch(e) {}
+    }
     showApp();
     // Immediately sync inventory from server so member sees the group's stock
     setTimeout(() => syncFromServer(true), 800);
@@ -3616,12 +3625,30 @@ async function syncFromServer(force = false) {
   try {
     if (!S.activeGroupId) return;
     const gid = encodeURIComponent(S.activeGroupId);
-    const [invRes, txRes] = await Promise.all([
+    const [invRes, txRes, grpRes] = await Promise.all([
       fetch(`${RAILWAY_URL}/api/inventory?groupId=${gid}`),
-      fetch(`${RAILWAY_URL}/api/transactions?groupId=${gid}&limit=100`)
+      fetch(`${RAILWAY_URL}/api/transactions?groupId=${gid}&limit=100`),
+      fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
     ]);
     const serverItems = await invRes.json();
     const serverTx = await txRes.json();
+    // Sync members for active group from server so all devices see who has joined
+    if (grpRes.ok) {
+      try {
+        const serverGroups = await grpRes.json();
+        const sg = serverGroups.find(g => g.id === S.activeGroupId);
+        if (sg?.members?.length) {
+          let membersChanged = false;
+          sg.members.forEach(sm => {
+            if (!S.members.find(m => m.groupId === sm.groupId && m.email === sm.email)) {
+              S.members.push(sm);
+              membersChanged = true;
+            }
+          });
+          if (membersChanged) save();
+        }
+      } catch(e) { /* ignore member parse errors */ }
+    }
     if (!S.activeGroupId) return;
 
     let changed = false;
@@ -3862,6 +3889,14 @@ function startServerSync() {
       if (!sseConnection || sseConnection.readyState === EventSource.CLOSED) {
         connectSSE();
       }
+    }
+  });
+
+  // Cross-tab: if another tab joins a group, re-sync members
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'labstock_members_changed' && e.newValue && S.activeGroupId) {
+      const changedGroupId = e.newValue.split('_')[0];
+      if (changedGroupId === S.activeGroupId) syncFromServer(true);
     }
   });
 }
@@ -4455,10 +4490,11 @@ function openQRSheet() {
   document.getElementById('qrItemName').textContent = item.name;
   document.getElementById('qrItemCode').textContent = item.code || '';
 
-  // Short URL — use item code only (shorter = more reliable QR scan)
+  // URL embeds groupId for public view + item code for deep-link
   const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
   const key = encodeURIComponent(item.code || item.name);
-  const url = `${appUrl}?item=${key}`;
+  const gParam = encodeURIComponent(S.activeGroupId || '');
+  const url = `${appUrl}?view=${gParam}&item=${key}`;
 
   const wrap = document.getElementById('qrCanvas');
   wrap.innerHTML = '';
@@ -4507,11 +4543,12 @@ function openQRPrintAll() {
   if (!items.length) { toast('No items to print', 'wrn'); return; }
   const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
   const groupName = S.groups.find(g=>g.id===S.activeGroupId)?.name||'';
+  const gParam = encodeURIComponent(S.activeGroupId || '');
   toast('Opening print view…', 'ok');
 
   // Build rows using inline SVG QR — no CDN, works offline
   const rows = items.map(item => {
-    const url = appUrl + '?item=' + encodeURIComponent(item.code||item.name);
+    const url = appUrl + '?view=' + gParam + '&item=' + encodeURIComponent(item.code||item.name);
     const svgDataUrl = QRGen.getSVGDataUrl(url, 130);
     return `<div class="cell">
       <img src="${svgDataUrl}" width="130" height="130" style="display:block;margin:0 auto 6px">
@@ -4890,17 +4927,250 @@ function applyManualInvite() {
   handleInviteLink(code);
 }
 
+// ── PUBLIC VIEW (QR scan by non-app-users) ───────────────────
+
+async function showPublicView(groupId, itemKey) {
+  const page = document.getElementById('publicViewPage');
+  page.style.display = 'flex';
+  // Hide login screen behind it
+  document.getElementById('loginScreen').style.display = 'none';
+
+  // Fetch group info for label
+  try {
+    const res = await fetch(`${RAILWAY_URL}/api/lab-groups?groupId=${encodeURIComponent(groupId)}`);
+    if (res.ok) {
+      const groups = await res.json();
+      const g = Array.isArray(groups) ? groups.find(x => x.id === groupId) : null;
+      if (g) document.getElementById('pvGroupName').textContent = g.name || 'Lab Group';
+    }
+  } catch(e) {}
+
+  // Fetch inventory for this group
+  try {
+    const invRes = await fetch(`${RAILWAY_URL}/api/inventory?groupId=${encodeURIComponent(groupId)}`);
+    if (!invRes.ok) throw new Error('fetch failed');
+    const items = await invRes.json();
+    const key = decodeURIComponent(itemKey).toLowerCase();
+    const item = items.find(i =>
+      (i.code || '').toLowerCase() === key ||
+      (i.name || '').toLowerCase() === key
+    );
+
+    document.getElementById('pvLoading').style.display = 'none';
+
+    if (!item) {
+      document.getElementById('pvError').style.display = 'block';
+      return;
+    }
+
+    // Populate
+    document.getElementById('pvContent').style.display = 'block';
+    document.getElementById('pvName').textContent = item.name || '—';
+    document.getElementById('pvCode').textContent = item.code || 'No Code';
+    document.getElementById('pvUnit').textContent = item.unit || 'units';
+    document.getElementById('pvMinStock').textContent = (item.minStock || 10) + ' ' + (item.unit || 'units');
+    document.getElementById('pvCategory').textContent = item.category || '—';
+    document.getElementById('pvLocation').textContent = item.location || '—';
+
+    // Stock + badge
+    const stock = item.stock ?? 0;
+    const min = item.minStock || 10;
+    const low = stock <= min;
+    const watch = stock <= min * 1.5;
+    const stockEl = document.getElementById('pvStock');
+    stockEl.textContent = stock;
+    stockEl.style.color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent)';
+    const badge = document.getElementById('pvStockBadge');
+    if (low) { badge.textContent = 'LOW STOCK'; badge.className = 'badge bg-red'; }
+    else if (watch) { badge.textContent = 'WATCH'; badge.className = 'badge bg-warn'; }
+    else { badge.textContent = 'IN STOCK'; badge.className = 'badge bg-green'; }
+
+    // Expiry
+    if (item.expiry) {
+      document.getElementById('pvExpiryRow').style.display = 'block';
+      const today = new Date(); today.setHours(0,0,0,0);
+      const expDate = new Date(item.expiry);
+      const daysLeft = Math.ceil((expDate - today) / 86400000);
+      const exEl = document.getElementById('pvExpiry');
+      if (daysLeft < 0) { exEl.textContent = `⛔ Expired (${item.expiry})`; exEl.style.color = 'var(--danger)'; }
+      else if (daysLeft <= 30) { exEl.textContent = `⚠️ ${item.expiry} (${daysLeft}d left)`; exEl.style.color = 'var(--warn)'; }
+      else { exEl.textContent = item.expiry; exEl.style.color = 'var(--accent)'; }
+    }
+
+    // Photo
+    try {
+      const photoRes = await fetch(`${RAILWAY_URL}/api/photos/${encodeURIComponent(groupId)}/${encodeURIComponent(item.name)}`);
+      if (photoRes.ok) {
+        const data = await photoRes.json();
+        if (data.photo) {
+          document.getElementById('pvPhoto').src = data.photo;
+          document.getElementById('pvPhoto').style.display = 'block';
+          document.getElementById('pvPhotoPlaceholder').style.display = 'none';
+        }
+      }
+    } catch(e) {}
+
+    document.getElementById('pvUpdated').textContent = 'Live from LabStock inventory';
+
+  } catch(e) {
+    document.getElementById('pvLoading').style.display = 'none';
+    document.getElementById('pvError').style.display = 'block';
+    document.getElementById('pvErrorMsg').textContent = 'Could not reach the server. Check your connection.';
+  }
+}
+
+function pvJoinApp() {
+  // Hide public view, show login screen so they can sign up/join
+  document.getElementById('publicViewPage').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  // Clear ?view params so normal flow takes over
+  window.history.replaceState({}, '', window.location.pathname);
+}
+
 // ── INIT ─────────────────────────────────────────────────
 load();
-// Check for invite link on page load
-detectInviteOnLoad();
-if (S.user) {
-  showApp();
-  startServerSync();
-  handleQRDeepLink();
-  updateRequestFlowUI();
-  setTimeout(checkExpiryAlerts, 2000);
+
+const _initParams = new URLSearchParams(window.location.search);
+const _viewGroupId = _initParams.get('view');
+const _viewItemKey = _initParams.get('item');
+
+if (_viewGroupId && _viewItemKey) {
+  // QR scan detected
+  if (S.user) {
+    // Logged-in user: show full app with product page open
+    showApp();
+    startServerSync();
+    updateRequestFlowUI();
+    setTimeout(checkExpiryAlerts, 2000);
+    // Deep-link to the specific item with edit access
+    setTimeout(() => {
+      // Switch to active group matching the QR if possible
+      if (_viewGroupId !== S.activeGroupId) {
+        const matchGroup = S.groups.find(g => g.id === _viewGroupId);
+        if (matchGroup) { S.activeGroupId = _viewGroupId; save(); updateTopbar(); }
+      }
+      const key = decodeURIComponent(_viewItemKey).toLowerCase();
+      const item = S.inventory.find(i =>
+        (i.code||'').toLowerCase() === key ||
+        (i.name||'').toLowerCase() === key
+      );
+      if (item) {
+        openProductPage(item.id);
+      } else {
+        // Not in local cache yet — wait for sync then try again
+        setTimeout(() => {
+          const item2 = S.inventory.find(i =>
+            (i.code||'').toLowerCase() === key ||
+            (i.name||'').toLowerCase() === key
+          );
+          if (item2) openProductPage(item2.id);
+        }, 2000);
+      }
+      window.history.replaceState({}, '', window.location.pathname);
+    }, 900);
+  } else {
+    // Not logged in: show public read-only view
+    showPublicView(_viewGroupId, _viewItemKey);
+  }
+} else {
+  // Normal app boot
+  detectInviteOnLoad();
+  if (S.user) {
+    showApp();
+    startServerSync();
+    handleQRDeepLink();
+    updateRequestFlowUI();
+    setTimeout(checkExpiryAlerts, 2000);
+  }
 }
 </script>
+<!-- ════════════════════════════════════
+     PUBLIC VIEW-ONLY PAGE (QR scan by non-users)
+════════════════════════════════════ -->
+<div id="publicViewPage" style="display:none;position:fixed;inset:0;z-index:400;background:var(--bg);flex-direction:column;font-family:var(--body)">
+  <!-- Header -->
+  <div style="background:var(--accent);color:white;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0">
+    <div style="font-size:22px">🧪</div>
+    <div style="flex:1">
+      <div style="font-family:var(--display);font-size:16px;font-weight:800">LabStock</div>
+      <div id="pvGroupName" style="font-size:11px;opacity:.8">Lab Inventory</div>
+    </div>
+    <div style="font-size:10px;background:rgba(255,255,255,.2);padding:4px 10px;border-radius:20px;font-weight:600">👁 VIEW ONLY</div>
+  </div>
+
+  <!-- Scrollable content -->
+  <div style="flex:1;overflow-y:auto;padding:0 0 120px">
+    <!-- Loading state -->
+    <div id="pvLoading" style="text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:40px;margin-bottom:12px">⏳</div>
+      <div style="font-size:14px">Loading item...</div>
+    </div>
+
+    <!-- Item content -->
+    <div id="pvContent" style="display:none">
+      <!-- Photo -->
+      <div style="background:var(--surface2);width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden;max-height:260px">
+        <img id="pvPhoto" style="width:100%;height:100%;object-fit:cover;display:none" alt="">
+        <div id="pvPhotoPlaceholder" style="font-size:72px;opacity:.25">📦</div>
+      </div>
+
+      <!-- Info -->
+      <div style="padding:20px 16px 0">
+        <div style="font-family:var(--display);font-size:24px;font-weight:800;line-height:1.2;margin-bottom:6px" id="pvName">—</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;flex-wrap:wrap">
+          <span class="badge bg-gray" id="pvCode" style="font-family:var(--mono);font-size:12px"></span>
+          <span class="badge" id="pvStockBadge"></span>
+        </div>
+
+        <!-- Stock big -->
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div>
+            <div style="font-family:var(--display);font-size:42px;font-weight:800;line-height:1" id="pvStock">—</div>
+            <div style="font-size:14px;color:var(--muted);margin-top:4px" id="pvUnit">units</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:11px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;margin-bottom:4px">MIN LEVEL</div>
+            <div style="font-weight:700;font-size:16px" id="pvMinStock">—</div>
+          </div>
+        </div>
+
+        <!-- Meta grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px">
+            <div style="font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Category</div>
+            <div style="font-weight:700;font-size:14px" id="pvCategory">—</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px">
+            <div style="font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Location</div>
+            <div style="font-weight:700;font-size:14px" id="pvLocation">—</div>
+          </div>
+          <div id="pvExpiryRow" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;grid-column:1/-1">
+            <div style="font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Expiry Date</div>
+            <div style="font-weight:700;font-size:14px" id="pvExpiry">—</div>
+          </div>
+        </div>
+
+        <!-- Last updated -->
+        <div id="pvUpdated" style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:16px"></div>
+      </div>
+    </div>
+
+    <!-- Error state -->
+    <div id="pvError" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)">
+      <div style="font-size:48px;margin-bottom:12px">🔍</div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px">Item not found</div>
+      <div style="font-size:13px" id="pvErrorMsg">This item may have been removed or the QR code is outdated.</div>
+    </div>
+  </div>
+
+  <!-- Bottom CTA — join the app -->
+  <div style="position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:14px 16px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px">
+    <div style="font-size:11px;color:var(--muted);text-align:center">Want to manage stock? Join LabStock →</div>
+    <button onclick="pvJoinApp()" style="width:100%;padding:14px;border-radius:var(--r);border:none;background:var(--accent);color:white;font-family:var(--body);font-size:15px;font-weight:700;cursor:pointer">
+      🧪 Open LabStock App
+    </button>
+  </div>
+</div>
+
 </body>
 </html>
