@@ -2498,8 +2498,12 @@ function renderMembersSheet() {
   const pendingTab = document.getElementById('memTab-pending');
   if(pendingTab) pendingTab.textContent = pendingCount>0 ? `⏳ Pending (${pendingCount})` : '⏳ Pending';
 
-  // Show cached members instantly
-  _renderMembersList(el);
+// Show cached members or skeleton while server loads
+  if (S.members.filter(m => m.groupId === S.activeGroupId).length > 0) {
+    _renderMembersList(el);
+  } else {
+    el.innerHTML = skeletonRows(3);
+  }
 
   // Then refresh from server in background
   fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
@@ -2509,8 +2513,10 @@ function renderMembersSheet() {
       if (!sg) return;
       // Merge server members — server is source of truth
       const serverEmails = new Set(sg.members.map(m=>m.email));
-      // Remove members that server no longer has (for this group)
-      S.members = S.members.filter(m => m.groupId !== S.activeGroupId || serverEmails.has(m.email));
+      // Only remove members if server returned data — prevents wipe on network error
+      if (serverEmails.size > 0) {
+        S.members = S.members.filter(m => m.groupId !== S.activeGroupId || serverEmails.has(m.email));
+      }
       // Add any new server members
       sg.members.forEach(sm => {
         const ex = S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email);
@@ -2526,11 +2532,18 @@ function renderMembersSheet() {
     .catch(()=>{});
 }
 function _renderMembersList(el) {
-  const mems = S.members.filter(m => m.groupId === S.activeGroupId);
+  // Deduplicate by email — prevents double-entries when both devices sync
+  const seen = new Set();
+  const mems = S.members.filter(m => {
+    if (m.groupId !== S.activeGroupId) return false;
+    if (seen.has(m.email)) return false;
+    seen.add(m.email); return true;
+  });
   const grp = S.groups.find(g => g.id === S.activeGroupId);
   // Ensure admin always appears even if not in members array
   if (grp && !mems.find(m => m.email === grp.adminEmail)) {
     mems.unshift({ id:'admin_'+grp.id, groupId:grp.id, email:grp.adminEmail, name:grp.adminEmail.split('@')[0], role:'admin', joined:grp.created||'' });
+  }
   }
   if (!mems.length) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">🧑‍🔬</div><p>No members yet.<br>Tap + Add to invite.</p></div>';
