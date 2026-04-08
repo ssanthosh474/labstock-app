@@ -24,7 +24,6 @@
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
-// ── Minimal XLSX reader (no CDN needed) ──────────────────
 // Reads simple flat .xlsx files (no formulas, no merged cells needed)
 const MiniXLSX = (() => {
   // Unzip: find a file by name in a ZIP ArrayBuffer, return its Uint8Array
@@ -193,9 +192,7 @@ const MiniXLSX = (() => {
 </script>
 
 <style>
-/* ════════════════════════════════════════
-   CSS VARIABLES & RESET
-════════════════════════════════════════ */
+
 :root {
   --bg: #f5f3ee;
   --surface: #ffffff;
@@ -237,9 +234,6 @@ body {
   user-select: none;
 }
 
-/* ════════════════════════════════════════
-   INSTALL BANNER
-════════════════════════════════════════ */
 #installBanner {
   position: fixed; top: 0; left: 0; right: 0; z-index: 500;
   background: var(--accent);
@@ -264,9 +258,6 @@ body {
 }
 .install-dismiss { background: none; border: none; color: rgba(255,255,255,.7); font-size: 20px; cursor: pointer; padding: 4px; }
 
-/* ════════════════════════════════════════
-   OFFLINE BANNER
-════════════════════════════════════════ */
 #offlineBanner {
   position: fixed; bottom: calc(var(--bottom-nav-h) + var(--safe-bottom)); left: 0; right: 0;
   background: var(--warn); color: white;
@@ -276,9 +267,6 @@ body {
 }
 #offlineBanner.show { display: block; }
 
-/* ════════════════════════════════════════
-   LOGIN SCREEN
-════════════════════════════════════════ */
 #loginScreen {
   position: fixed; inset: 0; z-index: 300;
   background: var(--bg);
@@ -332,9 +320,6 @@ body {
 }
 .demo-btn:active { background: var(--accent); color: white; transform: scale(.98); }
 
-/* ════════════════════════════════════════
-   APP SHELL
-════════════════════════════════════════ */
 #app {
   display: none;
   position: fixed; inset: 0;
@@ -342,7 +327,6 @@ body {
 }
 #app.visible { display: flex; }
 
-/* Top bar */
 .topbar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -369,14 +353,12 @@ body {
 }
 .topbar-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
-/* Page scroll area */
 .page-scroll {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
 }
 
-/* Bottom navigation */
 .bottom-nav {
   position: fixed; bottom: 0; left: 0; right: 0;
   height: calc(var(--bottom-nav-h) + var(--safe-bottom));
@@ -409,7 +391,6 @@ body {
   border: 2px solid var(--surface);
 }
 
-/* FAB */
 .fab {
   position: fixed;
   bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
@@ -424,23 +405,18 @@ body {
 }
 .fab:active { transform: scale(.92); }
 
-/* ════════════════════════════════════════
-   PAGES
-════════════════════════════════════════ */
 .page { display: none; animation: pageIn .22s ease; }
 .page.active { display: block; }
 @keyframes pageIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
 .page-pad { padding: 16px; }
 
-/* Section headers */
 .section-hd {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 12px;
 }
 .section-title { font-family: var(--display); font-size: 16px; font-weight: 700; }
 
-/* ── Cards ── */
 .card {
   background: var(--surface);
   border-radius: var(--r);
@@ -455,7 +431,6 @@ body {
 }
 .card-title { font-family: var(--display); font-size: 14px; font-weight: 700; }
 
-/* ── KPI row ── */
 .kpi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 .kpi {
   background: var(--surface); border-radius: var(--r); border: 1px solid var(--border);
@@ -469,7 +444,6 @@ body {
 .kpi.c-warn .kpi-val { color: var(--warn); }
 .kpi.c-info .kpi-val { color: #1d6fa4; }
 
-/* ── List rows ── */
 .list-row {
   display: flex; align-items: center; gap: 12px;
   padding: 13px 16px; border-bottom: 1px solid var(--border);
@@ -495,13 +469,11 @@ body {
 .row-val.out { color: var(--danger); }
 .row-val.warn { color: var(--warn); }
 
-/* ── Stock bar ── */
 .stock-wrap { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .stock-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; max-width: 80px; }
 .stock-fill { height: 100%; border-radius: 2px; }
 .stock-num { font-family: var(--mono); font-size: 11px; font-weight: 600; }
 
-/* ── Badges ── */
 .badge {
   display: inline-block; padding: 2px 8px; border-radius: 20px;
   font-size: 10px; font-weight: 700; letter-spacing: .3px;
@@ -511,7 +483,6 @@ body {
 .bg-warn { background: var(--warn-bg); color: var(--warn); }
 .bg-gray { background: var(--surface2); color: var(--muted); }
 
-/* ── Buttons ── */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   padding: 12px 20px; border-radius: var(--r-sm);
@@ -526,9 +497,6 @@ body {
 .btn-full { width: 100%; }
 .btn-sm { padding: 8px 14px; font-size: 13px; }
 
-/* ════════════════════════════════════════
-   BOTTOM SHEET (Modal for mobile)
-════════════════════════════════════════ */
 .sheet-overlay {
   position: fixed; inset: 0; z-index: 200;
   background: rgba(0,0,0,.45); backdrop-filter: blur(4px);
@@ -561,7 +529,6 @@ body {
 .sheet-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
 .sheet-footer { padding: 12px 20px 0; display: flex; flex-direction: column; gap: 10px; }
 
-/* ── Form ── */
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-label { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: 1px; text-transform: uppercase; }
 .form-input {
@@ -575,7 +542,6 @@ body {
 .form-input::placeholder { color: var(--muted); }
 select.form-input { cursor: pointer; }
 
-/* Type toggle */
 .type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .type-btn {
   padding: 13px; border-radius: var(--r-sm); border: 1.5px solid var(--border);
@@ -585,7 +551,6 @@ select.form-input { cursor: pointer; }
 .type-btn.in-on { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-l); }
 .type-btn.out-on { background: var(--danger-bg); color: var(--danger); border-color: #ffc9cb; }
 
-/* ── Search ── */
 .search-wrap {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border: 1.5px solid var(--border);
@@ -597,19 +562,16 @@ select.form-input { cursor: pointer; }
 }
 .search-wrap input::placeholder { color: var(--muted); }
 
-/* ── Empty state ── */
 .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
 .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .3; }
 .empty p { font-size: 13px; }
 
-/* ── Info box ── */
 .info-box {
   background: var(--accent-bg); border: 1px solid var(--accent-l);
   border-radius: var(--r-sm); padding: 12px 14px;
   font-size: 13px; color: #1e5c3f; line-height: 1.5;
 }
 
-/* ── Slack code box ── */
 .code-box {
   background: #1a1d21; color: #abb2bf;
   border-radius: var(--r-sm); padding: 14px 16px;
@@ -619,7 +581,6 @@ select.form-input { cursor: pointer; }
 .code-box .v { color: #98c379; }
 .code-box .c { color: #5c6370; font-style: italic; }
 
-/* ── Profile sheet ── */
 .profile-hero {
   text-align: center; padding: 24px 20px 16px;
   border-bottom: 1px solid var(--border);
@@ -635,7 +596,6 @@ select.form-input { cursor: pointer; }
 .profile-email { font-size: 13px; color: var(--muted); margin-top: 3px; }
 .profile-role { margin-top: 8px; }
 
-/* ── Members ── */
 .member-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
 .member-row:last-child { border-bottom: none; }
 .m-av { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
@@ -643,9 +603,6 @@ select.form-input { cursor: pointer; }
 .m-name { font-weight: 600; font-size: 14px; }
 .m-email { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ════════════════════════════════════════
-   PRODUCT DETAIL PAGE
-════════════════════════════════════════ */
 #productPage {
   position: fixed; inset: 0; z-index: 150;
   background: var(--bg);
@@ -762,7 +719,6 @@ select.form-input { cursor: pointer; }
   margin-bottom: 10px;
 }
 
-/* ── Toast ── */
 #toast {
   position: fixed; top: calc(70px + var(--safe-top)); left: 16px; right: 16px;
   background: var(--text); color: white; border-radius: var(--r);
@@ -990,8 +946,17 @@ select.form-input { cursor: pointer; }
       </div>
       <div class="page-pad" style="padding-top:12px">
         <div class="section-hd">
-          <div class="section-title">Transaction Log</div>
+          <div class="section-title" id="logTitle">Transaction Log</div>
+          <button class="btn btn-ghost btn-sm" id="logDeleteBtn" style="display:none;color:var(--danger)" onclick="deleteSelectedTx()">🗑 Delete</button>
           <button class="btn btn-ghost btn-sm" onclick="openSheet('exportSheet')" id="btnExport">⬇ Export</button>
+        </div>
+        <!-- Select all toolbar (shown when any selected) -->
+        <div id="logSelectBar" style="display:none;padding:8px 0;display:none;align-items:center;gap:10px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="logSelectAll" onchange="logToggleAll(this.checked)" style="accent-color:var(--accent);width:16px;height:16px">
+            Select all
+          </label>
+          <button onclick="deleteSelectedTx()" style="padding:5px 12px;border-radius:6px;border:none;background:var(--danger);color:white;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete selected</button>
         </div>
         <div class="card" id="logList"></div>
       </div>
@@ -1101,6 +1066,11 @@ select.form-input { cursor: pointer; }
             <div class="row-body"><div class="row-title">Item Requests</div><div class="row-sub" id="requestReviewSub">No pending requests</div></div>
             <span id="requestReviewCount" class="badge bg-red" style="display:none"></span>
           </div>
+          <div class="list-row" onclick="switchTab('slack')">
+            <div class="row-icon info">🤖</div>
+            <div class="row-body"><div class="row-title">Telegram & Bot</div><div class="row-sub">Bot sync, request flow settings</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
           <div class="list-row" onclick="openSheet('settingsSheet')">
             <div class="row-icon info">⚙️</div>
             <div class="row-body"><div class="row-title">Settings</div><div class="row-sub">Alerts & preferences</div></div>
@@ -1135,9 +1105,6 @@ select.form-input { cursor: pointer; }
     </div>
     <div class="nav-tab" id="tab-log" onclick="switchTab('log')">
       <span class="nav-icon">↕️</span><span class="nav-label">Log</span>
-    </div>
-    <div class="nav-tab" id="tab-slack" onclick="switchTab('slack')">
-      <span class="nav-icon">🤖</span><span class="nav-label">Telegram</span>
     </div>
     <div class="nav-tab" id="tab-more" onclick="switchTab('more')">
       <span class="nav-icon">⋯</span><span class="nav-label">More</span>
@@ -1712,20 +1679,17 @@ select.form-input { cursor: pointer; }
      SCRIPTS
 ════════════════════════════════════ -->
 <script>
-// ── STATE ──────────────────────────────────────────────
 let S = {
   user: null, activeGroupId: null,
   groups: [], inventory: [], transactions: [], members: [],
   pendingInvites: [],
   itemRequests: [],   // { id, groupId, itemId, itemName, qty, unit, requestedBy, requestedAt, status, note, decidedBy, decidedAt }
   settings: { threshold: 10, channel: '#lab-inventory', webhook: '', notifyLow: true, requestFlowEnabled: false },
-  txType: 'IN', slackParsed: null
+  txType: 'IN'
 };
 
 function save() { localStorage.setItem('ls2', JSON.stringify(S)); }
 function load() { const d = localStorage.getItem('ls2'); if (d) Object.assign(S, JSON.parse(d)); }
-
-// ── SERVICE WORKER ──────────────────────────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').then(reg => {
@@ -1733,8 +1697,6 @@ if ('serviceWorker' in navigator) {
     }).catch(err => console.log('[PWA] SW failed:', err));
   });
 }
-
-// ── PWA INSTALL ─────────────────────────────────────────
 let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
@@ -1770,12 +1732,8 @@ function showInstallInstructions() {
     toast('Open this page on your phone to install', 'ok');
   }
 }
-
-// ── ONLINE/OFFLINE ──────────────────────────────────────
 window.addEventListener('offline', () => document.getElementById('offlineBanner').classList.add('show'));
 window.addEventListener('online', () => document.getElementById('offlineBanner').classList.remove('show'));
-
-// ── AUTH ─────────────────────────────────────────────────
 let _pendingUser = null;
 let _pendingInvite = null;
 
@@ -1881,9 +1839,22 @@ function backToStep1() {
 async function doLogin(user, firstGroup = null, inviteCode = null) {
   load();
   S.user = user;
+  if (!firstGroup && !inviteCode) {
+    const hasGroupLocal = S.groups.some(g => g.adminEmail === user.email) ||
+                          S.members.some(m => m.email === user.email);
+    if (hasGroupLocal) {
+      if (!S.activeGroupId || !S.groups.find(g => g.id === S.activeGroupId)) {
+        const g = S.groups.find(g => g.adminEmail === user.email || S.members.find(m => m.groupId === g.id && m.email === user.email));
+        if (g) S.activeGroupId = g.id;
+      }
+      save(); showApp();
+      // Sync in background — don't block UI
+      _syncGroupsBackground(user);
+      return;
+    }
+  }
 
   if (!user.isDemo) {
-    // ── Sync groups with server (bidirectional) ──────────────────
     try {
       const res = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
       if (res.ok) {
@@ -2164,8 +2135,6 @@ function showApp() {
   // Start syncing from Railway server
   setTimeout(startServerSync, 1000);
 }
-
-// ── TOPBAR ──────────────────────────────────────────────
 function updateTopbar() {
   const u = S.user; if (!u) return;
   const av = document.getElementById('topbarAvatar');
@@ -2193,8 +2162,6 @@ function getRole() {
   return S.members.find(m => m.groupId === S.activeGroupId && m.email === S.user.email)?.role || 'member';
 }
 function isAdmin() { return getRole() === 'admin'; }
-
-// ── TABS ────────────────────────────────────────────────
 let curTab = 'home';
 function switchTab(tab) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -2207,10 +2174,8 @@ function switchTab(tab) {
   fab.style.display = ['home','inv','log'].includes(tab) ? '' : 'none';
   if (tab === 'home') renderHome();
   if (tab === 'inv') renderInv();
-  if (tab === 'log') renderLog();
+  if (tab === 'log') { _selectedTx.clear(); renderLog(); }
 }
-
-// ── SHEETS ──────────────────────────────────────────────
 function openSheet(id) {
   if (id === 'txSheet') {
     const sel = document.getElementById('txItem');
@@ -2242,8 +2207,6 @@ function openSheet(id) {
 
 function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
 function sheetBgClose(e, id) { if (e.target === e.currentTarget) closeSheet(id); }
-
-// ── GROUPS ──────────────────────────────────────────────
 
 function renderGroupSheet() {
   const el = document.getElementById('groupSheetBody');
@@ -2290,8 +2253,6 @@ function setGroup(id) {
   toast(`Switched to: ${g?.name}`, 'ok');
   syncFromServer(true);
 }
-
-// ── GROUP FORM (create or edit) ──────────────────────────
 let _gfEditId = null;
 
 function showGroupForm(id) {
@@ -2430,8 +2391,6 @@ function showJoinGroupInApp() {
   if (!code?.trim()) return;
   handleInviteLink(code.trim());
 }
-
-// ── INVITE LINK ──────────────────────────────────────────
 function generateInviteLink(groupId) {
   const base = window.location.origin + window.location.pathname;
   const g = S.groups.find(g => g.id === groupId);
@@ -2488,15 +2447,6 @@ function handleInviteLink(code) {
 
     S.activeGroupId = groupId;
     save();
-    // Push member join to server so other group members see them immediately
-    if (!already) {
-      fetch(`${RAILWAY_URL}/api/lab-members`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() })
-      }).catch(() => {});
-      // Broadcast to other open tabs on same device that members changed
-      try { localStorage.setItem('labstock_members_changed', groupId + '_' + Date.now()); } catch(e) {}
-    }
     showApp();
     // Immediately sync inventory from server so member sees the group's stock
     setTimeout(() => syncFromServer(true), 800);
@@ -2506,8 +2456,6 @@ function handleInviteLink(code) {
     toast('Invalid invite link', 'err');
   }
 }
-
-// ── MEMBERS ─────────────────────────────────────────────
 let _selectedRole = 'member';
 
 function switchMemTab(tab) {
@@ -2528,94 +2476,91 @@ function switchMemTab(tab) {
   if (tab==='add') populateAddMemberPanel();
 }
 
-function selectRole(role) {
-  _selectedRole = role;
-  ['member','admin'].forEach(r => {
-    const btn = document.getElementById('roleBtn-'+r);
-    if (r===role) {
-      btn.style.background='var(--accent-bg)'; btn.style.color='var(--accent)';
-      btn.style.borderColor='var(--accent-l)';
-    } else {
-      btn.style.background='var(--surface2)'; btn.style.color='var(--muted)';
-      btn.style.borderColor='var(--border)';
-    }
-  });
-}
-
 function renderMembersSheet() {
   const el = document.getElementById('membersSheetBody');
   const wrap = document.getElementById('inviteWrap');
   const showAddBtn = document.getElementById('showAddMemBtn');
   const isAdm = isAdmin();
 
-  // Members list visible to ALL roles
-  // Add/Pending tabs only for admins
   document.getElementById('memTab-pending').style.display = isAdm ? '' : 'none';
   document.getElementById('memTab-add').style.display = isAdm ? '' : 'none';
-  wrap.style.display = isAdm ? '' : 'none';
-  if (showAddBtn) showAddBtn.style.display = isAdm ? '' : 'none';
+  if(wrap) wrap.style.display = isAdm ? '' : 'none';
+  if(showAddBtn) showAddBtn.style.display = isAdm ? '' : 'none';
   if (!isAdm) {
     document.getElementById('memPanel-add').style.display = 'none';
     document.getElementById('memPanel-pending').style.display = 'none';
     document.getElementById('memPanel-list').style.display = 'block';
   }
-  // Always show the members list panel for all roles
-  if (!document.getElementById('memPanel-list').style.display || document.getElementById('memPanel-list').style.display === 'none') {
-    document.getElementById('memPanel-list').style.display = 'block';
-  }
+  if(!document.getElementById('memPanel-list').style.display || document.getElementById('memPanel-list').style.display==='none')
+    document.getElementById('memPanel-list').style.display='block';
 
-  // Update pending badge count
-  const pendingCount = (S.pendingInvites||[]).filter(p => p.groupId===S.activeGroupId).length;
+  const pendingCount = (S.pendingInvites||[]).filter(p=>p.groupId===S.activeGroupId).length;
   const pendingTab = document.getElementById('memTab-pending');
-  if (pendingTab) pendingTab.textContent = pendingCount > 0 ? `⏳ Pending (${pendingCount})` : '⏳ Pending';
+  if(pendingTab) pendingTab.textContent = pendingCount>0 ? `⏳ Pending (${pendingCount})` : '⏳ Pending';
 
-  // Always fetch fresh members from server
+  // Show cached members instantly
+  _renderMembersList(el);
+
+  // Then refresh from server in background
   fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
     .then(r => r.ok ? r.json() : [])
     .then(serverGroups => {
       const sg = serverGroups.find(g => g.id === S.activeGroupId);
-      if (sg?.members?.length) {
-        sg.members.forEach(sm => {
-          if (!S.members.find(m => m.groupId === sm.groupId && m.email === sm.email)) {
-            S.members.push(sm);
-          }
-        });
-        save();
-      }
+      if (!sg) return;
+      // Merge server members — server is source of truth
+      const serverEmails = new Set(sg.members.map(m=>m.email));
+      // Remove members that server no longer has (for this group)
+      S.members = S.members.filter(m => m.groupId !== S.activeGroupId || serverEmails.has(m.email));
+      // Add any new server members
+      sg.members.forEach(sm => {
+        const ex = S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email);
+        if(!ex) S.members.push(sm);
+        else { ex.name=sm.name; ex.role=sm.role; }
+      });
+      // Also sync group telegramChatId
+      const grp = S.groups.find(g=>g.id===S.activeGroupId);
+      if(grp && sg.telegramChatId!==undefined) grp.telegramChatId=sg.telegramChatId;
+      save();
       _renderMembersList(el);
     })
-    .catch(() => _renderMembersList(el));
+    .catch(()=>{});
 }
 function _renderMembersList(el) {
   const mems = S.members.filter(m => m.groupId === S.activeGroupId);
-  // Also include group admin if not already in members list
-  const g = S.groups.find(g => g.id === S.activeGroupId);
-  if (g && !mems.find(m => m.email === g.adminEmail)) {
-    mems.unshift({ id: 'admin_'+g.id, groupId: g.id, email: g.adminEmail, name: g.adminEmail.split('@')[0], role: 'admin', joined: g.created||'' });
+  const grp = S.groups.find(g => g.id === S.activeGroupId);
+  // Ensure admin always appears even if not in members array
+  if (grp && !mems.find(m => m.email === grp.adminEmail)) {
+    mems.unshift({ id:'admin_'+grp.id, groupId:grp.id, email:grp.adminEmail, name:grp.adminEmail.split('@')[0], role:'admin', joined:grp.created||'' });
   }
-  if (!mems.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🧑‍🔬</div><p>No members yet.<br>Tap + Add Member to invite someone.</p></div>'; return; }
+  if (!mems.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🧑‍🔬</div><p>No members yet.<br>Tap + Add to invite.</p></div>';
+    return;
+  }
+  const curIsAdmin = isAdmin();
   el.innerHTML = mems.map(m => {
-    const init = (m.name||m.email||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?';
+    const init = (m.name||m.email||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)||'?';
     const isSelf = m.email === S.user?.email;
-    const g = S.groups.find(g => g.id === S.activeGroupId);
-    const effectiveRole = (g && g.adminEmail === m.email) ? 'admin' : (m.role || 'member');
-    const isAdmMem = effectiveRole === 'admin';
-    const canEdit = isAdm && !isSelf;
-    return `<div class="member-row" style="align-items:flex-start;padding:14px 16px">
-      <div class="m-av" style="margin-top:2px;background:${isAdmMem?'var(--accent)':'#888'}">${init}</div>
-      <div class="m-info" style="flex:1">
-        <div class="m-name">${m.name||m.email} ${isSelf?'<span class="badge bg-gray" style="font-size:9px">You</span>':''}</div>
-        <div class="m-email">${m.email}</div>
+    const effectiveRole = (grp && grp.adminEmail===m.email) ? 'admin' : (m.role||'member');
+    const isAdmMem = effectiveRole==='admin';
+    const canEdit = curIsAdmin && !isSelf && !(grp && grp.adminEmail===m.email);
+    return `<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)">
+      <div style="width:40px;height:40px;border-radius:50%;background:${isAdmMem?'var(--accent)':'#888'};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:15px;flex-shrink:0">${init}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          ${m.name||m.email.split('@')[0]}
+          ${isSelf?'<span class="badge bg-gray" style="font-size:9px">You</span>':''}
+          <span class="badge ${isAdmMem?'bg-green':'bg-gray'}" style="font-size:9px">${effectiveRole}</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;word-break:break-all">${m.email}</div>
         ${canEdit ? `<div style="display:flex;gap:6px;margin-top:8px">
-          <button onclick="changeRole('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 10px">
-            ${isAdmMem?'⬇ Make Member':'⬆ Make Admin'}
+          <button onclick="changeRole('${m.id}')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface2);font-size:11px;font-weight:600;cursor:pointer">
+            ${isAdmMem?'⬇ Member':'⬆ Admin'}
           </button>
-          <button onclick="confirmRemoveMem('${m.id}')" class="btn btn-danger btn-sm" style="font-size:11px;padding:5px 10px">
+          <button onclick="confirmRemoveMem('${m.id}')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:11px;font-weight:600;cursor:pointer">
             🗑 Remove
           </button>
         </div>` : ''}
       </div>
-      <span class="badge ${isAdmMem?'bg-green':'bg-gray'}" style="margin-top:2px">${effectiveRole}</span>
     </div>`;
   }).join('');
 }
@@ -2661,60 +2606,7 @@ async function renderPendingSheet() {
     </div>`).join('');
 }
 
-async function addMemberByEmail() {
-  if (!isAdmin()) { toast('Admin only', 'err'); return; }
-  const name = document.getElementById('addMemName').value.trim();
-  const email = document.getElementById('addMemEmail').value.trim().toLowerCase();
-  const errEl = document.getElementById('addMemError');
-  errEl.style.display = 'none';
-
-  if (!name) { errEl.textContent='Name is required'; errEl.style.display='block'; return; }
-  if (!isValidEmail(email)) { errEl.textContent='Enter a valid email address'; errEl.style.display='block'; return; }
-  if (S.members.find(m => m.groupId===S.activeGroupId && m.email===email)) {
-    errEl.textContent='This person is already a member'; errEl.style.display='block'; return;
-  }
-  if ((S.pendingInvites||[]).find(p => p.groupId===S.activeGroupId && p.email===email)) {
-    errEl.textContent='Already invited — check Pending tab'; errEl.style.display='block'; return;
-  }
-
-  const g = S.groups.find(g => g.id === S.activeGroupId);
-  const inviteId = 'inv_' + Date.now();
-  const inviteData = {
-    id: inviteId,
-    groupId: S.activeGroupId,
-    groupName: g?.name || '',
-    groupDesc: g?.desc || '',
-    adminEmail: S.user.email,
-    email, name,
-    role: _selectedRole,
-    created: new Date().toISOString()
-  };
-
-  // Store locally for admin's pending tab
-  if (!S.pendingInvites) S.pendingInvites = [];
-  S.pendingInvites.push(inviteData);
-  save();
-
-  // Push to Railway server so member's device can find it on login
-  try {
-    await fetch(`${RAILWAY_URL}/api/invites`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(inviteData)
-    });
-  } catch(e) {
-    toast('⚠️ Saved locally but server unreachable — share invite link as backup', 'wrn');
-  }
-
-  logAct(`Invited ${email} as ${_selectedRole}`);
-  toast(`✅ ${name} added — they'll join on next login`, 'ok');
-  document.getElementById('addMemName').value = '';
-  document.getElementById('addMemEmail').value = '';
-  selectRole('member');
-  switchMemTab('pending');
-  renderMembersSheet();
-}
-
+async 
 function shareInviteLink() {
   if (!isAdmin()) { toast('Admin only', 'err'); return; }
   if (!S.activeGroupId) { toast('Select a group first', 'wrn'); return; }
@@ -2763,6 +2655,11 @@ function changeRole(memId) {
   m.role = newRole;
   logAct(`Changed ${m.name} to ${newRole}`); save(); renderMembersSheet();
   toast(`${m.name} is now ${newRole}`, 'ok');
+  // Sync to server
+  fetch(`${RAILWAY_URL}/api/lab-members`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id:m.id, groupId:m.groupId, email:m.email, name:m.name, role:newRole, joined:m.joined||new Date().toISOString()})
+  }).catch(()=>{});
 }
 
 function confirmRemoveMem(memId) {
@@ -2790,11 +2687,11 @@ function removeMem(id) {
   S.members = S.members.filter(m => m.id !== id);
   logAct(`Removed ${m.email}`); save(); renderMembersSheet();
   toast(`${m.name} removed`, 'wrn');
+  // Sync delete to server
+  fetch(`${RAILWAY_URL}/api/lab-members/${encodeURIComponent(m.groupId)}/${encodeURIComponent(m.email)}`, {method:'DELETE'}).catch(()=>{});
 }
 
 function promptInvite() { switchMemTab('add'); }
-
-// ── INVENTORY ───────────────────────────────────────────
 function gid() { return S.activeGroupId; }
 function getItems() { return S.inventory.filter(i => i.groupId === gid()); }
 
@@ -2936,8 +2833,6 @@ function renderInv() {
 }
 
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ document.getElementById('txItem').value=id; setTxType(type); },80); }
-
-// ── TRANSACTIONS ────────────────────────────────────────
 let txTypeState = 'IN';
 function setTxType(t) {
   txTypeState = t;
@@ -2989,25 +2884,53 @@ function submitTx(override=null) {
   return true;
 }
 
+let _selectedTx = new Set();
+
 function renderLog() {
   const q = document.getElementById('logSearch')?.value?.toLowerCase()||'';
   const txs = S.transactions.filter(t=>t.groupId===gid()&&!t._act&&(!q||t.itemName?.toLowerCase().includes(q)||t.person?.toLowerCase().includes(q)));
   const el = document.getElementById('logList');
+  const bar = document.getElementById('logSelectBar');
+  const delBtn = document.getElementById('logDeleteBtn');
+  const title = document.getElementById('logTitle');
+
+  // Update toolbar
+  const hasSel = _selectedTx.size > 0;
+  if(bar){ bar.style.display = hasSel ? 'flex' : 'none'; }
+  if(delBtn){ delBtn.style.display = hasSel ? '' : 'none'; }
+  if(title){ title.textContent = hasSel ? _selectedTx.size + ' selected' : 'Transaction Log'; }
+
   if (!txs.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">↕️</div><p>No transactions yet.</p></div>'; return; }
   el.innerHTML = txs.map(t => {
     const isIn = t.type==='IN';
-    return `<div class="list-row">
-      <div class="row-icon ${isIn?'in':'out'}">${isIn?'📦':'🔻'}</div>
+    const sel = _selectedTx.has(t.id);
+    return `<div class="list-row${sel?' selected':''}" style="${sel?'background:var(--accent-bg)':''};gap:10px" onclick="logToggleRow('${t.id}')">
+      <input type="checkbox" onclick="event.stopPropagation();logToggleRow('${t.id}')" ${sel?'checked':''} style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+      <div class="row-icon ${isIn?'in':'out'}" style="flex-shrink:0">${isIn?'📦':'🔻'}</div>
       <div class="row-body">
-        <div class="row-title">${t.itemName||t.name||'Unknown Item'} ${t.source==='SLACK'?'<span class="badge bg-gray">Slack</span>':t.source==='TELEGRAM'?'<span class="badge bg-gray">Telegram</span>':''}</div>
-        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'Unknown'}</div>
+        <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='TELEGRAM'?'<span class="badge bg-gray">TG</span>':''}</div>
+        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'?'} • ${isIn?'+':'−'}${t.qty} ${t.unit||''}</div>
       </div>
-      <div class="row-val ${isIn?'in':'out'}">${isIn?'+':'−'}${t.qty} ${t.unit}</div>
     </div>`;
   }).join('');
 }
 
-// ── HOME ────────────────────────────────────────────────
+function logToggleRow(id) {
+  if(_selectedTx.has(id)) _selectedTx.delete(id); else _selectedTx.add(id);
+  renderLog();
+}
+function logToggleAll(checked) {
+  const txs = S.transactions.filter(t=>t.groupId===gid()&&!t._act);
+  if(checked) txs.forEach(t=>_selectedTx.add(t.id)); else _selectedTx.clear();
+  renderLog();
+}
+function deleteSelectedTx() {
+  if(!_selectedTx.size) return;
+  if(!confirm(`Delete ${_selectedTx.size} transaction(s)? Cannot be undone.`)) return;
+  S.transactions = S.transactions.filter(t => !_selectedTx.has(t.id));
+  _selectedTx.clear(); save(); renderLog(); renderHome(); updateAlertBadge();
+  toast('Transactions deleted', 'wrn');
+}
 function renderHome() {
   const today = new Date().toISOString().split('T')[0];
   const items = getItems();
@@ -3031,8 +2954,6 @@ function renderHome() {
     </div>`;
   }).join('');
 }
-
-// ── ALERTS ──────────────────────────────────────────────
 function updateAlertBadge() {
   const count = getItems().filter(i=>i.stock<=i.minStock).length;
   const tab = document.getElementById('tab-inv');
@@ -3041,8 +2962,6 @@ function updateAlertBadge() {
   if (count) tab.innerHTML += `<span class="nav-badge">${count}</span>`;
   document.getElementById('membersSubText').textContent = `${S.members.filter(m=>m.groupId===S.activeGroupId).length} members`;
 }
-
-// ── SLACK PARSE ─────────────────────────────────────────
 function parseSlack() {
   const raw = document.getElementById('slackPaste').value;
   if (!raw.trim()) { toast('Paste a message first','wrn'); return; }
@@ -3073,8 +2992,6 @@ function applySlack() {
     S.slackParsed=null;
   }
 }
-
-// ── ACTIVITY ────────────────────────────────────────────
 function logAct(action) {
   if (!S.user) return;
   S.transactions.unshift({id:'a_'+Date.now(),groupId:gid(),_act:true,user:S.user.name||S.user.email,action,timestamp:new Date().toISOString()});
@@ -3135,8 +3052,6 @@ function deleteSelectedLogs() {
   renderActivity();
   toast('Logs deleted', 'wrn');
 }
-
-// ── SETTINGS ────────────────────────────────────────────
 function loadSettings() {
   if (document.getElementById('sThreshold')) document.getElementById('sThreshold').value = S.settings.threshold;
   if (document.getElementById('sChannel')) document.getElementById('sChannel').value = S.settings.channel||'';
@@ -3160,8 +3075,6 @@ function saveSetting() {
   }
   save();
 }
-
-// ── EXPORT ──────────────────────────────────────────────
 function exportCSV() { openSheet('exportSheet'); }
 
 function getFilteredTx() {
@@ -3279,8 +3192,6 @@ function switchExportTab(tab) {
   document.getElementById('etab-tx').style.cssText = `flex:1;padding:10px;background:none;border:none;border-bottom:2px solid ${tab==='tx'?'var(--accent)':'transparent'};color:${tab==='tx'?'var(--accent)':'var(--muted)'};font-weight:${tab==='tx'?700:500};font-size:13px;cursor:pointer`;
   document.getElementById('etab-stock').style.cssText = `flex:1;padding:10px;background:none;border:none;border-bottom:2px solid ${tab==='stock'?'var(--accent)':'transparent'};color:${tab==='stock'?'var(--accent)':'var(--muted)'};font-weight:${tab==='stock'?700:500};font-size:13px;cursor:pointer`;
 }
-
-// ── PRIORITY CLASSIFICATION ───────────────────────────────
 function getPriority(item) {
   const ratio = item.minStock > 0 ? item.stock / item.minStock : item.stock;
   if (item.stock <= item.minStock) return { level: 'P0', label: 'CRITICAL', color: '#c1121f', bg: '#ffe5e7', emoji: '🔴' };
@@ -3428,8 +3339,6 @@ function dlFile(filename, type, content) {
   a.href = 'data:' + type + ';charset=utf-8,' + encodeURIComponent(content);
   a.download = filename; a.click();
 }
-
-// ── BULK UPLOAD ──────────────────────────────────────────
 function downloadTemplate() {
   const csv = `Item Name,Unique Code,Category,Location,Unit,Stock,Min Stock
 Ethanol 95%,CHM-001,Chemicals,Shelf A1,L,10,5
@@ -3503,7 +3412,6 @@ function previewBulk(event) {
   }
 
   if (isXLSX) {
-    // ── XLSX: use built-in MiniXLSX (no CDN) ──
     reader.onload = async (e) => {
       try {
         const raw = await MiniXLSX.read(e.target.result);
@@ -3516,7 +3424,6 @@ function previewBulk(event) {
     };
     reader.readAsArrayBuffer(file);
   } else {
-    // ── CSV: plain text parse ──
     reader.onload = (e) => {
       const lines = e.target.result.split('\n').filter(l => l.trim());
       const raw = lines.map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
@@ -3573,16 +3480,12 @@ function resetData() {
   if (!confirm('Delete ALL data? Cannot undo.')) return;
   localStorage.removeItem('ls2'); location.reload();
 }
-
-// ── TOAST ────────────────────────────────────────────────
 function toast(msg, type='ok') {
   const el = document.getElementById('toast');
   el.textContent = msg; el.className = `show ${type}`;
   clearTimeout(window._t);
   window._t = setTimeout(()=>el.classList.remove('show'), 3200);
 }
-
-// ── SEED ─────────────────────────────────────────────────
 function seedDemo() {
   const id='g_demo';
   S.groups=[{id,name:'Biochemistry Lab',desc:'Main research lab',adminEmail:S.user.email,created:new Date().toISOString()}];
@@ -3608,8 +3511,6 @@ function seedDemo() {
     {id:'t2',groupId:id,type:'OUT',source:'TELEGRAM',itemId:'i6',itemName:'Agar Powder',category:'Reagents',qty:50,unit:'g',person:'Dr. Priya Sharma',date:today,notes:'Batch #7',timestamp:new Date().toISOString()},
   ];
 }
-
-// ── RAILWAY SERVER SYNC ──────────────────────────────────
 const RAILWAY_URL = 'https://labstockserver-production.up.railway.app';
 let syncInterval = null;
 let sseConnection = null;
@@ -3625,30 +3526,12 @@ async function syncFromServer(force = false) {
   try {
     if (!S.activeGroupId) return;
     const gid = encodeURIComponent(S.activeGroupId);
-    const [invRes, txRes, grpRes] = await Promise.all([
+    const [invRes, txRes] = await Promise.all([
       fetch(`${RAILWAY_URL}/api/inventory?groupId=${gid}`),
-      fetch(`${RAILWAY_URL}/api/transactions?groupId=${gid}&limit=100`),
-      fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
+      fetch(`${RAILWAY_URL}/api/transactions?groupId=${gid}&limit=100`)
     ]);
     const serverItems = await invRes.json();
     const serverTx = await txRes.json();
-    // Sync members for active group from server so all devices see who has joined
-    if (grpRes.ok) {
-      try {
-        const serverGroups = await grpRes.json();
-        const sg = serverGroups.find(g => g.id === S.activeGroupId);
-        if (sg?.members?.length) {
-          let membersChanged = false;
-          sg.members.forEach(sm => {
-            if (!S.members.find(m => m.groupId === sm.groupId && m.email === sm.email)) {
-              S.members.push(sm);
-              membersChanged = true;
-            }
-          });
-          if (membersChanged) save();
-        }
-      } catch(e) { /* ignore member parse errors */ }
-    }
     if (!S.activeGroupId) return;
 
     let changed = false;
@@ -3891,17 +3774,7 @@ function startServerSync() {
       }
     }
   });
-
-  // Cross-tab: if another tab joins a group, re-sync members
-  window.addEventListener('storage', (e) => {
-    if (e.key === 'labstock_members_changed' && e.newValue && S.activeGroupId) {
-      const changedGroupId = e.newValue.split('_')[0];
-      if (changedGroupId === S.activeGroupId) syncFromServer(true);
-    }
-  });
 }
-
-// ── PRODUCT PAGE ─────────────────────────────────────────
 let _currentProductId = null;
 
 function openProductPage(itemId) {
@@ -4010,8 +3883,6 @@ function closeProductPage() {
   renderInv();
   updateAlertBadge();
 }
-
-// ── SWIPE GESTURES ──────────────────────────────────────────
 (function initSwipeGestures() {
   let tx = 0, ty = 0, startX = 0, startY = 0;
   let swipeTarget = null;
@@ -4071,48 +3942,6 @@ function editItemFromProduct() {
   document.getElementById('addItemSheet').classList.add('open');
 }
 
-// ── QUICK EDIT (location & code inline from product page) ─
-function openQuickEdit() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  if (!item) return;
-  document.getElementById('qeLocation').value = item.location || '';
-  document.getElementById('qeCode').value = item.code || '';
-  document.getElementById('qeMin').value = item.minStock || 10;
-  // Show item name in sheet title
-  const titleEl = document.querySelector('#quickEditSheet .sheet-title');
-  if (titleEl) titleEl.textContent = 'Quick Edit — ' + item.name;
-  // Directly add open class — don't use openSheet() to avoid any reset logic
-  document.getElementById('quickEditSheet').classList.add('open');
-}
-
-function saveQuickEdit() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  if (!item) return;
-  const loc = document.getElementById('qeLocation').value.trim();
-  const code = document.getElementById('qeCode').value.trim();
-  const min = parseFloat(document.getElementById('qeMin').value) || 10;
-  // Check code uniqueness
-  if (code && code !== item.code) {
-    const dup = getItems().find(i => i.id !== item.id && i.code === code);
-    if (dup) { toast(`Code "${code}" already used by ${dup.name}`, 'err'); return; }
-  }
-  item.location = loc;
-  item.code = code;
-  item.minStock = min;
-  save();
-  closeSheet('quickEditSheet');
-  // Sync to server
-  fetch(`${RAILWAY_URL}/api/inventory`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ groupId: S.activeGroupId, name: item.name, code, location: loc, minStock: min })
-  }).catch(() => {});
-  // Refresh product page
-  openProductPage(_currentProductId);
-  toast('✅ Updated!', 'ok');
-}
-
-// ── IN/OUT from product page — direct submit without sheet ─
 function productTx(type) {
   const item = S.inventory.find(i => i.id === _currentProductId);
   if (!item) return;
@@ -4141,8 +3970,6 @@ function productTx(type) {
 
   document.getElementById('txSheet').classList.add('open');
 }
-
-// ── PHOTOS — store on Railway server so all users see them ─
 async function handlePhotoUpload(event) {
   const file = event.target.files[0];
   if (!file || !_currentProductId) return;
@@ -4220,268 +4047,63 @@ function deleteProductPhoto() {
   document.getElementById('photoDeleteBtn').style.display = 'none';
   toast('Photo removed', 'wrn');
 }
-
-
-// ══════════════════════════════════════════════════════════════
 // QR & REQUEST FLOW MODULE
-// ══════════════════════════════════════════════════════════════
-
-// ── QR CODE — Pure JS, zero CDN, works offline ────────────────
-// Self-contained QR encoder: byte mode, EC level M, auto version
-// Renders as crisp SVG — guaranteed scannable by any phone camera
+// Implements QR version 1-10, byte mode, mask 0, EC level M
+// Produces valid SVG — guaranteed scannable by any camera app
 const QRGen = (() => {
+  // Uses qrcode.js — most widely tested QR library
+  // Loaded lazily on first use
+  let libReady = false;
+  let pendingQueue = [];
 
-  // ── Reed-Solomon GF(256) ──────────────────────────────────────
-  const GF_EXP = new Uint8Array(512);
-  const GF_LOG = new Uint8Array(256);
-  (() => {
-    let x = 1;
-    for (let i = 0; i < 255; i++) {
-      GF_EXP[i] = x; GF_LOG[x] = i;
-      x <<= 1; if (x & 0x100) x ^= 0x11d;
-    }
-    for (let i = 255; i < 512; i++) GF_EXP[i] = GF_EXP[i - 255];
-  })();
-  const gfMul = (a, b) => (!a || !b) ? 0 : GF_EXP[GF_LOG[a] + GF_LOG[b]];
-  function gfPoly(ec) {
-    let p = [1];
-    for (let i = 0; i < ec; i++) {
-      const q = [1, GF_EXP[i]];
-      const r = new Uint8Array(p.length + 1);
-      for (let j = 0; j < p.length; j++) for (let k = 0; k < 2; k++) r[j+k] ^= gfMul(p[j], q[k]);
-      p = Array.from(r);
-    }
-    return p;
-  }
-  function rsEncode(data, ec) {
-    const gen = gfPoly(ec);
-    const msg = [...data, ...new Array(ec).fill(0)];
-    for (let i = 0; i < data.length; i++) {
-      const coef = msg[i];
-      if (coef !== 0) for (let j = 1; j < gen.length; j++) msg[i+j] ^= gfMul(gen[j], coef);
-    }
-    return msg.slice(data.length);
-  }
-
-  // ── QR tables (version 1-10, EC level M) ──────────────────────
-  // [dataCodewords, ecCodewords, blocks]
-  const CAP = [
-    null,
-    [16,10,1],[28,16,1],[44,26,1],[64,18,2],[86,24,2],
-    [108,16,4],[124,18,4],[154,22,2],[182,22,3],[216,26,4]
-  ];
-  // Format info strings for EC=M, masks 0-7
-  const FMT = [
-    0b101010000010010,0b101000100100101,0b101111001111100,0b101101101001011,
-    0b100010111111001,0b100000011001110,0b100111110010111,0b100101010100000
-  ];
-  // Version info (versions 7+)
-  const ALIGN = [[],[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50]];
-
-  function pickVersion(byteLen) {
-    for (let v = 1; v <= 10; v++) if (CAP[v] && CAP[v][0] >= byteLen + 2) return v; // +2 for mode+terminator overhead
-    return 10;
-  }
-
-  // ── Matrix helpers ─────────────────────────────────────────────
-  function makeMatrix(size) { return Array.from({length:size},()=>new Int8Array(size).fill(-1)); }
-
-  function setFinder(m, r, c) {
-    for (let dr = -1; dr <= 7; dr++) for (let dc = -1; dc <= 7; dc++) {
-      const pr = r+dr, pc = c+dc;
-      if (pr < 0 || pr >= m.length || pc < 0 || pc >= m.length) continue;
-      m[pr][pc] = (dr>=0&&dr<=6&&(dc===0||dc===6)) || (dc>=0&&dc<=6&&(dr===0||dr===6)) ||
-                  (dr>=2&&dr<=4&&dc>=2&&dc<=4) ? 1 : 0;
-    }
-  }
-  function setTiming(m, size) {
-    for (let i = 8; i < size-8; i++) { m[6][i] = i%2===0?1:0; m[i][6] = i%2===0?1:0; }
-  }
-  function setAlign(m, centers) {
-    for (let ri = 0; ri < centers.length; ri++) for (let ci = 0; ci < centers.length; ci++) {
-      if ((ri===0&&ci===0)||(ri===0&&ci===centers.length-1)||(ri===centers.length-1&&ci===0)) continue;
-      const r = centers[ri], c = centers[ci];
-      for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++)
-        m[r+dr][c+dc] = (Math.abs(dr)===2||Math.abs(dc)===2||(!dr&&!dc)) ? 1 : 0;
-    }
-  }
-  function reserveFormat(m, size) {
-    const pos = [0,1,2,3,4,5,7,8,8,8,8,8,8,8,7,5,4,3,2,1,0];
-    const pos2= [8,8,8,8,8,8,8,8,7,5,4,3,2,1,0,0,0,0,0,0,0];
-    for (let i = 0; i < 15; i++) { m[pos[i]][pos2[i]] = 0; m[pos2[i]][pos[i]] = 0; }
-    m[8][size-8] = 1; // dark module
-  }
-  function writeFormat(m, size, mask) {
-    const bits = FMT[mask];
-    const seqR = [0,1,2,3,4,5,7,8,8,8,8,8,8,8,8];
-    const seqC = [8,8,8,8,8,8,8,8,7,5,4,3,2,1,0];
-    const seqR2= [size-1,size-2,size-3,size-4,size-5,size-6,size-7,size-8];
-    const seqC2= [8,8,8,8,8,8,8,8];
-    for (let i = 0; i < 15; i++) {
-      const b = (bits >> (14-i)) & 1;
-      m[seqR[i]][seqC[i]] = b;
-      if (i < 7) m[seqR2[i]][seqC2[i]] = b;
-      else if (i === 7) m[8][size-8] = 1;
-      else m[8][seqC[i]] = b;
-    }
-  }
-
-  function encodeData(text, version) {
-    const [dataCC, ecCC, blocks] = CAP[version];
-    const bytes = new TextEncoder().encode(text);
-    // Byte mode: 0100 + 8-bit length + data + terminator
-    const bits = [];
-    const push = (val, len) => { for (let i = len-1; i >= 0; i--) bits.push((val>>i)&1); };
-    push(0b0100, 4); push(bytes.length, 8);
-    bytes.forEach(b => push(b, 8));
-    // Terminator
-    for (let i = 0; i < 4 && bits.length < dataCC*8; i++) bits.push(0);
-    while (bits.length % 8) bits.push(0);
-    // Pad bytes
-    const pads = [0b11101100, 0b00010001];
-    let pi = 0;
-    while (bits.length < dataCC*8) { push(pads[pi], 8); pi = 1-pi; }
-    // Pack into bytes
-    const data = [];
-    for (let i = 0; i < bits.length; i+=8) {
-      let b = 0; for (let j = 0; j < 8; j++) b = (b<<1)|bits[i+j]; data.push(b);
-    }
-    // RS per block
-    const bSize = Math.floor(dataCC / blocks), extra = dataCC % blocks;
-    const ecPerBlock = Math.floor(ecCC / blocks);
-    const dataBlocks = [], ecBlocks = [];
-    let off = 0;
-    for (let b = 0; b < blocks; b++) {
-      const len = bSize + (b < extra ? 1 : 0);
-      const slice = data.slice(off, off+len); off += len;
-      dataBlocks.push(slice);
-      ecBlocks.push(rsEncode(slice, ecPerBlock));
-    }
-    // Interleave
-    const out = [];
-    const maxD = Math.max(...dataBlocks.map(b=>b.length));
-    for (let i = 0; i < maxD; i++) dataBlocks.forEach(b => { if (i < b.length) out.push(b[i]); });
-    const maxE = Math.max(...ecBlocks.map(b=>b.length));
-    for (let i = 0; i < maxE; i++) ecBlocks.forEach(b => { if (i < b.length) out.push(b[i]); });
-    return out;
-  }
-
-  function placeData(m, size, codewords) {
-    const bits = [];
-    codewords.forEach(byte => { for (let i = 7; i >= 0; i--) bits.push((byte>>i)&1); });
-    // Remainder bits
-    let bi = 0, upward = true;
-    for (let c = size-1; c >= 1; c -= 2) {
-      if (c === 6) c = 5; // skip timing
-      for (let row = 0; row < size; row++) {
-        const r = upward ? size-1-row : row;
-        for (let dc = 0; dc <= 1; dc++) {
-          const col = c - dc;
-          if (m[r][col] === -1) { m[r][col] = bi < bits.length ? bits[bi++] : 0; }
-        }
-      }
-      upward = !upward;
-    }
-  }
-
-  function applyMask(m, size, mask) {
-    const cond = [
-      (r,c) => (r+c)%2===0,
-      (r,c) => r%2===0,
-      (r,c) => c%3===0,
-      (r,c) => (r+c)%3===0,
-      (r,c) => (Math.floor(r/2)+Math.floor(c/3))%2===0,
-      (r,c) => (r*c)%2+(r*c)%3===0,
-      (r,c) => ((r*c)%2+(r*c)%3)%2===0,
-      (r,c) => ((r+c)%2+(r*c)%3)%2===0
-    ][mask];
-    const out = m.map(row => row.slice());
-    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++)
-      if (m[r][c] !== -1 && (m[r][c] === 0 || m[r][c] === 1)) {
-        // Only flip data modules (not function patterns — we track via a second pass)
-        if (cond(r,c)) out[r][c] ^= 1;
-      }
-    return out;
-  }
-
-  // Build the full QR matrix
-  function buildMatrix(text) {
-    const bytes = new TextEncoder().encode(text);
-    // 4 byte overhead (mode nibble + length byte + terminator nibble)
-    let version = 1;
-    for (let v = 1; v <= 10; v++) {
-      if (CAP[v] && CAP[v][0] >= bytes.length + 3) { version = v; break; }
-    }
-    const size = version * 4 + 17;
-    // Build function pattern mask (true = function module, don't apply data mask to it)
-    const func = Array.from({length:size},()=>new Uint8Array(size));
-
-    const m = makeMatrix(size);
-    setFinder(m, 0, 0); setFinder(m, 0, size-7); setFinder(m, size-7, 0);
-    setTiming(m, size);
-    if (ALIGN[version].length) setAlign(m, ALIGN[version]);
-    m[size-8][8] = 1; // dark module
-    reserveFormat(m, size);
-
-    // Mark function modules
-    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++)
-      if (m[r][c] !== -1) func[r][c] = 1;
-
-    const codewords = encodeData(text, version);
-    placeData(m, size, codewords);
-
-    // Pick mask 0 (simplest, always valid)
-    const mask = 0;
-    const cond = (r,c) => (r+c)%2===0;
-    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++)
-      if (!func[r][c] && cond(r,c)) m[r][c] ^= 1;
-
-    writeFormat(m, size, mask);
-    return { m, size };
-  }
-
-  function toSVG(text, px) {
-    px = px || 220;
-    const { m, size } = buildMatrix(text);
-    const mod = px / size;
-    const rects = [];
-    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++)
-      if (m[r][c] === 1) rects.push(`<rect x="${c*mod}" y="${r*mod}" width="${mod+0.5}" height="${mod+0.5}"/>`);
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${px} ${px}" width="${px}" height="${px}" shape-rendering="crispEdges">
-      <rect width="${px}" height="${px}" fill="white"/>
-      <g fill="black">${rects.join('')}</g>
-    </svg>`;
+  function loadLib(cb) {
+    if (libReady) { cb(); return; }
+    pendingQueue.push(cb);
+    if (pendingQueue.length > 1) return; // already loading
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload = () => {
+      libReady = true;
+      pendingQueue.forEach(fn => fn());
+      pendingQueue = [];
+    };
+    s.onerror = () => console.error('QR lib failed to load');
+    document.head.appendChild(s);
   }
 
   function render(text, container, size) {
     size = size || 220;
     container.innerHTML = '';
-    try {
-      container.innerHTML = toSVG(text, size);
-    } catch(e) {
-      // Fallback: Google Charts img
-      const img = document.createElement('img');
-      img.src = 'https://chart.googleapis.com/chart?cht=qr&chs='+size+'x'+size+'&chl='+encodeURIComponent(text)+'&choe=UTF-8&chld=M|2';
-      img.width = size; img.height = size;
-      img.style.cssText = 'display:block;image-rendering:pixelated';
-      container.appendChild(img);
-    }
+    loadLib(() => {
+      container.innerHTML = '';
+      try {
+        new QRCode(container, {
+          text: text,
+          width: size,
+          height: size,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch(e) {
+        container.innerHTML = '<p style="color:red;font-size:12px">QR error: ' + e.message + '</p>';
+      }
+    });
   }
 
   function getUrl(text, size) {
+    // For print-all: use Google Charts as img src (reliable for static img tags)
     size = size || 130;
-    return 'https://chart.googleapis.com/chart?cht=qr&chs='+size+'x'+size+'&chl='+encodeURIComponent(text)+'&choe=UTF-8&chld=M|2';
+    return 'https://chart.googleapis.com/chart?cht=qr&chs=' + size + 'x' + size +
+           '&chl=' + encodeURIComponent(text) + '&choe=UTF-8&chld=M|2';
   }
 
-  function getSVGDataUrl(text, size) {
-    const svg = toSVG(text, size || 130);
-    return 'data:image/svg+xml;base64,' + btoa(svg);
+  function getDataUrl(text, size) {
+    return Promise.resolve(getUrl(text, size));
   }
 
-  return { render, getUrl, getSVGDataUrl, toSVG };
+  return { render, getUrl, getDataUrl };
 })();
-
-// ── QR SHEET ──────────────────────────────────────────────────
 
 function openQRSheet() {
   const item = S.inventory.find(i => i.id === _currentProductId);
@@ -4490,11 +4112,9 @@ function openQRSheet() {
   document.getElementById('qrItemName').textContent = item.name;
   document.getElementById('qrItemCode').textContent = item.code || '';
 
-  // URL embeds groupId for public view + item code for deep-link
   const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
   const key = encodeURIComponent(item.code || item.name);
-  const gParam = encodeURIComponent(S.activeGroupId || '');
-  const url = `${appUrl}?view=${gParam}&item=${key}`;
+  const url = appUrl + '?item=' + key + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
 
   const wrap = document.getElementById('qrCanvas');
   wrap.innerHTML = '';
@@ -4505,32 +4125,30 @@ function openQRSheet() {
 
 function downloadQR() {
   const item = S.inventory.find(i => i.id === _currentProductId);
-  if (!item) return;
-  const name = (item.name || 'item').replace(/[^a-z0-9]/gi,'_');
-  const svg = document.querySelector('#qrCanvas svg');
-  if (!svg) { toast('QR not ready — wait a moment', 'wrn'); return; }
-  const blob = new Blob([svg.outerHTML], {type:'image/svg+xml'});
+  const name = (item?.name || 'item').replace(/[^a-z0-9]/gi,'_');
+  // qrcode.js renders a <canvas> inside the container
+  const canvas = document.querySelector('#qrCanvas canvas');
+  if (!canvas) { toast('QR not ready — wait a moment', 'wrn'); return; }
   const a = document.createElement('a');
-  a.download = 'QR_' + name + '.svg';
-  a.href = URL.createObjectURL(blob);
+  a.download = 'QR_' + name + '.png';
+  a.href = canvas.toDataURL('image/png');
   a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   toast('QR downloaded!', 'ok');
 }
 
 function printQR() {
   const item = S.inventory.find(i => i.id === _currentProductId);
   if (!item) return;
-  const svg = document.querySelector('#qrCanvas svg');
-  if (!svg) { toast('QR not ready', 'wrn'); return; }
-  const svgHtml = svg.outerHTML;
+  const canvas = document.querySelector('#qrCanvas canvas');
+  if (!canvas) { toast('QR not ready', 'wrn'); return; }
+  const dataUrl = canvas.toDataURL('image/png');
   const w = window.open('', '_blank');
   w.document.write('<!DOCTYPE html><html><head><title>QR - ' + item.name + '</title>' +
     '<style>body{font-family:sans-serif;text-align:center;padding:40px}' +
-    'svg{width:220px;height:220px;display:block;margin:0 auto 16px}' +
+    'img{width:220px;height:220px;display:block;margin:0 auto 16px}' +
     'h2{margin:0 0 4px;font-size:18px}p{margin:0;color:#666;font-size:13px}</style></head>' +
     '<body onload="window.print()">' +
-    svgHtml +
+    '<img src="' + dataUrl + '">' +
     '<h2>' + item.name + '</h2>' +
     '<p>' + (item.code||'') + ' &bull; ' + (item.category||'') + '</p>' +
     '<p style="margin-top:6px;font-size:11px">LabStock Inventory</p>' +
@@ -4543,15 +4161,14 @@ function openQRPrintAll() {
   if (!items.length) { toast('No items to print', 'wrn'); return; }
   const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
   const groupName = S.groups.find(g=>g.id===S.activeGroupId)?.name||'';
-  const gParam = encodeURIComponent(S.activeGroupId || '');
   toast('Opening print view…', 'ok');
 
-  // Build rows using inline SVG QR — no CDN, works offline
+  // Build rows using Google Charts QR — no JS needed, pure <img> tags
   const rows = items.map(item => {
-    const url = appUrl + '?view=' + gParam + '&item=' + encodeURIComponent(item.code||item.name);
-    const svgDataUrl = QRGen.getSVGDataUrl(url, 130);
+    const url = appUrl + '?item=' + encodeURIComponent(item.code||item.name);
+    const qrUrl = QRGen.getUrl(url, 130);
     return `<div class="cell">
-      <img src="${svgDataUrl}" width="130" height="130" style="display:block;margin:0 auto 6px">
+      <img src="${qrUrl}" width="130" height="130" style="display:block;margin:0 auto 6px">
       <div class="name">${item.name}</div>
       <div class="code">${item.code||'—'} · ${item.category||''}</div>
     </div>`;
@@ -4574,8 +4191,6 @@ function openQRPrintAll() {
     </body></html>`);
   w.document.close();
 }
-
-// ── REQUEST FLOW TOGGLE ───────────────────────────────────────
 
 function toggleRequestFlow(enabled) {
   if (!isAdmin()) { toast('Admin only', 'err'); return; }
@@ -4641,8 +4256,6 @@ function updateRequestBadge() {
   if (hdrBadge) { hdrBadge.textContent = pending.length; hdrBadge.style.display = pending.length ? 'inline-flex' : 'none'; }
 }
 
-// ── MEMBER: OPEN REQUEST SHEET ────────────────────────────────
-
 function openRequestSheet() {
   const item = S.inventory.find(i => i.id === _currentProductId);
   if (!item) return;
@@ -4693,8 +4306,6 @@ function submitItemRequest() {
   updateRequestBadge();
   toast(`✅ Request submitted! Admin will review.`, 'ok');
 }
-
-// ── ADMIN: REVIEW REQUESTS ────────────────────────────────────
 
 function renderRequestReview() {
   const el = document.getElementById('requestReviewBody');
@@ -4789,26 +4400,42 @@ function decideRequest(reqId, decision) {
   updateAlertBadge();
 }
 
-// ── HANDLE QR DEEP LINK ON PAGE LOAD ─────────────────────────
-
-function handleQRDeepLink() {
-  const params = new URLSearchParams(window.location.search);
-  const itemParam = params.get('item');
-  if (!itemParam || !S.user) return;
-  // Try to find item after app loads
-  setTimeout(() => {
-    const item = getItems().find(i =>
-      i.code?.toLowerCase() === itemParam.toLowerCase() ||
-      i.name.toLowerCase() === itemParam.toLowerCase()
-    );
-    if (item) {
-      openProductPage(item.id);
-      window.history.replaceState({}, '', window.location.pathname);
+async function _syncGroupsBackground(user) {
+  try {
+    const res = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
+    if (!res.ok) return;
+    const serverGroups = await res.json();
+    const serverGroupIds = new Set(serverGroups.map(g => g.id));
+    // Upload local-only groups
+    for (const lg of S.groups.filter(g => g.adminEmail === user.email)) {
+      if (!serverGroupIds.has(lg.id)) {
+        await fetch(`${RAILWAY_URL}/api/lab-groups`, { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({id:lg.id,name:lg.name,desc:lg.desc||'',adminEmail:lg.adminEmail,adminName:user.name,created:lg.created||new Date().toISOString()})}).catch(()=>{});
+        for (const m of S.members.filter(m => m.groupId === lg.id)) {
+          await fetch(`${RAILWAY_URL}/api/lab-members`, { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({id:m.id,groupId:m.groupId,email:m.email,name:m.name,role:m.role||'member',joined:m.joined||new Date().toISOString()})}).catch(()=>{});
+        }
+      }
     }
-  }, 800);
+    // Merge server data into local
+    const res2 = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
+    const all = res2.ok ? await res2.json() : serverGroups;
+    all.forEach(sg => {
+      const ex = S.groups.find(g => g.id === sg.id);
+      if (!ex) S.groups.push({id:sg.id,name:sg.name,desc:sg.desc,adminEmail:sg.adminEmail,telegramChatId:sg.telegramChatId,created:sg.created});
+      else { ex.name=sg.name; ex.desc=sg.desc; if(sg.telegramChatId!==undefined) ex.telegramChatId=sg.telegramChatId; }
+      sg.members.forEach(sm => { if(!S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email)) S.members.push(sm); });
+    });
+    if (all.length > 0) {
+      const vids = new Set(all.map(g=>g.id));
+      S.groups = S.groups.filter(g=>vids.has(g.id));
+      S.members = S.members.filter(m=>vids.has(m.groupId));
+    }
+    save();
+    renderGroupSheet();
+    updateTopbar();
+  } catch(e) {}
 }
-
-// ── INVITE PANEL + GROUP CODE ────────────────────────────────
 
 function getGroupCode(groupId) {
   // Short 6-char code derived from groupId — stable and unique
@@ -4840,8 +4467,6 @@ function copyGroupCode() {
     .catch(() => { prompt('Group code:', code); });
 }
 
-// ── EXPIRY ALERTS (check on app load) ───────────────────────
-
 function checkExpiryAlerts() {
   if (!S.activeGroupId) return;
   const today = new Date(); today.setHours(0,0,0,0);
@@ -4864,25 +4489,40 @@ function checkExpiryAlerts() {
 // Show expiry badge in inventory list
 const _origRenderInv = renderInv;
 
-// ── QR FIX: Handle item deep-link on page load ───────────────
-
 function handleQRDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const itemParam = params.get('item');
-  if (!itemParam || !S.user) return;
-  setTimeout(() => {
-    const item = getItems().find(i =>
-      i.code?.toLowerCase() === itemParam.toLowerCase() ||
-      i.name.toLowerCase() === decodeURIComponent(itemParam).toLowerCase()
-    );
-    if (item) {
-      openProductPage(item.id);
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, 900);
+  const groupParam = params.get('group');
+  if (!itemParam) return;
+
+  if (S.user) {
+    setTimeout(() => {
+      if (groupParam && groupParam !== S.activeGroupId) {
+        const g = S.groups.find(g=>g.id===groupParam);
+        if(g){ S.activeGroupId=groupParam; save(); updateTopbar(); }
+      }
+      const item = getItems().find(i =>
+        i.code?.toLowerCase()===itemParam.toLowerCase() ||
+        i.name.toLowerCase()===decodeURIComponent(itemParam).toLowerCase()
+      );
+      if(item){ openProductPage(item.id); window.history.replaceState({},'',' window.location.pathname'); }
+      else toast('Item not found in current group','wrn');
+    }, 600);
+  } else {
+    _showPublicItemView(itemParam, groupParam);
+  }
 }
 
-// ── JOIN BY GROUP CODE ────────────────────────────────────────
+function _showPublicItemView(itemCode, groupId) {
+  const url = RAILWAY_URL+'/api/inventory/'+encodeURIComponent(itemCode)+(groupId?'?groupId='+encodeURIComponent(groupId):'');
+  document.body.innerHTML = '<div style="min-height:100vh;background:#f5f5f5;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px"><div style="max-width:400px;width:100%"><div style="text-align:center;margin-bottom:20px"><div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div><div style="font-size:12px;color:#888;margin-top:4px">Lab Inventory</div></div><div id="pubCard" style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 16px rgba(0,0,0,.08)"><div style="text-align:center;color:#888;padding:20px">Loading...</div></div><a href="'+window.location.origin+window.location.pathname+'" style="display:block;margin-top:16px;text-align:center;padding:12px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:600;font-size:14px">🔑 Sign in to LabStock</a></div></div>';
+  fetch(url).then(r=>r.ok?r.json():null).then(item=>{
+    const c=document.getElementById('pubCard');
+    if(!item){c.innerHTML='<div style="text-align:center;color:#e53935;padding:20px">❌ Item not found</div>';return;}
+    const low=item.stock<=item.minStock;
+    c.innerHTML='<div style="font-size:20px;font-weight:800;margin-bottom:4px">'+item.name+'</div><div style="font-size:11px;color:#888;font-family:monospace;margin-bottom:16px">'+(item.code||'')+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px"><div style="background:#f5f5f5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:28px;font-weight:800;color:'+(low?'#e53935':'#2d6a4f')+'">'+item.stock+'</div><div style="font-size:11px;color:#888">'+(item.unit||'units')+' in stock</div></div><div style="background:#f5f5f5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:#555">'+item.minStock+'</div><div style="font-size:11px;color:#888">min level</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><span style="padding:4px 10px;background:#e8f5e9;color:#2d6a4f;border-radius:20px;font-size:12px">'+(item.category||'')+'</span>'+(item.location?'<span style="padding:4px 10px;background:#f3f4f6;color:#555;border-radius:20px;font-size:12px">📍 '+item.location+'</span>':'')+'<span style="padding:4px 10px;background:'+(low?'#fdecea':'#e8f5e9')+';color:'+(low?'#e53935':'#2d6a4f')+';border-radius:20px;font-size:12px;font-weight:700">'+(low?'⚠️ LOW STOCK':'✅ OK')+'</span></div><div style="font-size:11px;color:#aaa;margin-top:14px;text-align:center">View only • Sign in for full access</div>';
+  }).catch(()=>{ const c=document.getElementById('pubCard'); if(c)c.innerHTML='<div style="color:#e53935;text-align:center;padding:20px">❌ Could not load item</div>'; });
+}
 
 function showJoinGroup() {
   _hideAllLoginSteps();
@@ -4926,251 +4566,16 @@ function applyManualInvite() {
   try { const url = new URL(raw); code = url.searchParams.get('invite') || raw; } catch(e) {}
   handleInviteLink(code);
 }
-
-// ── PUBLIC VIEW (QR scan by non-app-users) ───────────────────
-
-async function showPublicView(groupId, itemKey) {
-  const page = document.getElementById('publicViewPage');
-  page.style.display = 'flex';
-  // Hide login screen behind it
-  document.getElementById('loginScreen').style.display = 'none';
-
-  // Fetch group info for label
-  try {
-    const res = await fetch(`${RAILWAY_URL}/api/lab-groups?groupId=${encodeURIComponent(groupId)}`);
-    if (res.ok) {
-      const groups = await res.json();
-      const g = Array.isArray(groups) ? groups.find(x => x.id === groupId) : null;
-      if (g) document.getElementById('pvGroupName').textContent = g.name || 'Lab Group';
-    }
-  } catch(e) {}
-
-  // Fetch inventory for this group
-  try {
-    const invRes = await fetch(`${RAILWAY_URL}/api/inventory?groupId=${encodeURIComponent(groupId)}`);
-    if (!invRes.ok) throw new Error('fetch failed');
-    const items = await invRes.json();
-    const key = decodeURIComponent(itemKey).toLowerCase();
-    const item = items.find(i =>
-      (i.code || '').toLowerCase() === key ||
-      (i.name || '').toLowerCase() === key
-    );
-
-    document.getElementById('pvLoading').style.display = 'none';
-
-    if (!item) {
-      document.getElementById('pvError').style.display = 'block';
-      return;
-    }
-
-    // Populate
-    document.getElementById('pvContent').style.display = 'block';
-    document.getElementById('pvName').textContent = item.name || '—';
-    document.getElementById('pvCode').textContent = item.code || 'No Code';
-    document.getElementById('pvUnit').textContent = item.unit || 'units';
-    document.getElementById('pvMinStock').textContent = (item.minStock || 10) + ' ' + (item.unit || 'units');
-    document.getElementById('pvCategory').textContent = item.category || '—';
-    document.getElementById('pvLocation').textContent = item.location || '—';
-
-    // Stock + badge
-    const stock = item.stock ?? 0;
-    const min = item.minStock || 10;
-    const low = stock <= min;
-    const watch = stock <= min * 1.5;
-    const stockEl = document.getElementById('pvStock');
-    stockEl.textContent = stock;
-    stockEl.style.color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent)';
-    const badge = document.getElementById('pvStockBadge');
-    if (low) { badge.textContent = 'LOW STOCK'; badge.className = 'badge bg-red'; }
-    else if (watch) { badge.textContent = 'WATCH'; badge.className = 'badge bg-warn'; }
-    else { badge.textContent = 'IN STOCK'; badge.className = 'badge bg-green'; }
-
-    // Expiry
-    if (item.expiry) {
-      document.getElementById('pvExpiryRow').style.display = 'block';
-      const today = new Date(); today.setHours(0,0,0,0);
-      const expDate = new Date(item.expiry);
-      const daysLeft = Math.ceil((expDate - today) / 86400000);
-      const exEl = document.getElementById('pvExpiry');
-      if (daysLeft < 0) { exEl.textContent = `⛔ Expired (${item.expiry})`; exEl.style.color = 'var(--danger)'; }
-      else if (daysLeft <= 30) { exEl.textContent = `⚠️ ${item.expiry} (${daysLeft}d left)`; exEl.style.color = 'var(--warn)'; }
-      else { exEl.textContent = item.expiry; exEl.style.color = 'var(--accent)'; }
-    }
-
-    // Photo
-    try {
-      const photoRes = await fetch(`${RAILWAY_URL}/api/photos/${encodeURIComponent(groupId)}/${encodeURIComponent(item.name)}`);
-      if (photoRes.ok) {
-        const data = await photoRes.json();
-        if (data.photo) {
-          document.getElementById('pvPhoto').src = data.photo;
-          document.getElementById('pvPhoto').style.display = 'block';
-          document.getElementById('pvPhotoPlaceholder').style.display = 'none';
-        }
-      }
-    } catch(e) {}
-
-    document.getElementById('pvUpdated').textContent = 'Live from LabStock inventory';
-
-  } catch(e) {
-    document.getElementById('pvLoading').style.display = 'none';
-    document.getElementById('pvError').style.display = 'block';
-    document.getElementById('pvErrorMsg').textContent = 'Could not reach the server. Check your connection.';
-  }
-}
-
-function pvJoinApp() {
-  // Hide public view, show login screen so they can sign up/join
-  document.getElementById('publicViewPage').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-  // Clear ?view params so normal flow takes over
-  window.history.replaceState({}, '', window.location.pathname);
-}
-
-// ── INIT ─────────────────────────────────────────────────
 load();
-
-const _initParams = new URLSearchParams(window.location.search);
-const _viewGroupId = _initParams.get('view');
-const _viewItemKey = _initParams.get('item');
-
-if (_viewGroupId && _viewItemKey) {
-  // QR scan detected
-  if (S.user) {
-    // Logged-in user: show full app with product page open
-    showApp();
-    startServerSync();
-    updateRequestFlowUI();
-    setTimeout(checkExpiryAlerts, 2000);
-    // Deep-link to the specific item with edit access
-    setTimeout(() => {
-      // Switch to active group matching the QR if possible
-      if (_viewGroupId !== S.activeGroupId) {
-        const matchGroup = S.groups.find(g => g.id === _viewGroupId);
-        if (matchGroup) { S.activeGroupId = _viewGroupId; save(); updateTopbar(); }
-      }
-      const key = decodeURIComponent(_viewItemKey).toLowerCase();
-      const item = S.inventory.find(i =>
-        (i.code||'').toLowerCase() === key ||
-        (i.name||'').toLowerCase() === key
-      );
-      if (item) {
-        openProductPage(item.id);
-      } else {
-        // Not in local cache yet — wait for sync then try again
-        setTimeout(() => {
-          const item2 = S.inventory.find(i =>
-            (i.code||'').toLowerCase() === key ||
-            (i.name||'').toLowerCase() === key
-          );
-          if (item2) openProductPage(item2.id);
-        }, 2000);
-      }
-      window.history.replaceState({}, '', window.location.pathname);
-    }, 900);
-  } else {
-    // Not logged in: show public read-only view
-    showPublicView(_viewGroupId, _viewItemKey);
-  }
-} else {
-  // Normal app boot
-  detectInviteOnLoad();
-  if (S.user) {
-    showApp();
-    startServerSync();
-    handleQRDeepLink();
-    updateRequestFlowUI();
-    setTimeout(checkExpiryAlerts, 2000);
-  }
+// Check for invite link on page load
+detectInviteOnLoad();
+if (S.user) {
+  showApp();
+  startServerSync();
+  handleQRDeepLink();
+  updateRequestFlowUI();
+  setTimeout(checkExpiryAlerts, 2000);
 }
 </script>
-<!-- ════════════════════════════════════
-     PUBLIC VIEW-ONLY PAGE (QR scan by non-users)
-════════════════════════════════════ -->
-<div id="publicViewPage" style="display:none;position:fixed;inset:0;z-index:400;background:var(--bg);flex-direction:column;font-family:var(--body)">
-  <!-- Header -->
-  <div style="background:var(--accent);color:white;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;flex-shrink:0">
-    <div style="font-size:22px">🧪</div>
-    <div style="flex:1">
-      <div style="font-family:var(--display);font-size:16px;font-weight:800">LabStock</div>
-      <div id="pvGroupName" style="font-size:11px;opacity:.8">Lab Inventory</div>
-    </div>
-    <div style="font-size:10px;background:rgba(255,255,255,.2);padding:4px 10px;border-radius:20px;font-weight:600">👁 VIEW ONLY</div>
-  </div>
-
-  <!-- Scrollable content -->
-  <div style="flex:1;overflow-y:auto;padding:0 0 120px">
-    <!-- Loading state -->
-    <div id="pvLoading" style="text-align:center;padding:60px 20px;color:var(--muted)">
-      <div style="font-size:40px;margin-bottom:12px">⏳</div>
-      <div style="font-size:14px">Loading item...</div>
-    </div>
-
-    <!-- Item content -->
-    <div id="pvContent" style="display:none">
-      <!-- Photo -->
-      <div style="background:var(--surface2);width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden;max-height:260px">
-        <img id="pvPhoto" style="width:100%;height:100%;object-fit:cover;display:none" alt="">
-        <div id="pvPhotoPlaceholder" style="font-size:72px;opacity:.25">📦</div>
-      </div>
-
-      <!-- Info -->
-      <div style="padding:20px 16px 0">
-        <div style="font-family:var(--display);font-size:24px;font-weight:800;line-height:1.2;margin-bottom:6px" id="pvName">—</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px;flex-wrap:wrap">
-          <span class="badge bg-gray" id="pvCode" style="font-family:var(--mono);font-size:12px"></span>
-          <span class="badge" id="pvStockBadge"></span>
-        </div>
-
-        <!-- Stock big -->
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-          <div>
-            <div style="font-family:var(--display);font-size:42px;font-weight:800;line-height:1" id="pvStock">—</div>
-            <div style="font-size:14px;color:var(--muted);margin-top:4px" id="pvUnit">units</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:11px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;margin-bottom:4px">MIN LEVEL</div>
-            <div style="font-weight:700;font-size:16px" id="pvMinStock">—</div>
-          </div>
-        </div>
-
-        <!-- Meta grid -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px">
-            <div style="font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Category</div>
-            <div style="font-weight:700;font-size:14px" id="pvCategory">—</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px">
-            <div style="font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Location</div>
-            <div style="font-weight:700;font-size:14px" id="pvLocation">—</div>
-          </div>
-          <div id="pvExpiryRow" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;grid-column:1/-1">
-            <div style="font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Expiry Date</div>
-            <div style="font-weight:700;font-size:14px" id="pvExpiry">—</div>
-          </div>
-        </div>
-
-        <!-- Last updated -->
-        <div id="pvUpdated" style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:16px"></div>
-      </div>
-    </div>
-
-    <!-- Error state -->
-    <div id="pvError" style="display:none;text-align:center;padding:60px 20px;color:var(--muted)">
-      <div style="font-size:48px;margin-bottom:12px">🔍</div>
-      <div style="font-size:15px;font-weight:700;margin-bottom:6px">Item not found</div>
-      <div style="font-size:13px" id="pvErrorMsg">This item may have been removed or the QR code is outdated.</div>
-    </div>
-  </div>
-
-  <!-- Bottom CTA — join the app -->
-  <div style="position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--border);padding:14px 16px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px">
-    <div style="font-size:11px;color:var(--muted);text-align:center">Want to manage stock? Join LabStock →</div>
-    <button onclick="pvJoinApp()" style="width:100%;padding:14px;border-radius:var(--r);border:none;background:var(--accent);color:white;font-family:var(--body);font-size:15px;font-weight:700;cursor:pointer">
-      🧪 Open LabStock App
-    </button>
-  </div>
-</div>
-
 </body>
 </html>
