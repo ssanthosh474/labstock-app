@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Item View – LabStock</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0; padding: 0;
+    background: #f7f7f7;
+    color: #222;
+  }
+  .container {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+  }
+  h1 {
+    font-size: 22px; margin: 0 0 10px;
+  }
+  .muted {
+    color: #888; font-size: 13px;
+  }
+  .row {
+    margin: 10px 0;
+    font-size: 15px;
+  }
+  .label { font-weight: bold; }
+  .error {
+    color: red;
+    margin-top: 20px;
+    font-weight: bold;
+    text-align: center;
+  }
+  .loading {
+    text-align: center;
+    padding: 40px 0;
+    font-size: 15px;
+    color: #666;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div id="loading" class="loading">Loading item…</div>
+  <div id="content" style="display:none">
+    <div class="card">
+      <h1 id="itemName"></h1>
+      <div id="itemCode" class="muted"></div>
+
+      <div class="row"><span class="label">Stock:</span> <span id="stock"></span></div>
+      <div class="row"><span class="label">Category:</span> <span id="category"></span></div>
+      <div class="row"><span class="label">Unit:</span> <span id="unit"></span></div>
+      <div class="row"><span class="label">Location:</span> <span id="location"></span></div>
+      <div class="row"><span class="label">Expiry:</span> <span id="expiry"></span></div>
+    </div>
+  </div>
+
+  <div id="error" class="error" style="display:none"></div>
+</div>
+
+<script>
+const API = "YOUR_RAILWAY_URL_HERE";   // ← Replace with real backend
+// Example:  const API = "https://labstock-api.up.railway.app";
+
+function qs(name) {
+  return new URLSearchParams(location.search).get(name);
+}
+
+const itemKey = qs("item");
+const groupId = qs("group");
+
+async function loadItem() {
+  if (!itemKey) {
+    showError("Missing ?item= parameter");
+    return;
+  }
+
+  try {
+    // ──────────────────────────────────────────────
+    // 1. Fetch items for the group
+    //    GET /api/items?group=123
+    // ──────────────────────────────────────────────
+    const url = `${API}/api/items?group=${encodeURIComponent(groupId || "")}`;
+    const res = await fetch(url);
+
+    if (!res.ok) throw new Error("Server error");
+    const items = await res.json();
+
+    // ──────────────────────────────────────────────
+    // 2. Find matching item by code or name
+    // ──────────────────────────────────────────────
+    const item = items.find(i =>
+      (i.code && i.code.toLowerCase() === itemKey.toLowerCase()) ||
+      i.name.toLowerCase() === itemKey.toLowerCase()
+    );
+
+    if (!item) {
+      showError("Item not found in this group");
+      return;
+    }
+
+    // ──────────────────────────────────────────────
+    // 3. Render item
+    // ──────────────────────────────────────────────
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("content").style.display = "block";
+
+    document.getElementById("itemName").textContent = item.name;
+    document.getElementById("itemCode").textContent = item.code || "";
+
+    document.getElementById("stock").textContent = `${item.stock} ${item.unit}`;
+    document.getElementById("category").textContent = item.category || "-";
+    document.getElementById("unit").textContent = item.unit || "-";
+    document.getElementById("location").textContent = item.location || "-";
+    document.getElementById("expiry").textContent = item.expiry || "—";
+
+  } catch (err) {
+    showError(err.message || "Failed to load item");
+  }
+}
+
+function showError(msg) {
+  document.getElementById("loading").style.display = "none";
+  const el = document.getElementById("error");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+loadItem();
+</script>
+
+</body>
+</html>
