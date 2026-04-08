@@ -803,10 +803,10 @@ select.form-input { cursor: pointer; }
   </div>
   <div class="login-card">
 
-    <!-- STEP 1: Sign In options -->
+    <!-- STEP 1: Sign In -->
     <div id="loginStep1">
       <div style="font-size:13px;font-weight:600;margin-bottom:4px;text-align:center">Sign In</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:18px;text-align:center">All lab members sign in here</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px;text-align:center">Admin or member — sign in the same way</div>
       <button class="google-btn" onclick="signInGoogle()">
         <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.36-8.16 2.36-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
         Sign in with Google
@@ -816,7 +816,7 @@ select.form-input { cursor: pointer; }
       <button class="demo-btn" onclick="showEmailLogin()" style="font-size:14px">✉️ Sign in with Email</button>
     </div>
 
-    <!-- STEP 1B: Email login (any user) -->
+    <!-- STEP 1B: Email login -->
     <div id="loginStep2Email" style="display:none">
       <button onclick="document.getElementById('loginStep1').style.display='block';this.parentElement.style.display='none';" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:12px;padding:0">&#8592; Back</button>
       <div style="font-size:13px;font-weight:600;margin-bottom:4px">Sign In with Email</div>
@@ -831,17 +831,35 @@ select.form-input { cursor: pointer; }
           <input class="form-input" id="loginEmail" type="email" placeholder="yourname@gmail.com" style="font-size:15px" inputmode="email" autocomplete="email">
           <div id="emailError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none">Please enter a valid email</div>
         </div>
-        <button class="google-btn" onclick="submitStep1()" style="background:var(--accent);color:white;border-color:var(--accent)">
-          Continue &#8594;
-        </button>
+        <button class="google-btn" onclick="submitStep1()" style="background:var(--accent);color:white;border-color:var(--accent)">Continue &#8594;</button>
       </div>
     </div>
 
-    <!-- STEP 2: Create first group (first-time admin only) -->
+    <!-- STEP 2: Choose path — new user with no groups -->
+    <div id="loginStepChoose" style="display:none">
+      <div style="text-align:center;margin-bottom:18px">
+        <div style="font-size:28px;margin-bottom:6px">👋</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px">Welcome, <span id="chooseUserName"></span>!</div>
+        <div style="font-size:12px;color:var(--muted)">What would you like to do?</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button onclick="showCreateGroup()" style="padding:14px;border-radius:var(--r);border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;text-align:left">
+          🧪 Create a new lab group
+          <div style="font-size:11px;font-weight:400;color:var(--muted);margin-top:3px">You'll be the admin — invite members after</div>
+        </button>
+        <button onclick="showJoinGroup()" style="padding:14px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;text-align:left">
+          🔗 Join an existing group
+          <div style="font-size:11px;font-weight:400;color:var(--muted);margin-top:3px">Paste an invite link from your admin</div>
+        </button>
+      </div>
+      <button style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;width:100%;text-align:center;padding:12px 4px 0" onclick="logout()">Sign out</button>
+    </div>
+
+    <!-- STEP 3: Create group -->
     <div id="loginStep2" style="display:none">
-      <button onclick="backToStep1()" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:12px;padding:0">&#8592; Back</button>
+      <button onclick="showChooseStep()" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:12px;padding:0">&#8592; Back</button>
       <div style="font-size:13px;font-weight:600;margin-bottom:4px">Create Your Lab Group</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Set up your group — members can join after</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px">You'll be the admin. Members can join after via invite link.</div>
       <div style="display:flex;flex-direction:column;gap:12px">
         <div class="form-group">
           <label class="form-label">Group Name *</label>
@@ -852,25 +870,37 @@ select.form-input { cursor: pointer; }
           <input class="form-input" id="setupGroupDesc" placeholder="e.g. Main research lab, Floor 3" style="font-size:15px">
         </div>
         <button class="google-btn" onclick="submitStep2()" style="background:var(--accent);color:white;border-color:var(--accent)">
-          &#x1F680; Create Group and Start
+          🚀 Create Group and Start
         </button>
       </div>
     </div>
 
-    <!-- STEP 3: Waiting room (user logged in but no group yet) -->
-    <div id="loginStepWaiting" style="display:none">
-      <div style="text-align:center;padding:8px 0 16px">
-        <div style="font-size:36px;margin-bottom:10px">⏳</div>
-        <div style="font-size:14px;font-weight:700;margin-bottom:6px">Waiting for access</div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.6">You're signed in but not yet in a lab group.<br>Ask your admin to add you, or enter an invite code below.</div>
-      </div>
-      <div class="form-group" style="margin-bottom:10px">
-        <label class="form-label">Have an invite code?</label>
+    <!-- STEP 4: Join group with invite -->
+    <div id="loginStepJoin" style="display:none">
+      <button onclick="showChooseStep()" style="background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:12px;padding:0">&#8592; Back</button>
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px">Join a Lab Group</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5">Paste the invite link your admin shared with you.</div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label class="form-label">Invite Link or Code</label>
         <input class="form-input" id="manualInviteCode" placeholder="Paste invite link or code here" style="font-size:14px">
       </div>
       <button class="google-btn" onclick="applyManualInvite()" style="background:var(--accent);color:white;border-color:var(--accent);margin-bottom:10px">
         Join Group &#8594;
       </button>
+      <button style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;width:100%;text-align:center;padding:4px" onclick="logout()">Sign out</button>
+    </div>
+
+    <!-- STEP 5: Already in groups — offer to add more -->
+    <div id="loginStepWaiting" style="display:none">
+      <div style="text-align:center;padding:8px 0 12px">
+        <div style="font-size:36px;margin-bottom:10px">⏳</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px">Waiting for access</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.6">You're signed in but not in any group yet.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">
+        <button onclick="showCreateGroup()" style="padding:12px;border-radius:var(--r);border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:13px;font-weight:600;cursor:pointer">🧪 Create a new group</button>
+        <button onclick="showJoinGroup()" style="padding:12px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer">🔗 Join with invite link</button>
+      </div>
       <button style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;width:100%;text-align:center;padding:4px" onclick="logout()">Sign out</button>
     </div>
 
@@ -1400,9 +1430,53 @@ select.form-input { cursor: pointer; }
       <div class="sheet-title">Groups</div>
       <button class="sheet-close" onclick="closeSheet('groupSheet')">✕</button>
     </div>
-    <div id="groupSheetBody" style="padding:16px;display:flex;flex-direction:column;gap:10px"></div>
-    <div style="padding:0 16px 8px">
-      <button class="btn btn-primary btn-full" onclick="promptCreateGroup()">+ Create Group</button>
+    <div id="groupSheetBody" style="padding:16px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:55vh"></div>
+    <div style="padding:0 16px 12px">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="showGroupForm()">🧪 Create Group</button>
+        <button class="btn btn-ghost" style="flex:1" onclick="showJoinGroupInApp()">🔗 Join Group</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Group Create / Edit Form Sheet -->
+<div class="sheet-overlay" id="groupFormSheet" onclick="sheetBgClose(event,'groupFormSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="groupFormTitle">New Group</div>
+      <button class="sheet-close" onclick="closeSheet('groupFormSheet')">✕</button>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;max-height:72vh">
+
+      <div class="form-group">
+        <label class="form-label">Group Name *</label>
+        <input class="form-input" id="gfName" placeholder="e.g. Biochemistry Lab" autocomplete="off">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input class="form-input" id="gfDesc" placeholder="e.g. Main research lab, Floor 3" autocomplete="off">
+      </div>
+
+      <!-- Telegram linking -->
+      <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">🤖 Telegram Chat Link</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+          Each group can have its own Telegram chat. Send <code style="background:var(--bg);padding:1px 5px;border-radius:4px;font-family:var(--mono)">/whoami</code> in your Telegram group to get the Chat ID.
+        </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label class="form-label">Telegram Chat ID</label>
+          <input class="form-input" id="gfChatId" placeholder="e.g. -1003513959136" autocomplete="off" inputmode="numeric" style="font-family:var(--mono);font-size:14px;letter-spacing:.5px">
+        </div>
+        <div id="gfTelegramStatus" style="display:none;font-size:12px;padding:7px 10px;border-radius:6px;margin-top:2px"></div>
+        <button id="gfUnlinkBtn" style="display:none;margin-top:10px;font-size:12px;padding:6px 14px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;cursor:pointer;width:100%" onclick="unlinkTelegramFromForm()">🔗 Unlink Telegram Chat</button>
+      </div>
+
+      <button class="btn btn-primary btn-full" onclick="saveGroupForm()">💾 Save Group</button>
+
+      <button id="gfDeleteBtn" style="display:none;background:transparent;border:1.5px solid var(--danger);color:var(--danger);padding:11px;border-radius:var(--r);font-size:14px;font-weight:600;cursor:pointer;width:100%" onclick="deleteGroupFromForm()">🗑️ Delete This Group</button>
     </div>
   </div>
 </div>
@@ -1671,41 +1745,101 @@ function submitStep2() {
   const nameEl = document.getElementById('setupGroupName');
   nameEl.style.borderColor = '';
   if (!groupName) { nameEl.style.borderColor='var(--danger)'; nameEl.focus(); return; }
-  doLogin(_pendingUser, { name: groupName, desc: groupDesc });
+  // If already logged in (adding a new group from choose screen), use S.user
+  const user = _pendingUser || S.user;
+  if (!user) { backToStep1(); return; }
+  doLogin(user, { name: groupName, desc: groupDesc });
 }
 
 function backToStep1() {
+  _hideAllLoginSteps();
   document.getElementById('loginStep1').style.display = 'block';
-  document.getElementById('loginStep2').style.display = 'none';
 }
 
 async function doLogin(user, firstGroup = null, inviteCode = null) {
   load();
-  const isNewUser = !S.user || S.user.email !== user.email;
-  if (isNewUser && !user.isDemo) {
-    const userGroupIds = new Set([
-      ...S.groups.filter(g => g.adminEmail === user.email).map(g => g.id),
-      ...S.members.filter(m => m.email === user.email).map(m => m.groupId)
-    ]);
-    if (userGroupIds.size > 0) {
-      S.inventory = S.inventory.filter(i => userGroupIds.has(i.groupId));
-      S.transactions = S.transactions.filter(t => userGroupIds.has(t.groupId));
-      S.groups = S.groups.filter(g => userGroupIds.has(g.id));
-      S.members = S.members.filter(m => userGroupIds.has(m.groupId));
-    } else {
-      S.inventory = []; S.transactions = [];
-      S.groups = []; S.members = [];
-    }
-  }
   S.user = user;
+
+  if (!user.isDemo) {
+    // ── Sync groups with server (bidirectional) ──────────────────
+    try {
+      const res = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
+      if (res.ok) {
+        const serverGroups = await res.json();
+        const serverGroupIds = new Set(serverGroups.map(g => g.id));
+
+        // 1. Upload any local groups the server doesn't know about yet
+        //    (handles first login after update, or offline-created groups)
+        const localAdminGroups = S.groups.filter(g => g.adminEmail === user.email);
+        for (const lg of localAdminGroups) {
+          if (!serverGroupIds.has(lg.id)) {
+            // Server doesn't know this group — push it up
+            await fetch(`${RAILWAY_URL}/api/lab-groups`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: lg.id, name: lg.name, desc: lg.desc||'', adminEmail: lg.adminEmail, adminName: user.name, created: lg.created||new Date().toISOString() })
+            }).catch(() => {});
+            // Push members for this group
+            const groupMembers = S.members.filter(m => m.groupId === lg.id);
+            for (const m of groupMembers) {
+              await fetch(`${RAILWAY_URL}/api/lab-members`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: m.id, groupId: m.groupId, email: m.email, name: m.name, role: m.role||'member', joined: m.joined||new Date().toISOString() })
+              }).catch(() => {});
+            }
+            // Push Telegram binding if exists
+            if (lg.telegramChatId) {
+              fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(lg.id)}/telegram`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId: lg.telegramChatId })
+              }).catch(() => {});
+            }
+          }
+        }
+
+        // 2. Re-fetch after upload so we have the full merged list
+        const res2 = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
+        const allServerGroups = res2.ok ? await res2.json() : serverGroups;
+
+        // 3. Merge server groups into local state
+        allServerGroups.forEach(sg => {
+          const existing = S.groups.find(g => g.id === sg.id);
+          if (!existing) {
+            S.groups.push({ id: sg.id, name: sg.name, desc: sg.desc, adminEmail: sg.adminEmail, telegramChatId: sg.telegramChatId, created: sg.created });
+          } else {
+            existing.name = sg.name; existing.desc = sg.desc; existing.telegramChatId = sg.telegramChatId;
+          }
+          sg.members.forEach(sm => {
+            if (!S.members.find(m => m.groupId === sm.groupId && m.email === sm.email)) {
+              S.members.push(sm);
+            }
+          });
+        });
+
+        // 4. Keep only groups the server knows about (removes stale local-only groups)
+        if (allServerGroups.length > 0) {
+          const validIds = new Set(allServerGroups.map(g => g.id));
+          S.groups = S.groups.filter(g => validIds.has(g.id));
+          S.members = S.members.filter(m => validIds.has(m.groupId));
+          S.inventory = S.inventory.filter(i => validIds.has(i.groupId));
+          S.transactions = S.transactions.filter(t => validIds.has(t.groupId));
+        }
+      }
+    } catch(e) { /* server unreachable — use local cache */ }
+  }
 
   if (firstGroup) {
     const newGid = 'g_' + Date.now();
-    S.groups.push({ id: newGid, name: firstGroup.name, desc: firstGroup.desc || '', adminEmail: user.email, created: new Date().toISOString() });
-    S.members.push({ id: 'm_' + Date.now(), groupId: newGid, email: user.email, name: user.name, role: 'admin', joined: new Date().toISOString() });
+    const now = new Date().toISOString();
+    const newG = { id: newGid, name: firstGroup.name, desc: firstGroup.desc || '', adminEmail: user.email, telegramChatId: null, created: now };
+    S.groups.push(newG);
+    S.members.push({ id: 'm_' + Date.now(), groupId: newGid, email: user.email, name: user.name, role: 'admin', joined: now });
     S.activeGroupId = newGid;
-    localStorage.setItem('invite_group_' + newGid, firstGroup.name);
-  } else if (!S.activeGroupId) {
+    // Push new group to server
+    fetch(`${RAILWAY_URL}/api/lab-groups`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: newGid, name: firstGroup.name, desc: firstGroup.desc||'', adminEmail: user.email, adminName: user.name, created: now })
+    }).catch(() => {});
+  } else if (!S.activeGroupId || !S.groups.find(g => g.id === S.activeGroupId)) {
     const myGroup = S.groups.find(g =>
       g.adminEmail === user.email ||
       S.members.find(m => m.groupId === g.id && m.email === user.email)
@@ -1724,30 +1858,55 @@ async function doLogin(user, firstGroup = null, inviteCode = null) {
     const res = await fetch(`${RAILWAY_URL}/api/invites/${encodeURIComponent(user.email)}`);
     if (res.ok) {
       const inv = await res.json();
-      // Consume the invite from server
       fetch(`${RAILWAY_URL}/api/invites/${encodeURIComponent(user.email)}`, { method: 'DELETE' }).catch(()=>{});
       acceptPendingInvite(inv);
       return;
     }
-  } catch(e) { /* server unreachable — continue normal flow */ }
+  } catch(e) {}
 
-  // If user has a group → show app. Otherwise → show waiting room
   const hasGroup = S.groups.some(g => g.adminEmail === user.email) ||
                    S.members.some(m => m.email === user.email);
   if (hasGroup) {
     showApp();
   } else {
-    showWaitingRoom();
+    // New user with no groups — show choose path (create or join)
+    showChooseStep();
   }
+}
+
+function _hideAllLoginSteps() {
+  ['loginStep1','loginStep2','loginStep2Email','loginStepChoose','loginStepJoin','loginStepWaiting'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
 }
 
 function showWaitingRoom() {
   document.getElementById('loginScreen').style.display = 'flex';
-  ['loginStep1','loginStep2','loginStep2Email'].forEach(id => {
-    document.getElementById(id).style.display = 'none';
-  });
+  _hideAllLoginSteps();
   document.getElementById('loginStepWaiting').style.display = 'block';
   document.getElementById('loginFootnote').textContent = `Signed in as ${S.user?.name || S.user?.email}`;
+}
+
+function showChooseStep() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  _hideAllLoginSteps();
+  const nameEl = document.getElementById('chooseUserName');
+  if (nameEl) nameEl.textContent = S.user?.name?.split(' ')[0] || S.user?.email || '';
+  document.getElementById('loginStepChoose').style.display = 'block';
+  document.getElementById('loginFootnote').textContent = `Signed in as ${S.user?.name || S.user?.email}`;
+}
+
+function showCreateGroup() {
+  _hideAllLoginSteps();
+  document.getElementById('loginStep2').style.display = 'block';
+  setTimeout(() => document.getElementById('setupGroupName').focus(), 200);
+}
+
+function showJoinGroup() {
+  _hideAllLoginSteps();
+  document.getElementById('loginStepJoin').style.display = 'block';
+  setTimeout(() => document.getElementById('manualInviteCode').focus(), 200);
 }
 
 function applyManualInvite() {
@@ -1784,6 +1943,11 @@ function acceptPendingInvite(inv) {
   S.pendingInvites = (S.pendingInvites||[]).filter(p => !(p.groupId===inv.groupId && p.email===S.user.email));
   S.activeGroupId = inv.groupId;
   save();
+  // Push member join to server
+  fetch(`${RAILWAY_URL}/api/lab-members`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupId: inv.groupId, email: S.user.email, name: S.user.name||inv.name||S.user.email, role: inv.role||'member', joined: new Date().toISOString() })
+  }).catch(() => {});
   showApp();
   setTimeout(() => syncFromServer(true), 800);
   toast(`✅ Joined "${inv.groupName}"! Welcome to the group.`, 'ok');
@@ -1950,22 +2114,39 @@ function closeSheet(id) { document.getElementById(id).classList.remove('open'); 
 function sheetBgClose(e, id) { if (e.target === e.currentTarget) closeSheet(id); }
 
 // ── GROUPS ──────────────────────────────────────────────
+
 function renderGroupSheet() {
   const el = document.getElementById('groupSheetBody');
-  if (!S.groups.length) { el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:13px;padding:12px">No groups yet. Create your first group!</p>'; return; }
+  if (!S.groups.length) {
+    el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:13px;padding:24px 12px">No groups yet.<br>Tap <strong>+ Create Group</strong> below.</p>';
+    return;
+  }
   el.innerHTML = S.groups.map(g => {
-    const active = g.id === S.activeGroupId;
-    const count = S.members.filter(m => m.groupId === g.id).length;
+    const active  = g.id === S.activeGroupId;
+    const count   = S.members.filter(m => m.groupId === g.id).length;
     const isOwner = g.adminEmail === S.user?.email;
-    return `<div style="background:${active?'var(--accent-bg)':'var(--surface2)'};border:1.5px solid ${active?'var(--accent-l)':'var(--border)'};border-radius:var(--r);padding:14px;margin-bottom:2px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div onclick="setGroup('${g.id}')" style="font-weight:700;font-size:15px;cursor:pointer;flex:1">🧪 ${g.name} ${active?'<span class="badge bg-green">Active</span>':''}</div>
-        ${isOwner ? `<div style="display:flex;gap:6px">
-          <button class="btn btn-ghost btn-xs" onclick="editGroup('${g.id}')">✏️</button>
-          <button class="btn btn-danger btn-xs" onclick="deleteGroup('${g.id}')">🗑️</button>
-        </div>` : ''}
+    const hasTG   = !!g.telegramChatId;
+    return `
+    <div style="background:${active?'var(--accent-bg)':'var(--surface2)'};border:1.5px solid ${active?'var(--accent-l)':'var(--border)'};border-radius:var(--r);padding:14px;transition:box-shadow .15s">
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
+        <div onclick="setGroup('${g.id}')" style="font-weight:700;font-size:15px;cursor:pointer;flex:1;line-height:1.3">
+          🧪 ${g.name}
+          ${active?'<span class="badge bg-green" style="font-size:10px;margin-left:5px;vertical-align:middle">Active</span>':''}
+        </div>
+        ${isOwner?`<div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();showGroupForm('${g.id}')">✏️</button>
+          <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteGroup('${g.id}')">🗑️</button>
+        </div>`:''}
       </div>
-      <div onclick="setGroup('${g.id}')" style="font-size:12px;color:var(--muted);cursor:pointer">${g.desc||'No description'} • ${count} member${count!==1?'s':''}</div>
+      <div onclick="setGroup('${g.id}')" style="font-size:12px;color:var(--muted);cursor:pointer;margin-bottom:8px">
+        ${g.desc||'No description'} • ${count} member${count!==1?'s':''}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${hasTG
+          ?`<span style="font-size:11px;background:#e8f5e9;color:#2d6a4f;padding:2px 8px;border-radius:20px;font-weight:600">🤖 Telegram linked</span>
+            <span style="font-size:10px;color:var(--muted);font-family:var(--mono)">${g.telegramChatId}</span>`
+          :`<span style="font-size:11px;background:var(--surface);color:var(--muted);padding:2px 8px;border-radius:20px;border:1px solid var(--border)">🤖 No Telegram</span>`}
+      </div>
     </div>`;
   }).join('');
 }
@@ -1977,43 +2158,147 @@ function setGroup(id) {
   document.getElementById('groupSubText').textContent = g?.name || '';
   closeSheet('groupSheet');
   toast(`Switched to: ${g?.name}`, 'ok');
-  // Re-sync from server for this group's data
   syncFromServer(true);
 }
 
-function promptCreateGroup() {
-  const name = prompt('Group name:');
-  if (!name?.trim()) return;
-  const desc = prompt('Description (optional):') || '';
-  const id = 'g_' + Date.now();
-  S.groups.push({ id, name: name.trim(), desc, adminEmail: S.user.email, created: new Date().toISOString() });
-  S.members.push({ id: 'm_' + Date.now(), groupId: id, email: S.user.email, name: S.user.name, role: 'admin', joined: new Date().toISOString() });
-  S.activeGroupId = id; save();
-  renderGroupSheet(); updateTopbar();
-  toast(`"${name}" created!`, 'ok');
+// ── GROUP FORM (create or edit) ──────────────────────────
+let _gfEditId = null;
+
+function showGroupForm(id) {
+  _gfEditId = id || null;
+  const g = id ? S.groups.find(x => x.id === id) : null;
+  document.getElementById('groupFormTitle').textContent = g ? 'Edit Group' : 'New Group';
+  document.getElementById('gfName').value   = g?.name || '';
+  document.getElementById('gfDesc').value   = g?.desc || '';
+  document.getElementById('gfChatId').value = g?.telegramChatId || '';
+  document.getElementById('gfName').style.borderColor = '';
+  const statusEl  = document.getElementById('gfTelegramStatus');
+  const unlinkBtn = document.getElementById('gfUnlinkBtn');
+  const deleteBtn = document.getElementById('gfDeleteBtn');
+  if (g?.telegramChatId) {
+    statusEl.style.cssText  = 'display:block;font-size:12px;padding:7px 10px;border-radius:6px;background:#e8f5e9;color:#2d6a4f';
+    statusEl.textContent    = '✅ Linked to chat: ' + g.telegramChatId;
+    unlinkBtn.style.display = 'block';
+  } else {
+    statusEl.style.display  = 'none';
+    unlinkBtn.style.display = 'none';
+  }
+  deleteBtn.style.display = g ? 'block' : 'none';
+  openSheet('groupFormSheet');
+  setTimeout(() => document.getElementById('gfName').focus(), 320);
 }
 
-function editGroup(id) {
-  const g = S.groups.find(g => g.id === id); if (!g) return;
-  const name = prompt('Group name:', g.name);
-  if (!name?.trim()) return;
-  const desc = prompt('Description:', g.desc || '');
-  g.name = name.trim();
-  g.desc = desc || '';
-  logAct(`Edited group: ${g.name}`); save(); renderGroupSheet(); updateTopbar();
-  toast('Group updated!', 'ok');
+async function saveGroupForm() {
+  const name   = document.getElementById('gfName').value.trim();
+  const desc   = document.getElementById('gfDesc').value.trim();
+  const chatId = document.getElementById('gfChatId').value.trim();
+  if (!name) {
+    document.getElementById('gfName').style.borderColor = 'var(--danger)';
+    document.getElementById('gfName').focus();
+    toast('Group name is required', 'err'); return;
+  }
+  document.getElementById('gfName').style.borderColor = '';
+
+  if (_gfEditId) {
+    // Edit mode
+    const g = S.groups.find(x => x.id === _gfEditId); if (!g) return;
+    g.name = name; g.desc = desc;
+    const oldChatId = g.telegramChatId || '';
+    if (chatId && chatId !== oldChatId) {
+      const ok = await _linkTG(_gfEditId, chatId);
+      if (ok) { g.telegramChatId = chatId; toast('Telegram linked ✅', 'ok'); }
+    } else if (!chatId && oldChatId) {
+      await _unlinkTG(_gfEditId);
+      g.telegramChatId = null;
+      toast('Telegram unlinked', 'wrn');
+    }
+    logAct(`Edited group: ${g.name}`); save();
+    renderGroupSheet(); updateTopbar();
+    // Sync updated group to server
+    fetch(`${RAILWAY_URL}/api/lab-groups`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: _gfEditId, name: g.name, desc: g.desc, adminEmail: g.adminEmail, adminName: S.user.name, created: g.created })
+    }).catch(() => {});
+    toast('Group updated!', 'ok');
+  } else {
+    // Create mode
+    const id = 'g_' + Date.now();
+    const now = new Date().toISOString();
+    const newG = { id, name, desc, adminEmail: S.user.email, created: now, telegramChatId: null };
+    S.groups.push(newG);
+    S.members.push({ id: 'm_' + Date.now(), groupId: id, email: S.user.email, name: S.user.name, role: 'admin', joined: now });
+    S.activeGroupId = id;
+    if (chatId) {
+      const ok = await _linkTG(id, chatId);
+      if (ok) newG.telegramChatId = chatId;
+    }
+    save(); renderGroupSheet(); updateTopbar();
+    // Push to server so other devices see it
+    fetch(`${RAILWAY_URL}/api/lab-groups`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name, desc, adminEmail: S.user.email, adminName: S.user.name, created: now })
+    }).catch(() => {});
+    toast(`"${name}" created!`, 'ok');
+  }
+  closeSheet('groupFormSheet');
 }
+
+async function unlinkTelegramFromForm() {
+  if (!_gfEditId) return;
+  const g = S.groups.find(x => x.id === _gfEditId); if (!g) return;
+  if (!confirm(`Unlink Telegram chat from "${g.name}"?`)) return;
+  await _unlinkTG(_gfEditId);
+  g.telegramChatId = null; save();
+  document.getElementById('gfChatId').value = '';
+  document.getElementById('gfTelegramStatus').style.display = 'none';
+  document.getElementById('gfUnlinkBtn').style.display = 'none';
+  renderGroupSheet();
+  toast('Telegram unlinked', 'wrn');
+}
+
+async function _linkTG(groupId, chatId) {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(groupId)}/telegram`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ chatId: chatId.toString() })
+    });
+    if (!r.ok) throw new Error();
+    return true;
+  } catch { toast('Server error linking Telegram — check Chat ID', 'err'); return false; }
+}
+
+async function _unlinkTG(groupId) {
+  try {
+    await fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(groupId)}/telegram`, { method: 'DELETE' });
+  } catch {}
+}
+
+function deleteGroupFromForm() { deleteGroup(_gfEditId); }
 
 function deleteGroup(id) {
   const g = S.groups.find(g => g.id === id); if (!g) return;
-  if (!confirm(`Delete "${g.name}"?\n\nThis will delete all members and inventory in this group. Cannot be undone.`)) return;
-  S.groups = S.groups.filter(g => g.id !== id);
-  S.members = S.members.filter(m => m.groupId !== id);
-  S.inventory = S.inventory.filter(i => i.groupId !== id);
+  if (!confirm(`Delete "${g.name}"?\n\nThis removes all members and inventory. Cannot be undone.`)) return;
+  if (g.telegramChatId) _unlinkTG(id);
+  S.groups       = S.groups.filter(x => x.id !== id);
+  S.members      = S.members.filter(m => m.groupId !== id);
+  S.inventory    = S.inventory.filter(i => i.groupId !== id);
   S.transactions = S.transactions.filter(t => t.groupId !== id);
   if (S.activeGroupId === id) S.activeGroupId = S.groups[0]?.id || null;
-  save(); renderGroupSheet(); updateTopbar(); renderHome();
+  save(); closeSheet('groupFormSheet'); renderGroupSheet(); updateTopbar(); renderHome();
+  // Push delete to server
+  fetch(`${RAILWAY_URL}/api/lab-groups/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
   toast('Group deleted', 'wrn');
+}
+
+// Keep old name working (called from onboarding)
+function promptCreateGroup() { showGroupForm(); }
+
+// Join a group from inside the app (for users already logged in)
+function showJoinGroupInApp() {
+  closeSheet('groupSheet');
+  const code = prompt('Paste your invite link or code:');
+  if (!code?.trim()) return;
+  handleInviteLink(code.trim());
 }
 
 // ── INVITE LINK ──────────────────────────────────────────
@@ -2381,7 +2666,7 @@ function saveItem() {
   fetch(`${RAILWAY_URL}/api/inventory`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min })
+    body: JSON.stringify({ groupId: S.activeGroupId, name, code, category: cat, location: loc, stock, unit, minStock: min })
   }).catch(() => {});
 }
 
@@ -2408,8 +2693,8 @@ function deleteItem(id) {
   logAct(`Deleted: ${item.name}`); save(); renderInv(); updateAlertBadge();
   toast('Item deleted','wrn');
   // Push delete to server so Telegram users see it gone too
-  fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(item.name)}`, { method: 'DELETE' })
-    .catch(() => {}); // Silent fail — local delete already done
+  fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(item.name)}?groupId=${encodeURIComponent(S.activeGroupId||'')}`, { method: 'DELETE' })
+    .catch(() => {});
 }
 
 function renderInv() {
@@ -3000,6 +3285,16 @@ function importBulk() {
   });
   logAct(`Bulk imported: ${added} added, ${updated} updated`);
   save(); closeSheet('bulkSheet'); renderInv(); updateAlertBadge();
+
+  // Push bulk to server with groupId
+  if (S.activeGroupId) {
+    fetch(`${RAILWAY_URL}/api/inventory/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId: S.activeGroupId, items: _bulkData })
+    }).catch(() => {});
+  }
+
   _bulkData = [];
   document.getElementById('bulkFile').value = '';
   document.getElementById('bulkPreview').style.display = 'none';
@@ -3061,9 +3356,11 @@ async function syncFromServer(force = false) {
   lastSyncTime = now;
 
   try {
+    if (!S.activeGroupId) return;
+    const gid = encodeURIComponent(S.activeGroupId);
     const [invRes, txRes] = await Promise.all([
-      fetch(`${RAILWAY_URL}/api/inventory`),
-      fetch(`${RAILWAY_URL}/api/transactions?limit=100`)
+      fetch(`${RAILWAY_URL}/api/inventory?groupId=${gid}`),
+      fetch(`${RAILWAY_URL}/api/transactions?groupId=${gid}&limit=100`)
     ]);
     const serverItems = await invRes.json();
     const serverTx = await txRes.json();
@@ -3254,7 +3551,7 @@ function connectSSE() {
   clearTimeout(sseReconnectTimer);
 
   try {
-    sseConnection = new EventSource(`${RAILWAY_URL}/stream`);
+    sseConnection = new EventSource(`${RAILWAY_URL}/stream?groupId=${encodeURIComponent(S.activeGroupId||'')}`);
 
     sseConnection.onopen = () => {
       console.log('[SSE] Connected ✅');
@@ -3433,7 +3730,7 @@ function saveQuickEdit() {
   fetch(`${RAILWAY_URL}/api/inventory`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: item.name, code, location: loc, minStock: min })
+    body: JSON.stringify({ groupId: S.activeGroupId, name: item.name, code, location: loc, minStock: min })
   }).catch(() => {});
   // Refresh product page
   openProductPage(_currentProductId);
@@ -3498,9 +3795,9 @@ async function handlePhotoUpload(event) {
         await fetch(`${RAILWAY_URL}/api/photos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemName: item.name, photo: dataUrl })
+          body: JSON.stringify({ groupId: S.activeGroupId, itemName: item.name, photo: dataUrl })
         });
-      } catch(e) { /* server photo save failed — local copy still works */ }
+      } catch(e) {}
 
       // Show photo
       const photoEl = document.getElementById('productPhoto');
@@ -3519,7 +3816,7 @@ async function handlePhotoUpload(event) {
 async function loadProductPhoto(item) {
   // 1. Try server first
   try {
-    const res = await fetch(`${RAILWAY_URL}/api/photos/${encodeURIComponent(item.name)}`);
+    const res = await fetch(`${RAILWAY_URL}/api/photos/${encodeURIComponent(S.activeGroupId||'default')}/${encodeURIComponent(item.name)}`);
     if (res.ok) {
       const data = await res.json();
       if (data.photo) {
@@ -3540,7 +3837,7 @@ function deleteProductPhoto() {
   localStorage.removeItem('photo_' + _currentProductId);
   // Delete from server too
   if (item) {
-    fetch(`${RAILWAY_URL}/api/photos/${encodeURIComponent(item.name)}`, { method: 'DELETE' }).catch(() => {});
+    fetch(`${RAILWAY_URL}/api/photos/${encodeURIComponent(S.activeGroupId||'default')}/${encodeURIComponent(item.name)}`, { method: 'DELETE' }).catch(() => {});
   }
   document.getElementById('productPhoto').style.display = 'none';
   document.getElementById('productPhoto').src = '';
