@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com https://apis.google.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://accounts.google.com; font-src https://fonts.gstatic.com; connect-src *; img-src 'self' data: https: https://chart.googleapis.com; frame-src https://accounts.google.com;">
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://accounts.google.com; font-src https://fonts.gstatic.com; connect-src *; img-src 'self' data: https:; frame-src https://accounts.google.com;">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -24,6 +24,7 @@
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
+// ── Minimal XLSX reader (no CDN needed) ──────────────────
 // Reads simple flat .xlsx files (no formulas, no merged cells needed)
 const MiniXLSX = (() => {
   // Unzip: find a file by name in a ZIP ArrayBuffer, return its Uint8Array
@@ -192,7 +193,9 @@ const MiniXLSX = (() => {
 </script>
 
 <style>
-
+/* ════════════════════════════════════════
+   CSS VARIABLES & RESET
+════════════════════════════════════════ */
 :root {
   --bg: #f5f3ee;
   --surface: #ffffff;
@@ -234,6 +237,9 @@ body {
   user-select: none;
 }
 
+/* ════════════════════════════════════════
+   INSTALL BANNER
+════════════════════════════════════════ */
 #installBanner {
   position: fixed; top: 0; left: 0; right: 0; z-index: 500;
   background: var(--accent);
@@ -258,6 +264,9 @@ body {
 }
 .install-dismiss { background: none; border: none; color: rgba(255,255,255,.7); font-size: 20px; cursor: pointer; padding: 4px; }
 
+/* ════════════════════════════════════════
+   OFFLINE BANNER
+════════════════════════════════════════ */
 #offlineBanner {
   position: fixed; bottom: calc(var(--bottom-nav-h) + var(--safe-bottom)); left: 0; right: 0;
   background: var(--warn); color: white;
@@ -267,6 +276,9 @@ body {
 }
 #offlineBanner.show { display: block; }
 
+/* ════════════════════════════════════════
+   LOGIN SCREEN
+════════════════════════════════════════ */
 #loginScreen {
   position: fixed; inset: 0; z-index: 300;
   background: var(--bg);
@@ -320,6 +332,9 @@ body {
 }
 .demo-btn:active { background: var(--accent); color: white; transform: scale(.98); }
 
+/* ════════════════════════════════════════
+   APP SHELL
+════════════════════════════════════════ */
 #app {
   display: none;
   position: fixed; inset: 0;
@@ -327,6 +342,7 @@ body {
 }
 #app.visible { display: flex; }
 
+/* Top bar */
 .topbar {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -353,12 +369,14 @@ body {
 }
 .topbar-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
+/* Page scroll area */
 .page-scroll {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
 }
 
+/* Bottom navigation */
 .bottom-nav {
   position: fixed; bottom: 0; left: 0; right: 0;
   height: calc(var(--bottom-nav-h) + var(--safe-bottom));
@@ -391,6 +409,7 @@ body {
   border: 2px solid var(--surface);
 }
 
+/* FAB */
 .fab {
   position: fixed;
   bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
@@ -405,18 +424,23 @@ body {
 }
 .fab:active { transform: scale(.92); }
 
+/* ════════════════════════════════════════
+   PAGES
+════════════════════════════════════════ */
 .page { display: none; animation: pageIn .22s ease; }
 .page.active { display: block; }
 @keyframes pageIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
 .page-pad { padding: 16px; }
 
+/* Section headers */
 .section-hd {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 12px;
 }
 .section-title { font-family: var(--display); font-size: 16px; font-weight: 700; }
 
+/* ── Cards ── */
 .card {
   background: var(--surface);
   border-radius: var(--r);
@@ -431,6 +455,7 @@ body {
 }
 .card-title { font-family: var(--display); font-size: 14px; font-weight: 700; }
 
+/* ── KPI row ── */
 .kpi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 .kpi {
   background: var(--surface); border-radius: var(--r); border: 1px solid var(--border);
@@ -444,6 +469,7 @@ body {
 .kpi.c-warn .kpi-val { color: var(--warn); }
 .kpi.c-info .kpi-val { color: #1d6fa4; }
 
+/* ── List rows ── */
 .list-row {
   display: flex; align-items: center; gap: 12px;
   padding: 13px 16px; border-bottom: 1px solid var(--border);
@@ -469,11 +495,13 @@ body {
 .row-val.out { color: var(--danger); }
 .row-val.warn { color: var(--warn); }
 
+/* ── Stock bar ── */
 .stock-wrap { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
 .stock-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; max-width: 80px; }
 .stock-fill { height: 100%; border-radius: 2px; }
 .stock-num { font-family: var(--mono); font-size: 11px; font-weight: 600; }
 
+/* ── Badges ── */
 .badge {
   display: inline-block; padding: 2px 8px; border-radius: 20px;
   font-size: 10px; font-weight: 700; letter-spacing: .3px;
@@ -483,6 +511,7 @@ body {
 .bg-warn { background: var(--warn-bg); color: var(--warn); }
 .bg-gray { background: var(--surface2); color: var(--muted); }
 
+/* ── Buttons ── */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   padding: 12px 20px; border-radius: var(--r-sm);
@@ -497,6 +526,9 @@ body {
 .btn-full { width: 100%; }
 .btn-sm { padding: 8px 14px; font-size: 13px; }
 
+/* ════════════════════════════════════════
+   BOTTOM SHEET (Modal for mobile)
+════════════════════════════════════════ */
 .sheet-overlay {
   position: fixed; inset: 0; z-index: 200;
   background: rgba(0,0,0,.45); backdrop-filter: blur(4px);
@@ -529,6 +561,7 @@ body {
 .sheet-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
 .sheet-footer { padding: 12px 20px 0; display: flex; flex-direction: column; gap: 10px; }
 
+/* ── Form ── */
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-label { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: 1px; text-transform: uppercase; }
 .form-input {
@@ -542,6 +575,7 @@ body {
 .form-input::placeholder { color: var(--muted); }
 select.form-input { cursor: pointer; }
 
+/* Type toggle */
 .type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .type-btn {
   padding: 13px; border-radius: var(--r-sm); border: 1.5px solid var(--border);
@@ -551,6 +585,7 @@ select.form-input { cursor: pointer; }
 .type-btn.in-on { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-l); }
 .type-btn.out-on { background: var(--danger-bg); color: var(--danger); border-color: #ffc9cb; }
 
+/* ── Search ── */
 .search-wrap {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border: 1.5px solid var(--border);
@@ -562,16 +597,19 @@ select.form-input { cursor: pointer; }
 }
 .search-wrap input::placeholder { color: var(--muted); }
 
+/* ── Empty state ── */
 .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
 .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .3; }
 .empty p { font-size: 13px; }
 
+/* ── Info box ── */
 .info-box {
   background: var(--accent-bg); border: 1px solid var(--accent-l);
   border-radius: var(--r-sm); padding: 12px 14px;
   font-size: 13px; color: #1e5c3f; line-height: 1.5;
 }
 
+/* ── Slack code box ── */
 .code-box {
   background: #1a1d21; color: #abb2bf;
   border-radius: var(--r-sm); padding: 14px 16px;
@@ -581,6 +619,7 @@ select.form-input { cursor: pointer; }
 .code-box .v { color: #98c379; }
 .code-box .c { color: #5c6370; font-style: italic; }
 
+/* ── Profile sheet ── */
 .profile-hero {
   text-align: center; padding: 24px 20px 16px;
   border-bottom: 1px solid var(--border);
@@ -596,6 +635,7 @@ select.form-input { cursor: pointer; }
 .profile-email { font-size: 13px; color: var(--muted); margin-top: 3px; }
 .profile-role { margin-top: 8px; }
 
+/* ── Members ── */
 .member-row { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
 .member-row:last-child { border-bottom: none; }
 .m-av { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
@@ -603,6 +643,9 @@ select.form-input { cursor: pointer; }
 .m-name { font-weight: 600; font-size: 14px; }
 .m-email { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ════════════════════════════════════════
+   PRODUCT DETAIL PAGE
+════════════════════════════════════════ */
 #productPage {
   position: fixed; inset: 0; z-index: 150;
   background: var(--bg);
@@ -635,14 +678,12 @@ select.form-input { cursor: pointer; }
 .product-photo-wrap {
   position: relative;
   background: var(--surface2);
-  width: 100%;
-  aspect-ratio: 1 / 1;
+  width: 100%; height: 220px;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
 .product-photo-wrap img {
   width: 100%; height: 100%; object-fit: cover;
-  display: block;
 }
 .product-photo-placeholder {
   font-size: 72px; opacity: .25;
@@ -719,6 +760,7 @@ select.form-input { cursor: pointer; }
   margin-bottom: 10px;
 }
 
+/* ── Toast ── */
 #toast {
   position: fixed; top: calc(70px + var(--safe-top)); left: 16px; right: 16px;
   background: var(--text); color: white; border-radius: var(--r);
@@ -911,26 +953,9 @@ select.form-input { cursor: pointer; }
         <span>🔍</span>
         <input id="invSearch" placeholder="Search items..." oninput="renderInv()">
       </div>
-      <!-- Filter/Sort bar -->
-      <div style="padding:8px 16px 0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
-        <select id="invSort" onchange="renderInv()" style="font-size:12px;padding:5px 8px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">
-          <option value="name">🔤 A–Z</option>
-          <option value="name_desc">🔤 Z–A</option>
-          <option value="stock_low">⚠️ Low Stock</option>
-          <option value="stock_high">📦 High Stock</option>
-          <option value="code">🔢 Code</option>
-          <option value="category">🗂 Category</option>
-        </select>
-        <select id="invFilterCat" onchange="renderInv()" style="font-size:12px;padding:5px 8px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">
-          <option value="">All Categories</option>
-        </select>
-        <button id="invFilterLow" onclick="toggleLowFilter()" style="font-size:12px;padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">
-          🔴 Low Only
-        </button>
-      </div>
       <div class="page-pad" style="padding-top:12px">
         <div class="section-hd">
-          <div class="section-title" id="invCountTitle">All Items</div>
+          <div class="section-title">All Items</div>
           <button class="btn btn-ghost btn-sm" onclick="openSheet('bulkSheet')">📥 Bulk</button>
           <button class="btn btn-primary btn-sm" onclick="openSheet('addItemSheet')" id="btnAddItem">+ Add</button>
         </div>
@@ -946,17 +971,8 @@ select.form-input { cursor: pointer; }
       </div>
       <div class="page-pad" style="padding-top:12px">
         <div class="section-hd">
-          <div class="section-title" id="logTitle">Transaction Log</div>
-          <button class="btn btn-ghost btn-sm" id="logDeleteBtn" style="display:none;color:var(--danger)" onclick="deleteSelectedTx()">🗑 Delete</button>
+          <div class="section-title">Transaction Log</div>
           <button class="btn btn-ghost btn-sm" onclick="openSheet('exportSheet')" id="btnExport">⬇ Export</button>
-        </div>
-        <!-- Select all toolbar (shown when any selected) -->
-        <div id="logSelectBar" style="display:none;padding:8px 0;display:none;align-items:center;gap:10px">
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
-            <input type="checkbox" id="logSelectAll" onchange="logToggleAll(this.checked)" style="accent-color:var(--accent);width:16px;height:16px">
-            Select all
-          </label>
-          <button onclick="deleteSelectedTx()" style="padding:5px 12px;border-radius:6px;border:none;background:var(--danger);color:white;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete selected</button>
         </div>
         <div class="card" id="logList"></div>
       </div>
@@ -1017,26 +1033,6 @@ select.form-input { cursor: pointer; }
         <div id="slackPreview" style="display:none;margin-bottom:12px"></div>
         <button class="btn btn-ghost btn-full" onclick="parseSlack()" style="margin-bottom:8px">🔍 Parse & Apply Manually</button>
         <button class="btn btn-primary btn-full" id="applySlackBtn" onclick="applySlack()" style="display:none">✅ Apply to Stock</button>
-
-        <!-- Request Flow Toggle (admin only) -->
-        <div class="card" style="margin-top:14px" id="requestFlowCard">
-          <div class="card-hd"><div class="card-title">📋 Item Request Flow</div></div>
-          <div style="padding:14px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-              <div>
-                <div style="font-size:13px;font-weight:600">Enable Request Flow</div>
-                <div style="font-size:11px;color:var(--muted);margin-top:2px">Members request items → Admin approves before stock deducts</div>
-              </div>
-              <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0">
-                <input type="checkbox" id="requestFlowToggle" onchange="toggleRequestFlow(this.checked)" style="opacity:0;width:0;height:0">
-                <span id="requestFlowSlider" style="position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:24px;transition:.3s">
-                  <span style="position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:white;border-radius:50%;transition:.3s;display:block" id="requestFlowKnob"></span>
-                </span>
-              </label>
-            </div>
-            <div id="requestFlowStatus" style="font-size:12px;padding:7px 10px;border-radius:6px;background:var(--surface2);color:var(--muted)">Request flow is currently OFF — members use IN/OUT directly</div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -1059,16 +1055,6 @@ select.form-input { cursor: pointer; }
           <div class="list-row" id="activityRow" onclick="openSheet('activitySheet')">
             <div class="row-icon info">📋</div>
             <div class="row-body"><div class="row-title">Activity Log</div><div class="row-sub">Admin only</div></div>
-            <span style="color:var(--muted)">›</span>
-          </div>
-          <div class="list-row" id="requestReviewRow" style="display:none" onclick="openSheet('requestReviewSheet');renderRequestReview()">
-            <div class="row-icon" style="background:#fff3e0;color:#e65100">📋</div>
-            <div class="row-body"><div class="row-title">Item Requests</div><div class="row-sub" id="requestReviewSub">No pending requests</div></div>
-            <span id="requestReviewCount" class="badge bg-red" style="display:none"></span>
-          </div>
-          <div class="list-row" onclick="switchTab('slack')">
-            <div class="row-icon info">🤖</div>
-            <div class="row-body"><div class="row-title">Telegram & Bot</div><div class="row-sub">Bot sync, request flow settings</div></div>
             <span style="color:var(--muted)">›</span>
           </div>
           <div class="list-row" onclick="openSheet('settingsSheet')">
@@ -1105,6 +1091,9 @@ select.form-input { cursor: pointer; }
     </div>
     <div class="nav-tab" id="tab-log" onclick="switchTab('log')">
       <span class="nav-icon">↕️</span><span class="nav-label">Log</span>
+    </div>
+    <div class="nav-tab" id="tab-slack" onclick="switchTab('slack')">
+      <span class="nav-icon">🤖</span><span class="nav-label">Telegram</span>
     </div>
     <div class="nav-tab" id="tab-more" onclick="switchTab('more')">
       <span class="nav-icon">⋯</span><span class="nav-label">More</span>
@@ -1146,86 +1135,14 @@ select.form-input { cursor: pointer; }
 </div><!-- end app -->
 
 <!-- ════════════════════════════════════
-     QR CODE SHEET
-════════════════════════════════════ -->
-<div class="sheet-overlay" id="qrSheet" onclick="sheetBgClose(event,'qrSheet')">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-hd">
-      <div class="sheet-title">QR Code</div>
-      <button class="sheet-close" onclick="closeSheet('qrSheet')">✕</button>
-    </div>
-    <div style="padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:16px">
-      <div id="qrItemName" style="font-size:15px;font-weight:700;text-align:center"></div>
-      <div id="qrItemCode" style="font-size:12px;color:var(--muted);font-family:var(--mono)"></div>
-      <!-- QR canvas rendered here -->
-      <div id="qrCanvas" style="background:white;padding:16px;border-radius:12px;border:1.5px solid var(--border)"></div>
-      <div style="font-size:11px;color:var(--muted);text-align:center;line-height:1.5">Scan to open this item directly in LabStock</div>
-      <div style="display:flex;gap:10px;width:100%">
-        <button class="btn btn-primary" style="flex:1" onclick="downloadQR()">⬇️ Download</button>
-        <button class="btn btn-ghost" style="flex:1" onclick="printQR()">🖨️ Print</button>
-      </div>
-      <button class="btn btn-ghost btn-full" onclick="openQRPrintAll()" style="margin-top:0">📄 Print All Items</button>
-    </div>
-  </div>
-</div>
-
-<!-- ════════════════════════════════════
-     ITEM REQUEST SHEET (Member)
-════════════════════════════════════ -->
-<div class="sheet-overlay" id="requestSheet" onclick="sheetBgClose(event,'requestSheet')">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-hd">
-      <div class="sheet-title">Request Item</div>
-      <button class="sheet-close" onclick="closeSheet('requestSheet')">✕</button>
-    </div>
-    <div class="sheet-body">
-      <div id="reqItemInfo" style="background:var(--accent-bg);border:1.5px solid var(--accent-l);border-radius:var(--r);padding:12px;margin-bottom:14px">
-        <div style="font-weight:700;font-size:14px" id="reqItemName"></div>
-        <div style="font-size:12px;color:var(--muted)" id="reqItemStock"></div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Quantity Needed *</label>
-        <input class="form-input" type="number" id="reqQty" placeholder="e.g. 5" min="1" inputmode="numeric">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Reason / Note</label>
-        <input class="form-input" id="reqNote" placeholder="e.g. For experiment batch 3">
-      </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5">
-        Your request will be sent to the admin for approval. Stock is not deducted until approved.
-      </div>
-    </div>
-    <div class="sheet-footer">
-      <button class="btn btn-primary btn-full" onclick="submitItemRequest()">📋 Submit Request</button>
-      <button class="btn btn-ghost btn-full" onclick="closeSheet('requestSheet')">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- ════════════════════════════════════
-     ADMIN REQUEST REVIEW SHEET
-════════════════════════════════════ -->
-<div class="sheet-overlay" id="requestReviewSheet" onclick="sheetBgClose(event,'requestReviewSheet')">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-hd">
-      <div class="sheet-title">Item Requests <span id="reqReviewBadge" class="badge bg-red" style="margin-left:8px;display:none"></span></div>
-      <button class="sheet-close" onclick="closeSheet('requestReviewSheet')">✕</button>
-    </div>
-    <div id="requestReviewBody" style="padding:16px;display:flex;flex-direction:column;gap:10px;max-height:65vh;overflow-y:auto"></div>
-  </div>
-</div>
-
-<!-- ════════════════════════════════════
      PRODUCT DETAIL PAGE
 ════════════════════════════════════ -->
 <div id="productPage">
   <div class="product-topbar">
     <div class="product-back" onclick="closeProductPage()">←</div>
     <div style="flex:1;font-family:var(--display);font-size:16px;font-weight:700" id="productPageTitle">Item</div>
-    <button class="btn btn-ghost btn-sm" onclick="editItemFromProduct()" id="productEditBtn">✏️ Edit</button>
+    <button class="btn btn-ghost btn-sm" onclick="openQuickEdit()" style="margin-right:6px">📍 Edit</button>
+    <button class="btn btn-ghost btn-sm" onclick="editItemFromProduct()" id="productEditBtn">⚙️ Full</button>
   </div>
   <div class="product-scroll">
     <!-- Photo -->
@@ -1269,10 +1186,6 @@ select.form-input { cursor: pointer; }
           <div class="product-meta-label">Location</div>
           <div class="product-meta-val" id="productLocation">—</div>
         </div>
-        <div class="product-meta-item" id="productExpiryRow" style="display:none">
-          <div class="product-meta-label">Expiry Date</div>
-          <div class="product-meta-val" id="productExpiry" style="font-weight:700">—</div>
-        </div>
       </div>
 
       <!-- Recent transactions for this item -->
@@ -1285,10 +1198,8 @@ select.form-input { cursor: pointer; }
 
   <!-- Fixed action bar -->
   <div class="product-action-bar">
-    <button class="btn-in" id="prodBtnIn" onclick="productTx('IN')">▲ IN</button>
-    <button class="btn-out" id="prodBtnOut" onclick="productTx('OUT')">▼ OUT</button>
-    <button id="prodBtnRequest" onclick="openRequestSheet()" style="display:none;padding:0 14px;border-radius:12px;border:none;background:#fff3e0;color:#e65100;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">📋 Request</button>
-    <button onclick="openQRSheet()" style="padding:0 12px;border-radius:12px;border:none;background:var(--surface2);color:var(--text);font-size:18px;cursor:pointer;flex-shrink:0" title="QR Code">⬛</button>
+    <button class="btn-in" onclick="productTx('IN')">▲ IN</button>
+    <button class="btn-out" onclick="productTx('OUT')">▼ OUT</button>
   </div>
 </div>
 
@@ -1376,14 +1287,10 @@ select.form-input { cursor: pointer; }
         <label class="form-label">Min Stock (Alert Level)</label>
         <input class="form-input" type="number" id="iMin" placeholder="10" min="0" inputmode="numeric">
       </div>
-      <div class="form-group">
-        <label class="form-label">Expiry Date <span style="color:var(--muted);font-size:11px">(optional — for reagents, chemicals)</span></label>
-        <input class="form-input" type="date" id="iExpiry">
-      </div>
     </div>
     <div class="sheet-footer">
       <button class="btn btn-primary btn-full" onclick="saveItem()">Save Item</button>
-      <button class="btn btn-ghost btn-full" onclick="document.getElementById('editId').value='';closeSheet('addItemSheet')">Cancel</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('addItemSheet')">Cancel</button>
     </div>
   </div>
 </div>
@@ -1596,27 +1503,33 @@ select.form-input { cursor: pointer; }
     <div id="memPanel-pending" style="display:none;max-height:60vh;overflow-y:auto">
       <div id="pendingSheetBody"></div>
     </div>
-    <!-- Add member panel — invite link + group code only -->
+    <!-- Add member panel -->
     <div id="memPanel-add" style="display:none">
-      <div class="sheet-body" style="gap:14px">
-        <!-- Option 1: Invite Link -->
-        <div style="background:var(--accent-bg);border:1.5px solid var(--accent-l);border-radius:var(--r);padding:16px">
-          <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔗 Invite Link</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Share this link with your lab member. They click it, sign in, and are automatically added to this group.</div>
-          <div id="inviteLinkDisplay" style="font-size:11px;padding:8px 10px;background:var(--surface2);border-radius:8px;font-family:var(--mono);word-break:break-all;margin-bottom:10px;color:var(--text2)">Generating...</div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-primary" style="flex:1" onclick="copyInviteLink()">📋 Copy Link</button>
-            <button class="btn btn-ghost" style="flex:1" onclick="shareInviteLink()">📤 Share</button>
+      <div class="sheet-body" style="gap:12px">
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:4px">
+          Add a member by email — they'll see a join request next time they log in. Or share an invite link they can click directly.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Full Name *</label>
+          <input class="form-input" id="addMemName" placeholder="e.g. Dr. Priya Sharma">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address *</label>
+          <input class="form-input" id="addMemEmail" type="email" placeholder="priya@lab.com" inputmode="email">
+          <div id="addMemError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <button id="roleBtn-member" onclick="selectRole('member')" class="type-btn in-on" style="padding:12px;border-radius:var(--r-sm);border:1.5px solid var(--accent-l);background:var(--accent-bg);color:var(--accent);font-family:var(--body);font-size:13px;font-weight:700;cursor:pointer">🧑‍🔬 Member</button>
+            <button id="roleBtn-admin" onclick="selectRole('admin')" class="type-btn" style="padding:12px;border-radius:var(--r-sm);border:1.5px solid var(--border);background:var(--surface2);color:var(--muted);font-family:var(--body);font-size:13px;font-weight:700;cursor:pointer">⚙️ Admin</button>
           </div>
         </div>
-
-        <!-- Option 2: Group Code -->
-        <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:16px">
-          <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔢 Group Code</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">Share this short code. Members go to LabStock → Join Group → enter this code.</div>
-          <div id="groupCodeDisplay" style="font-size:22px;font-weight:800;font-family:var(--mono);letter-spacing:3px;text-align:center;padding:10px;background:var(--bg);border-radius:8px;margin-bottom:10px;color:var(--accent)">—</div>
-          <button class="btn btn-ghost btn-full" onclick="copyGroupCode()">📋 Copy Code</button>
+        <button class="btn btn-primary btn-full" onclick="addMemberByEmail()">✅ Add Member</button>
+        <div style="display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px">
+          <div style="flex:1;height:1px;background:var(--border)"></div>or<div style="flex:1;height:1px;background:var(--border)"></div>
         </div>
+        <button class="btn btn-ghost btn-full" onclick="shareInviteLink()">🔗 Share Invite Link</button>
       </div>
     </div>
     <div style="padding:12px 16px 6px" id="inviteWrap">
@@ -1631,7 +1544,6 @@ select.form-input { cursor: pointer; }
     <div class="sheet-handle"></div>
     <div class="sheet-hd">
       <div class="sheet-title">Activity Log</div>
-      <button onclick="if(confirm('Clear ALL activity logs?')){S.transactions=S.transactions.filter(t=>!t._act||t.groupId!==gid());_selectedLogs&&_selectedLogs.clear();save();renderActivity();toast('Logs cleared','wrn');}" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;cursor:pointer;margin-right:8px">Clear All</button>
       <button class="sheet-close" onclick="closeSheet('activitySheet')">✕</button>
     </div>
     <div id="activityBody" style="max-height:60vh;overflow-y:auto"></div>
@@ -1679,17 +1591,19 @@ select.form-input { cursor: pointer; }
      SCRIPTS
 ════════════════════════════════════ -->
 <script>
+// ── STATE ──────────────────────────────────────────────
 let S = {
   user: null, activeGroupId: null,
   groups: [], inventory: [], transactions: [], members: [],
   pendingInvites: [],
-  itemRequests: [],   // { id, groupId, itemId, itemName, qty, unit, requestedBy, requestedAt, status, note, decidedBy, decidedAt }
-  settings: { threshold: 10, channel: '#lab-inventory', webhook: '', notifyLow: true, requestFlowEnabled: false },
-  txType: 'IN'
+  settings: { threshold: 10, channel: '#lab-inventory', webhook: '', notifyLow: true },
+  txType: 'IN', slackParsed: null
 };
 
 function save() { localStorage.setItem('ls2', JSON.stringify(S)); }
 function load() { const d = localStorage.getItem('ls2'); if (d) Object.assign(S, JSON.parse(d)); }
+
+// ── SERVICE WORKER ──────────────────────────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').then(reg => {
@@ -1697,6 +1611,8 @@ if ('serviceWorker' in navigator) {
     }).catch(err => console.log('[PWA] SW failed:', err));
   });
 }
+
+// ── PWA INSTALL ─────────────────────────────────────────
 let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
@@ -1732,8 +1648,12 @@ function showInstallInstructions() {
     toast('Open this page on your phone to install', 'ok');
   }
 }
+
+// ── ONLINE/OFFLINE ──────────────────────────────────────
 window.addEventListener('offline', () => document.getElementById('offlineBanner').classList.add('show'));
 window.addEventListener('online', () => document.getElementById('offlineBanner').classList.remove('show'));
+
+// ── AUTH ─────────────────────────────────────────────────
 let _pendingUser = null;
 let _pendingInvite = null;
 
@@ -1839,22 +1759,9 @@ function backToStep1() {
 async function doLogin(user, firstGroup = null, inviteCode = null) {
   load();
   S.user = user;
-  if (!firstGroup && !inviteCode) {
-    const hasGroupLocal = S.groups.some(g => g.adminEmail === user.email) ||
-                          S.members.some(m => m.email === user.email);
-    if (hasGroupLocal) {
-      if (!S.activeGroupId || !S.groups.find(g => g.id === S.activeGroupId)) {
-        const g = S.groups.find(g => g.adminEmail === user.email || S.members.find(m => m.groupId === g.id && m.email === user.email));
-        if (g) S.activeGroupId = g.id;
-      }
-      save(); showApp();
-      // Sync in background — don't block UI
-      _syncGroupsBackground(user);
-      return;
-    }
-  }
 
   if (!user.isDemo) {
+    // ── Sync groups with server (bidirectional) ──────────────────
     try {
       const res = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
       if (res.ok) {
@@ -1899,10 +1806,7 @@ async function doLogin(user, firstGroup = null, inviteCode = null) {
           if (!existing) {
             S.groups.push({ id: sg.id, name: sg.name, desc: sg.desc, adminEmail: sg.adminEmail, telegramChatId: sg.telegramChatId, created: sg.created });
           } else {
-            existing.name = sg.name;
-            existing.desc = sg.desc;
-            // Always take telegramChatId from server — it's the source of truth
-            if (sg.telegramChatId !== undefined) existing.telegramChatId = sg.telegramChatId;
+            existing.name = sg.name; existing.desc = sg.desc; existing.telegramChatId = sg.telegramChatId;
           }
           sg.members.forEach(sm => {
             if (!S.members.find(m => m.groupId === sm.groupId && m.email === sm.email)) {
@@ -2135,6 +2039,8 @@ function showApp() {
   // Start syncing from Railway server
   setTimeout(startServerSync, 1000);
 }
+
+// ── TOPBAR ──────────────────────────────────────────────
 function updateTopbar() {
   const u = S.user; if (!u) return;
   const av = document.getElementById('topbarAvatar');
@@ -2162,6 +2068,8 @@ function getRole() {
   return S.members.find(m => m.groupId === S.activeGroupId && m.email === S.user.email)?.role || 'member';
 }
 function isAdmin() { return getRole() === 'admin'; }
+
+// ── TABS ────────────────────────────────────────────────
 let curTab = 'home';
 function switchTab(tab) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -2174,8 +2082,10 @@ function switchTab(tab) {
   fab.style.display = ['home','inv','log'].includes(tab) ? '' : 'none';
   if (tab === 'home') renderHome();
   if (tab === 'inv') renderInv();
-  if (tab === 'log') { _selectedTx.clear(); renderLog(); }
+  if (tab === 'log') renderLog();
 }
+
+// ── SHEETS ──────────────────────────────────────────────
 function openSheet(id) {
   if (id === 'txSheet') {
     const sel = document.getElementById('txItem');
@@ -2185,28 +2095,25 @@ function openSheet(id) {
     setTxType('IN');
   }
   if (id === 'addItemSheet') {
-    // Only reset to "Add" mode if not already populated for editing
-    const existingEditId = document.getElementById('editId').value;
-    if (!existingEditId) {
-      document.getElementById('itemSheetTitle').textContent = 'Add Item';
-      ['iName','iCat','iUnit','iCode','iLoc'].forEach(x => document.getElementById(x).value = '');
-      document.getElementById('iStock').value = 0;
-      document.getElementById('iMin').value = S.settings.threshold;
-    }
+    document.getElementById('itemSheetTitle').textContent = 'Add Item';
+    document.getElementById('editId').value = '';
+    ['iName','iCat','iUnit'].forEach(x => document.getElementById(x).value = '');
+    document.getElementById('iStock').value = 0;
+    document.getElementById('iMin').value = S.settings.threshold;
     const cats = [...new Set(getItems().map(i => i.category))];
     document.getElementById('catDL').innerHTML = cats.map(c => `<option value="${c}">`).join('');
-    // Clear edit id after use so next open is fresh Add mode
-    if (existingEditId) setTimeout(() => document.getElementById('editId').value = existingEditId, 0);
   }
   if (id === 'groupSheet') renderGroupSheet();
   if (id === 'membersSheet') { switchMemTab('list'); renderMembersSheet(); return document.getElementById(id).classList.add('open'); }
-  if (id === 'activitySheet') { if(typeof _selectedLogs!=='undefined') _selectedLogs.clear(); renderActivity(); }
+  if (id === 'activitySheet') renderActivity();
   if (id === 'settingsSheet') loadSettings();
   document.getElementById(id).classList.add('open');
 }
 
 function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
 function sheetBgClose(e, id) { if (e.target === e.currentTarget) closeSheet(id); }
+
+// ── GROUPS ──────────────────────────────────────────────
 
 function renderGroupSheet() {
   const el = document.getElementById('groupSheetBody');
@@ -2253,6 +2160,8 @@ function setGroup(id) {
   toast(`Switched to: ${g?.name}`, 'ok');
   syncFromServer(true);
 }
+
+// ── GROUP FORM (create or edit) ──────────────────────────
 let _gfEditId = null;
 
 function showGroupForm(id) {
@@ -2391,6 +2300,8 @@ function showJoinGroupInApp() {
   if (!code?.trim()) return;
   handleInviteLink(code.trim());
 }
+
+// ── INVITE LINK ──────────────────────────────────────────
 function generateInviteLink(groupId) {
   const base = window.location.origin + window.location.pathname;
   const g = S.groups.find(g => g.id === groupId);
@@ -2456,6 +2367,8 @@ function handleInviteLink(code) {
     toast('Invalid invite link', 'err');
   }
 }
+
+// ── MEMBERS ─────────────────────────────────────────────
 let _selectedRole = 'member';
 
 function switchMemTab(tab) {
@@ -2473,7 +2386,20 @@ function switchMemTab(tab) {
   document.getElementById('inviteWrap').style.display = (tab==='list' && isAdmin()) ? '' : 'none';
   if (tab==='pending') renderPendingSheet();
   if (tab==='list') renderMembersSheet();
-  if (tab==='add') populateAddMemberPanel();
+}
+
+function selectRole(role) {
+  _selectedRole = role;
+  ['member','admin'].forEach(r => {
+    const btn = document.getElementById('roleBtn-'+r);
+    if (r===role) {
+      btn.style.background='var(--accent-bg)'; btn.style.color='var(--accent)';
+      btn.style.borderColor='var(--accent-l)';
+    } else {
+      btn.style.background='var(--surface2)'; btn.style.color='var(--muted)';
+      btn.style.borderColor='var(--border)';
+    }
+  });
 }
 
 function renderMembersSheet() {
@@ -2482,82 +2408,49 @@ function renderMembersSheet() {
   const showAddBtn = document.getElementById('showAddMemBtn');
   const isAdm = isAdmin();
 
+  // Show/hide admin-only tabs and buttons
   document.getElementById('memTab-pending').style.display = isAdm ? '' : 'none';
   document.getElementById('memTab-add').style.display = isAdm ? '' : 'none';
-  if(wrap) wrap.style.display = isAdm ? '' : 'none';
-  if(showAddBtn) showAddBtn.style.display = isAdm ? '' : 'none';
+  wrap.style.display = isAdm ? '' : 'none';
+  if (showAddBtn) showAddBtn.style.display = isAdm ? '' : 'none';
+
+  // Also hide add/pending panels if not admin (safety)
   if (!isAdm) {
     document.getElementById('memPanel-add').style.display = 'none';
     document.getElementById('memPanel-pending').style.display = 'none';
     document.getElementById('memPanel-list').style.display = 'block';
   }
-  const pendingCount = (S.pendingInvites||[]).filter(p=>p.groupId===S.activeGroupId).length;
+
+  // Update pending badge count
+  const pendingCount = (S.pendingInvites||[]).filter(p => p.groupId===S.activeGroupId).length;
   const pendingTab = document.getElementById('memTab-pending');
-  if(pendingTab) pendingTab.textContent = pendingCount>0 ? `⏳ Pending (${pendingCount})` : '⏳ Pending';
+  if (pendingTab) pendingTab.textContent = pendingCount > 0 ? `⏳ Pending (${pendingCount})` : '⏳ Pending';
 
-  // Show cached members instantly
-  _renderMembersList(el);
-
-  // Then refresh from server in background
-  fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
-    .then(r => r.ok ? r.json() : [])
-    .then(serverGroups => {
-      const sg = serverGroups.find(g => g.id === S.activeGroupId);
-      if (!sg) return;
-      // Merge server members — server is source of truth
-      const serverEmails = new Set(sg.members.map(m=>m.email));
-      // Remove members that server no longer has (for this group)
-      S.members = S.members.filter(m => m.groupId !== S.activeGroupId || serverEmails.has(m.email));
-      // Add any new server members
-      sg.members.forEach(sm => {
-        const ex = S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email);
-        if(!ex) S.members.push(sm);
-        else { ex.name=sm.name; ex.role=sm.role; }
-      });
-      // Also sync group telegramChatId
-      const grp = S.groups.find(g=>g.id===S.activeGroupId);
-      if(grp && sg.telegramChatId!==undefined) grp.telegramChatId=sg.telegramChatId;
-      save();
-      _renderMembersList(el);
-    })
-    .catch(()=>{});
-}
-function _renderMembersList(el) {
   const mems = S.members.filter(m => m.groupId === S.activeGroupId);
-  const grp = S.groups.find(g => g.id === S.activeGroupId);
-  // Ensure admin always appears even if not in members array
-  if (grp && !mems.find(m => m.email === grp.adminEmail)) {
-    mems.unshift({ id:'admin_'+grp.id, groupId:grp.id, email:grp.adminEmail, name:grp.adminEmail.split('@')[0], role:'admin', joined:grp.created||'' });
-  }
-  if (!mems.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🧑‍🔬</div><p>No members yet.<br>Tap + Add to invite.</p></div>';
-    return;
-  }
-  const curIsAdmin = isAdmin();
+  if (!mems.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🧑‍🔬</div><p>No members yet.<br>Tap + Add Member to invite someone.</p></div>'; return; }
   el.innerHTML = mems.map(m => {
-    const init = (m.name||m.email||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)||'?';
+    const init = (m.name||m.email||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) || '?';
     const isSelf = m.email === S.user?.email;
-    const effectiveRole = (grp && grp.adminEmail===m.email) ? 'admin' : (m.role||'member');
-    const isAdmMem = effectiveRole==='admin';
-    const canEdit = curIsAdmin && !isSelf && !(grp && grp.adminEmail===m.email);
-    return `<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)">
-      <div style="width:40px;height:40px;border-radius:50%;background:${isAdmMem?'var(--accent)':'#888'};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:15px;flex-shrink:0">${init}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          ${m.name||m.email.split('@')[0]}
-          ${isSelf?'<span class="badge bg-gray" style="font-size:9px">You</span>':''}
-          <span class="badge ${isAdmMem?'bg-green':'bg-gray'}" style="font-size:9px">${effectiveRole}</span>
-        </div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px;word-break:break-all">${m.email}</div>
+    // Determine role — also check if this email is the group admin
+    const g = S.groups.find(g => g.id === S.activeGroupId);
+    const effectiveRole = (g && g.adminEmail === m.email) ? 'admin' : (m.role || 'member');
+    const isAdmMem = effectiveRole === 'admin';
+    const canEdit = isAdm && !isSelf;
+    return `<div class="member-row" style="align-items:flex-start;padding:14px 16px">
+      <div class="m-av" style="margin-top:2px;background:${isAdmMem?'var(--accent)':'#888'}">${init}</div>
+      <div class="m-info" style="flex:1">
+        <div class="m-name">${m.name||m.email} ${isSelf?'<span class="badge bg-gray" style="font-size:9px">You</span>':''}</div>
+        <div class="m-email">${m.email}</div>
         ${canEdit ? `<div style="display:flex;gap:6px;margin-top:8px">
-          <button onclick="changeRole('${m.id}')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface2);font-size:11px;font-weight:600;cursor:pointer">
-            ${isAdmMem?'⬇ Member':'⬆ Admin'}
+          <button onclick="changeRole('${m.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 10px">
+            ${isAdmMem?'⬇ Make Member':'⬆ Make Admin'}
           </button>
-          <button onclick="confirmRemoveMem('${m.id}')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:11px;font-weight:600;cursor:pointer">
+          <button onclick="confirmRemoveMem('${m.id}')" class="btn btn-danger btn-sm" style="font-size:11px;padding:5px 10px">
             🗑 Remove
           </button>
         </div>` : ''}
       </div>
+      <span class="badge ${isAdmMem?'bg-green':'bg-gray'}" style="margin-top:2px">${effectiveRole}</span>
     </div>`;
   }).join('');
 }
@@ -2603,7 +2496,60 @@ async function renderPendingSheet() {
     </div>`).join('');
 }
 
-async 
+async function addMemberByEmail() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  const name = document.getElementById('addMemName').value.trim();
+  const email = document.getElementById('addMemEmail').value.trim().toLowerCase();
+  const errEl = document.getElementById('addMemError');
+  errEl.style.display = 'none';
+
+  if (!name) { errEl.textContent='Name is required'; errEl.style.display='block'; return; }
+  if (!isValidEmail(email)) { errEl.textContent='Enter a valid email address'; errEl.style.display='block'; return; }
+  if (S.members.find(m => m.groupId===S.activeGroupId && m.email===email)) {
+    errEl.textContent='This person is already a member'; errEl.style.display='block'; return;
+  }
+  if ((S.pendingInvites||[]).find(p => p.groupId===S.activeGroupId && p.email===email)) {
+    errEl.textContent='Already invited — check Pending tab'; errEl.style.display='block'; return;
+  }
+
+  const g = S.groups.find(g => g.id === S.activeGroupId);
+  const inviteId = 'inv_' + Date.now();
+  const inviteData = {
+    id: inviteId,
+    groupId: S.activeGroupId,
+    groupName: g?.name || '',
+    groupDesc: g?.desc || '',
+    adminEmail: S.user.email,
+    email, name,
+    role: _selectedRole,
+    created: new Date().toISOString()
+  };
+
+  // Store locally for admin's pending tab
+  if (!S.pendingInvites) S.pendingInvites = [];
+  S.pendingInvites.push(inviteData);
+  save();
+
+  // Push to Railway server so member's device can find it on login
+  try {
+    await fetch(`${RAILWAY_URL}/api/invites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(inviteData)
+    });
+  } catch(e) {
+    toast('⚠️ Saved locally but server unreachable — share invite link as backup', 'wrn');
+  }
+
+  logAct(`Invited ${email} as ${_selectedRole}`);
+  toast(`✅ ${name} added — they'll join on next login`, 'ok');
+  document.getElementById('addMemName').value = '';
+  document.getElementById('addMemEmail').value = '';
+  selectRole('member');
+  switchMemTab('pending');
+  renderMembersSheet();
+}
+
 function shareInviteLink() {
   if (!isAdmin()) { toast('Admin only', 'err'); return; }
   if (!S.activeGroupId) { toast('Select a group first', 'wrn'); return; }
@@ -2652,11 +2598,6 @@ function changeRole(memId) {
   m.role = newRole;
   logAct(`Changed ${m.name} to ${newRole}`); save(); renderMembersSheet();
   toast(`${m.name} is now ${newRole}`, 'ok');
-  // Sync to server
-  fetch(`${RAILWAY_URL}/api/lab-members`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({id:m.id, groupId:m.groupId, email:m.email, name:m.name, role:newRole, joined:m.joined||new Date().toISOString()})
-  }).catch(()=>{});
 }
 
 function confirmRemoveMem(memId) {
@@ -2684,11 +2625,11 @@ function removeMem(id) {
   S.members = S.members.filter(m => m.id !== id);
   logAct(`Removed ${m.email}`); save(); renderMembersSheet();
   toast(`${m.name} removed`, 'wrn');
-  // Sync delete to server
-  fetch(`${RAILWAY_URL}/api/lab-members/${encodeURIComponent(m.groupId)}/${encodeURIComponent(m.email)}`, {method:'DELETE'}).catch(()=>{});
 }
 
 function promptInvite() { switchMemTab('add'); }
+
+// ── INVENTORY ───────────────────────────────────────────
 function gid() { return S.activeGroupId; }
 function getItems() { return S.inventory.filter(i => i.groupId === gid()); }
 
@@ -2700,7 +2641,6 @@ function saveItem() {
   const stock = parseFloat(document.getElementById('iStock').value)||0;
   const unit = document.getElementById('iUnit').value.trim();
   const min = parseFloat(document.getElementById('iMin').value)||10;
-  const expiry = document.getElementById('iExpiry')?.value || '';
   if (!name||!cat||!unit) { toast('Fill required fields', 'err'); return; }
   const eid = document.getElementById('editId').value;
   if (eid) {
@@ -2710,17 +2650,18 @@ function saveItem() {
       const duplicate = getItems().find(i => i.id !== eid && i.code === code);
       if (duplicate) { toast(`Code "${code}" already used by ${duplicate.name}`, 'err'); return; }
     }
-    Object.assign(item, {name, code, category:cat, location:loc, stock, unit, minStock:min, expiry});
+    Object.assign(item, {name, code, category:cat, location:loc, stock, unit, minStock:min});
     logAct(`Edited: ${name}`); toast('Item updated','ok');
   } else {
+    // Auto-generate code if not provided
     if (!code) code = generateItemCode(cat);
+    // Ensure uniqueness
     const duplicate = getItems().find(i => i.code === code);
     if (duplicate) code = generateItemCode(cat) + '_' + Date.now().toString().slice(-3);
-    S.inventory.push({id:'i_'+Date.now(), groupId:gid(), name, code, category:cat, location:loc, stock, unit, minStock:min, expiry});
+    S.inventory.push({id:'i_'+Date.now(), groupId:gid(), name, code, category:cat, location:loc, stock, unit, minStock:min});
     logAct(`Added: ${name} [${code}]`);
     toast(`✅ Item added! Code: ${code}`,'ok');
   }
-  document.getElementById('editId').value = ''; // reset for next Add
   save(); closeSheet('addItemSheet'); renderInv(); updateAlertBadge();
   fetch(`${RAILWAY_URL}/api/inventory`, {
     method: 'POST',
@@ -2731,9 +2672,8 @@ function saveItem() {
 
 function editItem(id) {
   const item = S.inventory.find(i=>i.id===id); if (!item) return;
-  // Set editId before openSheet so it skips the reset
-  document.getElementById('editId').value = id;
   document.getElementById('itemSheetTitle').textContent = 'Edit Item';
+  document.getElementById('editId').value = id;
   document.getElementById('iName').value = item.name;
   document.getElementById('iCode').value = item.code||'';
   document.getElementById('iCat').value = item.category;
@@ -2741,8 +2681,9 @@ function editItem(id) {
   document.getElementById('iStock').value = item.stock;
   document.getElementById('iUnit').value = item.unit;
   document.getElementById('iMin').value = item.minStock;
-  if (document.getElementById('iExpiry')) document.getElementById('iExpiry').value = item.expiry || '';
-  document.getElementById('addItemSheet').classList.add('open');
+  const cats = [...new Set(getItems().map(i => i.category))];
+  document.getElementById('catDL').innerHTML = cats.map(c => `<option value="${c}">`).join('');
+  openSheet('addItemSheet');
 }
 
 function deleteItem(id) {
@@ -2756,48 +2697,10 @@ function deleteItem(id) {
     .catch(() => {});
 }
 
-let _showLowOnly = false;
-function toggleLowFilter() {
-  _showLowOnly = !_showLowOnly;
-  const btn = document.getElementById('invFilterLow');
-  if (btn) { btn.style.background = _showLowOnly ? 'var(--danger)' : 'var(--surface2)'; btn.style.color = _showLowOnly ? 'white' : 'var(--text)'; btn.style.borderColor = _showLowOnly ? 'var(--danger)' : 'var(--border)'; }
-  renderInv();
-}
-
 function renderInv() {
-  const q      = document.getElementById('invSearch')?.value?.toLowerCase()||'';
-  const sort   = document.getElementById('invSort')?.value || 'name';
-  const catF   = document.getElementById('invFilterCat')?.value || '';
-
-  // Populate category dropdown
-  const catSel = document.getElementById('invFilterCat');
-  if (catSel) {
-    const cats = [...new Set(getItems().map(i => i.category))].sort();
-    const cur = catSel.value;
-    catSel.innerHTML = '<option value="">All Categories</option>' + cats.map(c => `<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
-  }
-
-  let items = getItems().filter(i => {
-    if (q && !i.name.toLowerCase().includes(q) && !i.category.toLowerCase().includes(q) && !(i.code||'').toLowerCase().includes(q)) return false;
-    if (catF && i.category !== catF) return false;
-    if (_showLowOnly && i.stock > i.minStock) return false;
-    return true;
-  });
-
-  // Sort
-  items = [...items].sort((a,b) => {
-    if (sort==='name')       return a.name.localeCompare(b.name);
-    if (sort==='name_desc')  return b.name.localeCompare(a.name);
-    if (sort==='stock_low')  return a.stock - b.stock;
-    if (sort==='stock_high') return b.stock - a.stock;
-    if (sort==='code')       return (a.code||'').localeCompare(b.code||'');
-    if (sort==='category')   return a.category.localeCompare(b.category);
-    return 0;
-  });
-
+  const q = document.getElementById('invSearch')?.value?.toLowerCase()||'';
+  const items = getItems().filter(i => !q || i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
   const el = document.getElementById('invList');
-  const title = document.getElementById('invCountTitle');
-  if (title) title.textContent = `${items.length} Item${items.length!==1?'s':''}`;
   if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items found.</p></div>'; return; }
   const adminBtns = isAdmin();
   el.innerHTML = items.map(item => {
@@ -2806,18 +2709,10 @@ function renderInv() {
     const watch = item.stock <= item.minStock*1.5;
     const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
     const badge = low ? '<span class="badge bg-red">LOW</span>' : watch ? '<span class="badge bg-warn">WATCH</span>' : '';
-    // Expiry badge
-    let expiryBadge = '';
-    if (item.expiry) {
-      const today2 = new Date(); today2.setHours(0,0,0,0);
-      const dLeft = Math.ceil((new Date(item.expiry) - today2) / 86400000);
-      if (dLeft < 0) expiryBadge = '<span class="badge bg-red" style="font-size:9px">⛔ EXPIRED</span>';
-      else if (dLeft <= 30) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
-    }
     return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
       <div class="row-icon ${low?'warn':'in'}">${low?'⚠️':'📦'}</div>
       <div class="row-body">
-        <div class="row-title">${item.name} ${badge} ${expiryBadge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
+        <div class="row-title">${item.name} ${badge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
         <div class="row-sub">${item.category}${item.location?' • 📍'+item.location:''}</div>
         <div class="stock-wrap">
           <div class="stock-bar"><div class="stock-fill" style="width:${pct}%;background:${color}"></div></div>
@@ -2830,6 +2725,8 @@ function renderInv() {
 }
 
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ document.getElementById('txItem').value=id; setTxType(type); },80); }
+
+// ── TRANSACTIONS ────────────────────────────────────────
 let txTypeState = 'IN';
 function setTxType(t) {
   txTypeState = t;
@@ -2881,53 +2778,25 @@ function submitTx(override=null) {
   return true;
 }
 
-let _selectedTx = new Set();
-
 function renderLog() {
   const q = document.getElementById('logSearch')?.value?.toLowerCase()||'';
   const txs = S.transactions.filter(t=>t.groupId===gid()&&!t._act&&(!q||t.itemName?.toLowerCase().includes(q)||t.person?.toLowerCase().includes(q)));
   const el = document.getElementById('logList');
-  const bar = document.getElementById('logSelectBar');
-  const delBtn = document.getElementById('logDeleteBtn');
-  const title = document.getElementById('logTitle');
-
-  // Update toolbar
-  const hasSel = _selectedTx.size > 0;
-  if(bar){ bar.style.display = hasSel ? 'flex' : 'none'; }
-  if(delBtn){ delBtn.style.display = hasSel ? '' : 'none'; }
-  if(title){ title.textContent = hasSel ? _selectedTx.size + ' selected' : 'Transaction Log'; }
-
   if (!txs.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">↕️</div><p>No transactions yet.</p></div>'; return; }
   el.innerHTML = txs.map(t => {
     const isIn = t.type==='IN';
-    const sel = _selectedTx.has(t.id);
-    return `<div class="list-row${sel?' selected':''}" style="${sel?'background:var(--accent-bg)':''};gap:10px" onclick="logToggleRow('${t.id}')">
-      <input type="checkbox" onclick="event.stopPropagation();logToggleRow('${t.id}')" ${sel?'checked':''} style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
-      <div class="row-icon ${isIn?'in':'out'}" style="flex-shrink:0">${isIn?'📦':'🔻'}</div>
+    return `<div class="list-row">
+      <div class="row-icon ${isIn?'in':'out'}">${isIn?'📦':'🔻'}</div>
       <div class="row-body">
-        <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='TELEGRAM'?'<span class="badge bg-gray">TG</span>':''}</div>
-        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'?'} • ${isIn?'+':'−'}${t.qty} ${t.unit||''}</div>
+        <div class="row-title">${t.itemName||t.name||'Unknown Item'} ${t.source==='SLACK'?'<span class="badge bg-gray">Slack</span>':t.source==='TELEGRAM'?'<span class="badge bg-gray">Telegram</span>':''}</div>
+        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'Unknown'}</div>
       </div>
+      <div class="row-val ${isIn?'in':'out'}">${isIn?'+':'−'}${t.qty} ${t.unit}</div>
     </div>`;
   }).join('');
 }
 
-function logToggleRow(id) {
-  if(_selectedTx.has(id)) _selectedTx.delete(id); else _selectedTx.add(id);
-  renderLog();
-}
-function logToggleAll(checked) {
-  const txs = S.transactions.filter(t=>t.groupId===gid()&&!t._act);
-  if(checked) txs.forEach(t=>_selectedTx.add(t.id)); else _selectedTx.clear();
-  renderLog();
-}
-function deleteSelectedTx() {
-  if(!_selectedTx.size) return;
-  if(!confirm(`Delete ${_selectedTx.size} transaction(s)? Cannot be undone.`)) return;
-  S.transactions = S.transactions.filter(t => !_selectedTx.has(t.id));
-  _selectedTx.clear(); save(); renderLog(); renderHome(); updateAlertBadge();
-  toast('Transactions deleted', 'wrn');
-}
+// ── HOME ────────────────────────────────────────────────
 function renderHome() {
   const today = new Date().toISOString().split('T')[0];
   const items = getItems();
@@ -2951,6 +2820,8 @@ function renderHome() {
     </div>`;
   }).join('');
 }
+
+// ── ALERTS ──────────────────────────────────────────────
 function updateAlertBadge() {
   const count = getItems().filter(i=>i.stock<=i.minStock).length;
   const tab = document.getElementById('tab-inv');
@@ -2959,6 +2830,8 @@ function updateAlertBadge() {
   if (count) tab.innerHTML += `<span class="nav-badge">${count}</span>`;
   document.getElementById('membersSubText').textContent = `${S.members.filter(m=>m.groupId===S.activeGroupId).length} members`;
 }
+
+// ── SLACK PARSE ─────────────────────────────────────────
 function parseSlack() {
   const raw = document.getElementById('slackPaste').value;
   if (!raw.trim()) { toast('Paste a message first','wrn'); return; }
@@ -2989,66 +2862,23 @@ function applySlack() {
     S.slackParsed=null;
   }
 }
+
+// ── ACTIVITY ────────────────────────────────────────────
 function logAct(action) {
   if (!S.user) return;
   S.transactions.unshift({id:'a_'+Date.now(),groupId:gid(),_act:true,user:S.user.name||S.user.email,action,timestamp:new Date().toISOString()});
 }
-let _selectedLogs = new Set();
-
 function renderActivity() {
   const logs = S.transactions.filter(t=>t.groupId===gid()&&t._act);
   const el = document.getElementById('activityBody');
-  const hasSelected = _selectedLogs.size > 0;
-
-  if (!logs.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>No activity yet.</p></div>';
-    return;
-  }
-
-  // Toolbar
-  const toolbar = `<div style="padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2">
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-      <input type="checkbox" id="actSelectAll" onchange="actToggleAll(this.checked)"
-        style="accent-color:var(--accent);width:16px;height:16px"
-        ${_selectedLogs.size === logs.length && logs.length > 0 ? 'checked' : ''}>
-      <span>${_selectedLogs.size > 0 ? _selectedLogs.size + ' selected' : 'Select all'}</span>
-    </label>
-    ${hasSelected ? `<button onclick="deleteSelectedLogs()" style="padding:6px 14px;border-radius:8px;border:none;background:var(--danger);color:white;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete (${_selectedLogs.size})</button>` : ''}
-  </div>`;
-
-  el.innerHTML = toolbar + logs.map(l => `
-    <div class="list-row" style="gap:12px;padding:12px 16px;${_selectedLogs.has(l.id)?'background:var(--accent-bg)':''}" onclick="actToggleRow('${l.id}')">
-      <input type="checkbox" onclick="event.stopPropagation();actToggleRow('${l.id}')"
-        ${_selectedLogs.has(l.id)?'checked':''} style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
-      <div class="row-body">
-        <div class="row-title" style="font-size:13px">${l.action}</div>
-        <div class="row-sub">👤 ${l.user} • ${new Date(l.timestamp).toLocaleString()}</div>
-      </div>
-    </div>`).join('');
+  if (!logs.length) { el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><p>No activity yet.</p></div>'; return; }
+  el.innerHTML = logs.map(l=>`<div class="list-row">
+    <div class="row-icon info">📋</div>
+    <div class="row-body"><div class="row-title">${l.action}</div><div class="row-sub">👤 ${l.user} • ${new Date(l.timestamp).toLocaleString()}</div></div>
+  </div>`).join('');
 }
 
-function actToggleRow(id) {
-  if (_selectedLogs.has(id)) _selectedLogs.delete(id);
-  else _selectedLogs.add(id);
-  renderActivity();
-}
-
-function actToggleAll(checked) {
-  const logs = S.transactions.filter(t=>t.groupId===gid()&&t._act);
-  if (checked) logs.forEach(l => _selectedLogs.add(l.id));
-  else _selectedLogs.clear();
-  renderActivity();
-}
-
-function deleteSelectedLogs() {
-  if (!_selectedLogs.size) return;
-  if (!confirm(`Delete ${_selectedLogs.size} selected log(s)?`)) return;
-  S.transactions = S.transactions.filter(t => !_selectedLogs.has(t.id));
-  _selectedLogs.clear();
-  save();
-  renderActivity();
-  toast('Logs deleted', 'wrn');
-}
+// ── SETTINGS ────────────────────────────────────────────
 function loadSettings() {
   if (document.getElementById('sThreshold')) document.getElementById('sThreshold').value = S.settings.threshold;
   if (document.getElementById('sChannel')) document.getElementById('sChannel').value = S.settings.channel||'';
@@ -3072,6 +2902,8 @@ function saveSetting() {
   }
   save();
 }
+
+// ── EXPORT ──────────────────────────────────────────────
 function exportCSV() { openSheet('exportSheet'); }
 
 function getFilteredTx() {
@@ -3189,6 +3021,8 @@ function switchExportTab(tab) {
   document.getElementById('etab-tx').style.cssText = `flex:1;padding:10px;background:none;border:none;border-bottom:2px solid ${tab==='tx'?'var(--accent)':'transparent'};color:${tab==='tx'?'var(--accent)':'var(--muted)'};font-weight:${tab==='tx'?700:500};font-size:13px;cursor:pointer`;
   document.getElementById('etab-stock').style.cssText = `flex:1;padding:10px;background:none;border:none;border-bottom:2px solid ${tab==='stock'?'var(--accent)':'transparent'};color:${tab==='stock'?'var(--accent)':'var(--muted)'};font-weight:${tab==='stock'?700:500};font-size:13px;cursor:pointer`;
 }
+
+// ── PRIORITY CLASSIFICATION ───────────────────────────────
 function getPriority(item) {
   const ratio = item.minStock > 0 ? item.stock / item.minStock : item.stock;
   if (item.stock <= item.minStock) return { level: 'P0', label: 'CRITICAL', color: '#c1121f', bg: '#ffe5e7', emoji: '🔴' };
@@ -3336,6 +3170,8 @@ function dlFile(filename, type, content) {
   a.href = 'data:' + type + ';charset=utf-8,' + encodeURIComponent(content);
   a.download = filename; a.click();
 }
+
+// ── BULK UPLOAD ──────────────────────────────────────────
 function downloadTemplate() {
   const csv = `Item Name,Unique Code,Category,Location,Unit,Stock,Min Stock
 Ethanol 95%,CHM-001,Chemicals,Shelf A1,L,10,5
@@ -3409,6 +3245,7 @@ function previewBulk(event) {
   }
 
   if (isXLSX) {
+    // ── XLSX: use built-in MiniXLSX (no CDN) ──
     reader.onload = async (e) => {
       try {
         const raw = await MiniXLSX.read(e.target.result);
@@ -3421,6 +3258,7 @@ function previewBulk(event) {
     };
     reader.readAsArrayBuffer(file);
   } else {
+    // ── CSV: plain text parse ──
     reader.onload = (e) => {
       const lines = e.target.result.split('\n').filter(l => l.trim());
       const raw = lines.map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
@@ -3435,15 +3273,6 @@ function importBulk() {
   if (!_bulkData.length) return;
   let added = 0, updated = 0;
   _bulkData.forEach(d => {
-    // Auto-generate code if missing
-    if (!d.code || d.code.trim() === '') {
-      d.code = generateItemCode(d.category);
-    }
-    // Ensure code is unique
-    const dup = getItems().find(i => i.code === d.code);
-    if (dup && dup.name.toLowerCase() !== d.name.toLowerCase()) {
-      d.code = d.code + '_' + Date.now().toString().slice(-3);
-    }
     const existing = getItems().find(i => i.name.toLowerCase() === d.name.toLowerCase());
     if (existing) {
       Object.assign(existing, { code: d.code, category: d.category, location: d.location, unit: d.unit, minStock: d.minStock });
@@ -3477,12 +3306,16 @@ function resetData() {
   if (!confirm('Delete ALL data? Cannot undo.')) return;
   localStorage.removeItem('ls2'); location.reload();
 }
+
+// ── TOAST ────────────────────────────────────────────────
 function toast(msg, type='ok') {
   const el = document.getElementById('toast');
   el.textContent = msg; el.className = `show ${type}`;
   clearTimeout(window._t);
   window._t = setTimeout(()=>el.classList.remove('show'), 3200);
 }
+
+// ── SEED ─────────────────────────────────────────────────
 function seedDemo() {
   const id='g_demo';
   S.groups=[{id,name:'Biochemistry Lab',desc:'Main research lab',adminEmail:S.user.email,created:new Date().toISOString()}];
@@ -3508,6 +3341,8 @@ function seedDemo() {
     {id:'t2',groupId:id,type:'OUT',source:'TELEGRAM',itemId:'i6',itemName:'Agar Powder',category:'Reagents',qty:50,unit:'g',person:'Dr. Priya Sharma',date:today,notes:'Batch #7',timestamp:new Date().toISOString()},
   ];
 }
+
+// ── RAILWAY SERVER SYNC ──────────────────────────────────
 const RAILWAY_URL = 'https://labstockserver-production.up.railway.app';
 let syncInterval = null;
 let sseConnection = null;
@@ -3772,6 +3607,8 @@ function startServerSync() {
     }
   });
 }
+
+// ── PRODUCT PAGE ─────────────────────────────────────────
 let _currentProductId = null;
 
 function openProductPage(itemId) {
@@ -3787,27 +3624,6 @@ function openProductPage(itemId) {
   document.getElementById('productCode').textContent = item.code || 'No Code';
   document.getElementById('productCategory').textContent = item.category || '—';
   document.getElementById('productLocation').textContent = item.location || '—';
-  // Expiry
-  const expiryRow = document.getElementById('productExpiryRow');
-  const expiryEl  = document.getElementById('productExpiry');
-  if (expiryRow && expiryEl && item.expiry) {
-    expiryRow.style.display = '';
-    const today = new Date(); today.setHours(0,0,0,0);
-    const expDate = new Date(item.expiry);
-    const daysLeft = Math.ceil((expDate - today) / 86400000);
-    if (daysLeft < 0) {
-      expiryEl.textContent = `⛔ Expired (${item.expiry})`;
-      expiryEl.style.color = 'var(--danger)';
-    } else if (daysLeft <= 30) {
-      expiryEl.textContent = `⚠️ ${item.expiry} (${daysLeft}d left)`;
-      expiryEl.style.color = 'var(--warn)';
-    } else {
-      expiryEl.textContent = item.expiry;
-      expiryEl.style.color = 'var(--accent)';
-    }
-  } else if (expiryRow) {
-    expiryRow.style.display = 'none';
-  }
   document.getElementById('productStockUnit').textContent = item.unit;
   document.getElementById('productMinStock').textContent = item.minStock + ' ' + item.unit;
 
@@ -3848,8 +3664,6 @@ function openProductPage(itemId) {
 
   // Show/hide edit button for admin
   document.getElementById('productEditBtn').style.display = isAdmin() ? '' : 'none';
-  // Update IN/OUT/Request buttons based on request flow setting
-  updateRequestFlowUI();
 
   // Open with animation
   const page = document.getElementById('productPage');
@@ -3880,65 +3694,50 @@ function closeProductPage() {
   renderInv();
   updateAlertBadge();
 }
-(function initSwipeGestures() {
-  let tx = 0, ty = 0, startX = 0, startY = 0;
-  let swipeTarget = null;
-
-  document.addEventListener('touchstart', e => {
-    const t = e.touches[0];
-    startX = t.clientX; startY = t.clientY;
-    tx = 0; ty = 0;
-    // Detect which swipeable area was touched
-    const productPage = document.getElementById('productPage');
-    if (productPage && productPage.classList.contains('open')) {
-      swipeTarget = 'product';
-    } else {
-      // Check if any sheet is open
-      const openSheet = document.querySelector('.sheet-overlay.open');
-      swipeTarget = openSheet ? 'sheet:' + openSheet.id : null;
-    }
-  }, { passive: true });
-
-  document.addEventListener('touchmove', e => {
-    if (!swipeTarget) return;
-    tx = e.touches[0].clientX - startX;
-    ty = e.touches[0].clientY - startY;
-  }, { passive: true });
-
-  document.addEventListener('touchend', () => {
-    if (!swipeTarget) return;
-    const absX = Math.abs(tx), absY = Math.abs(ty);
-    // Right swipe: tx > 60, more horizontal than vertical
-    if (tx > 60 && absX > absY * 1.5) {
-      if (swipeTarget === 'product') {
-        closeProductPage();
-      } else if (swipeTarget.startsWith('sheet:')) {
-        const id = swipeTarget.replace('sheet:', '');
-        closeSheet(id);
-      }
-    }
-    swipeTarget = null; tx = 0; ty = 0;
-  }, { passive: true });
-})();
 
 function editItemFromProduct() {
-  const id = _currentProductId;
-  const item = S.inventory.find(i => i.id === id);
-  if (!item) return;
-  // Pre-set editId so openSheet knows not to reset fields
-  document.getElementById('editId').value = id;
-  document.getElementById('itemSheetTitle').textContent = 'Edit Item';
-  document.getElementById('iName').value = item.name;
-  document.getElementById('iCode').value = item.code || '';
-  document.getElementById('iCat').value = item.category;
-  document.getElementById('iLoc').value = item.location || '';
-  document.getElementById('iStock').value = item.stock;
-  document.getElementById('iUnit').value = item.unit;
-  document.getElementById('iMin').value = item.minStock;
-  if (document.getElementById('iExpiry')) document.getElementById('iExpiry').value = item.expiry || '';
-  document.getElementById('addItemSheet').classList.add('open');
+  closeProductPage();
+  setTimeout(() => editItem(_currentProductId), 350);
 }
 
+// ── QUICK EDIT (location & code inline from product page) ─
+function openQuickEdit() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+  document.getElementById('qeLocation').value = item.location || '';
+  document.getElementById('qeCode').value = item.code || '';
+  document.getElementById('qeMin').value = item.minStock || 10;
+  document.getElementById('quickEditSheet').classList.add('open');
+}
+
+function saveQuickEdit() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+  const loc = document.getElementById('qeLocation').value.trim();
+  const code = document.getElementById('qeCode').value.trim();
+  const min = parseFloat(document.getElementById('qeMin').value) || 10;
+  // Check code uniqueness
+  if (code && code !== item.code) {
+    const dup = getItems().find(i => i.id !== item.id && i.code === code);
+    if (dup) { toast(`Code "${code}" already used by ${dup.name}`, 'err'); return; }
+  }
+  item.location = loc;
+  item.code = code;
+  item.minStock = min;
+  save();
+  document.getElementById('quickEditSheet').classList.remove('open');
+  // Sync to server
+  fetch(`${RAILWAY_URL}/api/inventory`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupId: S.activeGroupId, name: item.name, code, location: loc, minStock: min })
+  }).catch(() => {});
+  // Refresh product page
+  openProductPage(_currentProductId);
+  toast('✅ Updated!', 'ok');
+}
+
+// ── IN/OUT from product page — direct submit without sheet ─
 function productTx(type) {
   const item = S.inventory.find(i => i.id === _currentProductId);
   if (!item) return;
@@ -3967,6 +3766,8 @@ function productTx(type) {
 
   document.getElementById('txSheet').classList.add('open');
 }
+
+// ── PHOTOS — store on Railway server so all users see them ─
 async function handlePhotoUpload(event) {
   const file = event.target.files[0];
   if (!file || !_currentProductId) return;
@@ -4044,534 +3845,14 @@ function deleteProductPhoto() {
   document.getElementById('photoDeleteBtn').style.display = 'none';
   toast('Photo removed', 'wrn');
 }
-// QR & REQUEST FLOW MODULE
-// Implements QR version 1-10, byte mode, mask 0, EC level M
-// Produces valid SVG — guaranteed scannable by any camera app
-const QRGen = (() => {
-  // Uses qrcode.js — most widely tested QR library
-  // Loaded lazily on first use
-  let libReady = false;
-  let pendingQueue = [];
 
-  function loadLib(cb) {
-    if (libReady) { cb(); return; }
-    pendingQueue.push(cb);
-    if (pendingQueue.length > 1) return; // already loading
-    const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-    s.onload = () => {
-      libReady = true;
-      pendingQueue.forEach(fn => fn());
-      pendingQueue = [];
-    };
-    s.onerror = () => console.error('QR lib failed to load');
-    document.head.appendChild(s);
-  }
-
-  function render(text, container, size) {
-    size = size || 220;
-    container.innerHTML = '';
-    loadLib(() => {
-      container.innerHTML = '';
-      try {
-        new QRCode(container, {
-          text: text,
-          width: size,
-          height: size,
-          colorDark: '#000000',
-          colorLight: '#ffffff',
-          correctLevel: QRCode.CorrectLevel.M
-        });
-      } catch(e) {
-        container.innerHTML = '<p style="color:red;font-size:12px">QR error: ' + e.message + '</p>';
-      }
-    });
-  }
-
-  function getUrl(text, size) {
-    // For print-all: use Google Charts as img src (reliable for static img tags)
-    size = size || 130;
-    return 'https://chart.googleapis.com/chart?cht=qr&chs=' + size + 'x' + size +
-           '&chl=' + encodeURIComponent(text) + '&choe=UTF-8&chld=M|2';
-  }
-
-  function getDataUrl(text, size) {
-    return Promise.resolve(getUrl(text, size));
-  }
-
-  return { render, getUrl, getDataUrl };
-})();
-
-function openQRSheet() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  if (!item) return;
-
-  document.getElementById('qrItemName').textContent = item.name;
-  document.getElementById('qrItemCode').textContent = item.code || '';
-
-  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
-  const key = encodeURIComponent(item.code || item.name);
-  const url = appUrl + '?item=' + key + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
-
-  const wrap = document.getElementById('qrCanvas');
-  wrap.innerHTML = '';
-  QRGen.render(url, wrap, 220);
-
-  openSheet('qrSheet');
-}
-
-function downloadQR() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  const name = (item?.name || 'item').replace(/[^a-z0-9]/gi,'_');
-  // qrcode.js renders a <canvas> inside the container
-  const canvas = document.querySelector('#qrCanvas canvas');
-  if (!canvas) { toast('QR not ready — wait a moment', 'wrn'); return; }
-  const a = document.createElement('a');
-  a.download = 'QR_' + name + '.png';
-  a.href = canvas.toDataURL('image/png');
-  a.click();
-  toast('QR downloaded!', 'ok');
-}
-
-function printQR() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  if (!item) return;
-  const canvas = document.querySelector('#qrCanvas canvas');
-  if (!canvas) { toast('QR not ready', 'wrn'); return; }
-  const dataUrl = canvas.toDataURL('image/png');
-  const w = window.open('', '_blank');
-  w.document.write('<!DOCTYPE html><html><head><title>QR - ' + item.name + '</title>' +
-    '<style>body{font-family:sans-serif;text-align:center;padding:40px}' +
-    'img{width:220px;height:220px;display:block;margin:0 auto 16px}' +
-    'h2{margin:0 0 4px;font-size:18px}p{margin:0;color:#666;font-size:13px}</style></head>' +
-    '<body onload="window.print()">' +
-    '<img src="' + dataUrl + '">' +
-    '<h2>' + item.name + '</h2>' +
-    '<p>' + (item.code||'') + ' &bull; ' + (item.category||'') + '</p>' +
-    '<p style="margin-top:6px;font-size:11px">LabStock Inventory</p>' +
-    '</body></html>');
-  w.document.close();
-}
-
-function openQRPrintAll() {
-  const items = getItems();
-  if (!items.length) { toast('No items to print', 'wrn'); return; }
-  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
-  const groupName = S.groups.find(g=>g.id===S.activeGroupId)?.name||'';
-  toast('Opening print view…', 'ok');
-
-  // Build rows using Google Charts QR — no JS needed, pure <img> tags
-  const rows = items.map(item => {
-    const url = appUrl + '?item=' + encodeURIComponent(item.code||item.name);
-    const qrUrl = QRGen.getUrl(url, 130);
-    return `<div class="cell">
-      <img src="${qrUrl}" width="130" height="130" style="display:block;margin:0 auto 6px">
-      <div class="name">${item.name}</div>
-      <div class="code">${item.code||'—'} · ${item.category||''}</div>
-    </div>`;
-  }).join('');
-
-  const w = window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><title>QR Codes - LabStock</title>
-    <style>
-      body{font-family:sans-serif;padding:20px;background:#fff}
-      h1{font-size:18px;margin-bottom:16px}
-      .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px}
-      .cell{text-align:center;padding:12px;border:1px solid #eee;border-radius:8px;break-inside:avoid}
-      .name{font-size:11px;font-weight:700;line-height:1.3;margin-bottom:2px}
-      .code{font-size:10px;color:#888;font-family:monospace}
-      @media print{h1{display:none}.grid{gap:8px}}
-    </style></head>
-    <body onload="window.print()">
-    <h1>LabStock QR Codes — ${groupName}</h1>
-    <div class="grid">${rows}</div>
-    </body></html>`);
-  w.document.close();
-}
-
-function toggleRequestFlow(enabled) {
-  if (!isAdmin()) { toast('Admin only', 'err'); return; }
-  S.settings.requestFlowEnabled = enabled;
-  save();
-  updateRequestFlowUI();
-  toast(enabled ? '📋 Request flow ON — members must request items' : 'Request flow OFF', enabled?'ok':'wrn');
-}
-
-function updateRequestFlowUI() {
-  const enabled = S.settings.requestFlowEnabled;
-  const toggle = document.getElementById('requestFlowToggle');
-  const slider = document.getElementById('requestFlowSlider');
-  const knob   = document.getElementById('requestFlowKnob');
-  const status = document.getElementById('requestFlowStatus');
-  const card   = document.getElementById('requestFlowCard');
-
-  // Only show toggle card to admins
-  if (card) card.style.display = isAdmin() ? 'block' : 'none';
-
-  if (toggle) toggle.checked = !!enabled;
-  if (slider) slider.style.background = enabled ? 'var(--accent)' : 'var(--border)';
-  if (knob)   knob.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
-  if (status) {
-    status.textContent = enabled
-      ? '✅ Request flow is ON — members submit requests, admin approves before stock deducts'
-      : 'Request flow is OFF — members use IN/OUT directly';
-    status.style.background = enabled ? '#e8f5e9' : 'var(--surface2)';
-    status.style.color = enabled ? '#2d6a4f' : 'var(--muted)';
-  }
-
-  // Show/hide Request button on product page based on role + setting
-  const reqBtn = document.getElementById('prodBtnRequest');
-  const inBtn  = document.getElementById('prodBtnIn');
-  const outBtn = document.getElementById('prodBtnOut');
-  if (reqBtn && inBtn && outBtn) {
-    if (enabled && !isAdmin()) {
-      // Members see Request button instead of OUT
-      reqBtn.style.display = 'flex';
-      reqBtn.style.alignItems = 'center';
-      outBtn.style.display = 'none';
-    } else {
-      reqBtn.style.display = 'none';
-      outBtn.style.display = '';
-    }
-  }
-
-  // Show/hide Item Requests row in More page (admin only when enabled)
-  const reviewRow = document.getElementById('requestReviewRow');
-  if (reviewRow) reviewRow.style.display = (enabled && isAdmin()) ? '' : 'none';
-
-  // Update badge count
-  updateRequestBadge();
-}
-
-function updateRequestBadge() {
-  const pending = (S.itemRequests||[]).filter(r => r.groupId===gid() && r.status==='pending');
-  const badge = document.getElementById('requestReviewCount');
-  const sub   = document.getElementById('requestReviewSub');
-  const hdrBadge = document.getElementById('reqReviewBadge');
-  if (badge) { badge.textContent = pending.length; badge.style.display = pending.length ? 'inline-flex' : 'none'; }
-  if (sub)   sub.textContent = pending.length ? `${pending.length} pending approval` : 'No pending requests';
-  if (hdrBadge) { hdrBadge.textContent = pending.length; hdrBadge.style.display = pending.length ? 'inline-flex' : 'none'; }
-}
-
-function openRequestSheet() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  if (!item) return;
-  document.getElementById('reqItemName').textContent = item.name;
-  document.getElementById('reqItemStock').textContent = `Current stock: ${item.stock} ${item.unit} | Code: ${item.code||'—'}`;
-  document.getElementById('reqQty').value = '';
-  document.getElementById('reqNote').value = '';
-  openSheet('requestSheet');
-  setTimeout(()=>document.getElementById('reqQty').focus(), 300);
-}
-
-function submitItemRequest() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  if (!item) return;
-  const qty = parseInt(document.getElementById('reqQty').value);
-  const note = document.getElementById('reqNote').value.trim();
-  if (!qty || qty < 1) { toast('Enter a valid quantity', 'err'); return; }
-
-  const req = {
-    id: 'req_' + Date.now(),
-    groupId: gid(),
-    itemId: item.id,
-    itemName: item.name,
-    itemCode: item.code||'',
-    qty,
-    unit: item.unit,
-    requestedBy: S.user.name || S.user.email,
-    requestedByEmail: S.user.email,
-    requestedAt: new Date().toISOString(),
-    status: 'pending',   // pending | approved | rejected
-    note: note,
-    decidedBy: null,
-    decidedAt: null
-  };
-
-  if (!S.itemRequests) S.itemRequests = [];
-  S.itemRequests.unshift(req);
-  save();
-
-  // Push to server
-  fetch(`${RAILWAY_URL}/api/item-requests`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(req)
-  }).catch(()=>{});
-
-  closeSheet('requestSheet');
-  updateRequestBadge();
-  toast(`✅ Request submitted! Admin will review.`, 'ok');
-}
-
-function renderRequestReview() {
-  const el = document.getElementById('requestReviewBody');
-  const requests = (S.itemRequests||[]).filter(r => r.groupId===gid());
-  const hdrBadge = document.getElementById('reqReviewBadge');
-  const pending = requests.filter(r=>r.status==='pending');
-  if (hdrBadge) { hdrBadge.textContent=pending.length; hdrBadge.style.display=pending.length?'inline-flex':'none'; }
-
-  if (!requests.length) {
-    el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:13px;padding:32px 16px">No item requests yet.</p>';
-    return;
-  }
-
-  el.innerHTML = requests.map(r => {
-    const statusColor = r.status==='approved'?'#2d6a4f':r.status==='rejected'?'var(--danger)':'#e65100';
-    const statusBg    = r.status==='approved'?'#e8f5e9':r.status==='rejected'?'#fdecea':'#fff3e0';
-    const statusLabel = r.status==='approved'?'✅ Approved':r.status==='rejected'?'❌ Rejected':'⏳ Pending';
-    const date = new Date(r.requestedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    return `
-    <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:14px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-        <div>
-          <div style="font-weight:700;font-size:14px">${r.itemName} <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${r.itemCode}</span></div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">By: ${r.requestedBy} &bull; ${date}</div>
-        </div>
-        <span style="font-size:11px;padding:3px 8px;border-radius:20px;background:${statusBg};color:${statusColor};font-weight:600;white-space:nowrap;flex-shrink:0">${statusLabel}</span>
-      </div>
-      <div style="font-size:13px;margin-bottom:6px">Qty: <strong>${r.qty} ${r.unit}</strong>${r.note?` &bull; <em>${r.note}</em>`:''}</div>
-      ${r.status==='pending' ? `
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button onclick="decideRequest('${r.id}','approved')" style="flex:1;padding:9px;border-radius:8px;border:none;background:#2d6a4f;color:white;font-size:13px;font-weight:700;cursor:pointer">✅ Approve</button>
-        <button onclick="decideRequest('${r.id}','rejected')" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-size:13px;font-weight:700;cursor:pointer">❌ Reject</button>
-      </div>` : `
-      <div style="font-size:11px;color:var(--muted);margin-top:6px">${r.decidedBy?`${r.status==='approved'?'Approved':'Rejected'} by ${r.decidedBy}`:''}</div>`}
-    </div>`;
-  }).join('');
-}
-
-function decideRequest(reqId, decision) {
-  const req = (S.itemRequests||[]).find(r => r.id===reqId);
-  if (!req || req.status!=='pending') return;
-
-  req.status    = decision;
-  req.decidedBy = S.user.name || S.user.email;
-  req.decidedAt = new Date().toISOString();
-
-  if (decision==='approved') {
-    // Deduct stock now
-    const item = S.inventory.find(i => i.id===req.itemId || i.name.toLowerCase()===req.itemName.toLowerCase());
-    if (item) {
-      if (item.stock < req.qty) {
-        toast(`⚠️ Only ${item.stock} ${item.unit} in stock — cannot approve`, 'err');
-        req.status = 'pending'; // revert
-        return;
-      }
-      item.stock -= req.qty;
-      // Push transaction
-      const tx = {
-        id: 't_'+Date.now(), groupId: gid(), type:'OUT', source:'REQUEST',
-        itemName: item.name, itemCode: item.code, category: item.category,
-        location: item.location||'', qty: req.qty, unit: item.unit,
-        person: req.decidedBy, labMember: req.requestedBy,
-        notes: `Approved request from ${req.requestedBy}${req.note?' — '+req.note:''}`,
-        date: new Date().toISOString().split('T')[0],
-        timestamp: new Date().toISOString(), stockAfter: item.stock
-      };
-      S.transactions.unshift(tx);
-      // Sync to server
-      fetch(`${RAILWAY_URL}/api/transactions`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({groupId:gid(), itemName:item.name, qty:req.qty, type:'OUT',
-          person:req.decidedBy, notes:tx.notes, unit:item.unit, category:item.category})
-      }).catch(()=>{});
-      toast(`✅ Approved! ${req.qty} ${item.unit} deducted from ${item.name}`, 'ok');
-    } else {
-      toast('✅ Approved (item not found locally — sync may be needed)', 'ok');
-    }
-  } else {
-    toast(`❌ Request rejected`, 'wrn');
-  }
-
-  // Update request on server
-  fetch(`${RAILWAY_URL}/api/item-requests/${reqId}`, {
-    method:'PUT', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ status: req.status, decidedBy: req.decidedBy, decidedAt: req.decidedAt })
-  }).catch(()=>{});
-
-  save();
-  renderRequestReview();
-  updateRequestBadge();
-  renderInv();
-  updateAlertBadge();
-}
-
-async function _syncGroupsBackground(user) {
-  try {
-    const res = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
-    if (!res.ok) return;
-    const serverGroups = await res.json();
-    const serverGroupIds = new Set(serverGroups.map(g => g.id));
-    // Upload local-only groups
-    for (const lg of S.groups.filter(g => g.adminEmail === user.email)) {
-      if (!serverGroupIds.has(lg.id)) {
-        await fetch(`${RAILWAY_URL}/api/lab-groups`, { method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({id:lg.id,name:lg.name,desc:lg.desc||'',adminEmail:lg.adminEmail,adminName:user.name,created:lg.created||new Date().toISOString()})}).catch(()=>{});
-        for (const m of S.members.filter(m => m.groupId === lg.id)) {
-          await fetch(`${RAILWAY_URL}/api/lab-members`, { method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({id:m.id,groupId:m.groupId,email:m.email,name:m.name,role:m.role||'member',joined:m.joined||new Date().toISOString()})}).catch(()=>{});
-        }
-      }
-    }
-    // Merge server data into local
-    const res2 = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
-    const all = res2.ok ? await res2.json() : serverGroups;
-    all.forEach(sg => {
-      const ex = S.groups.find(g => g.id === sg.id);
-      if (!ex) S.groups.push({id:sg.id,name:sg.name,desc:sg.desc,adminEmail:sg.adminEmail,telegramChatId:sg.telegramChatId,created:sg.created});
-      else { ex.name=sg.name; ex.desc=sg.desc; if(sg.telegramChatId!==undefined) ex.telegramChatId=sg.telegramChatId; }
-      sg.members.forEach(sm => { if(!S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email)) S.members.push(sm); });
-    });
-    if (all.length > 0) {
-      const vids = new Set(all.map(g=>g.id));
-      S.groups = S.groups.filter(g=>vids.has(g.id));
-      S.members = S.members.filter(m=>vids.has(m.groupId));
-    }
-    save();
-    renderGroupSheet();
-    updateTopbar();
-  } catch(e) {}
-}
-
-function getGroupCode(groupId) {
-  // Short 6-char code derived from groupId — stable and unique
-  const raw = groupId.replace(/[^a-z0-9]/gi, '').toUpperCase();
-  return raw.slice(-6).padStart(6, '0');
-}
-
-function populateAddMemberPanel() {
-  if (!S.activeGroupId) return;
-  const link = generateInviteLink(S.activeGroupId);
-  const code = getGroupCode(S.activeGroupId);
-  const linkEl = document.getElementById('inviteLinkDisplay');
-  const codeEl = document.getElementById('groupCodeDisplay');
-  if (linkEl) linkEl.textContent = link;
-  if (codeEl) codeEl.textContent = code;
-}
-
-function copyInviteLink() {
-  const link = generateInviteLink(S.activeGroupId);
-  navigator.clipboard.writeText(link)
-    .then(() => toast('📋 Invite link copied!', 'ok'))
-    .catch(() => { prompt('Copy this link:', link); });
-}
-
-function copyGroupCode() {
-  const code = getGroupCode(S.activeGroupId);
-  navigator.clipboard.writeText(code)
-    .then(() => toast('📋 Group code copied: ' + code, 'ok'))
-    .catch(() => { prompt('Group code:', code); });
-}
-
-function checkExpiryAlerts() {
-  if (!S.activeGroupId) return;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const items = getItems().filter(i => i.expiry);
-  const expiring = [], expired = [];
-  items.forEach(i => {
-    const d = new Date(i.expiry);
-    const days = Math.ceil((d - today) / 86400000);
-    if (days < 0) expired.push({ ...i, daysLeft: days });
-    else if (days <= 30) expiring.push({ ...i, daysLeft: days });
-  });
-
-  if (expired.length) {
-    toast(`⛔ ${expired.length} item(s) EXPIRED! Check inventory.`, 'err');
-  } else if (expiring.length) {
-    toast(`⚠️ ${expiring.length} item(s) expiring within 30 days`, 'wrn');
-  }
-}
-
-// Show expiry badge in inventory list
-const _origRenderInv = renderInv;
-
-function handleQRDeepLink() {
-  const params = new URLSearchParams(window.location.search);
-  const itemParam = params.get('item');
-  const groupParam = params.get('group');
-  if (!itemParam) return;
-
-  if (S.user) {
-    setTimeout(() => {
-      if (groupParam && groupParam !== S.activeGroupId) {
-        const g = S.groups.find(g=>g.id===groupParam);
-        if(g){ S.activeGroupId=groupParam; save(); updateTopbar(); }
-      }
-      const item = getItems().find(i =>
-        i.code?.toLowerCase()===itemParam.toLowerCase() ||
-        i.name.toLowerCase()===decodeURIComponent(itemParam).toLowerCase()
-      );
-      if(item){ openProductPage(item.id); window.history.replaceState({},'',' window.location.pathname'); }
-      else toast('Item not found in current group','wrn');
-    }, 600);
-  } else {
-    _showPublicItemView(itemParam, groupParam);
-  }
-}
-
-function _showPublicItemView(itemCode, groupId) {
-  const url = RAILWAY_URL+'/api/inventory/'+encodeURIComponent(itemCode)+(groupId?'?groupId='+encodeURIComponent(groupId):'');
-  document.body.innerHTML = '<div style="min-height:100vh;background:#f5f5f5;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px"><div style="max-width:400px;width:100%"><div style="text-align:center;margin-bottom:20px"><div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div><div style="font-size:12px;color:#888;margin-top:4px">Lab Inventory</div></div><div id="pubCard" style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 16px rgba(0,0,0,.08)"><div style="text-align:center;color:#888;padding:20px">Loading...</div></div><a href="'+window.location.origin+window.location.pathname+'" style="display:block;margin-top:16px;text-align:center;padding:12px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:600;font-size:14px">🔑 Sign in to LabStock</a></div></div>';
-  fetch(url).then(r=>r.ok?r.json():null).then(item=>{
-    const c=document.getElementById('pubCard');
-    if(!item){c.innerHTML='<div style="text-align:center;color:#e53935;padding:20px">❌ Item not found</div>';return;}
-    const low=item.stock<=item.minStock;
-    c.innerHTML='<div style="font-size:20px;font-weight:800;margin-bottom:4px">'+item.name+'</div><div style="font-size:11px;color:#888;font-family:monospace;margin-bottom:16px">'+(item.code||'')+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px"><div style="background:#f5f5f5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:28px;font-weight:800;color:'+(low?'#e53935':'#2d6a4f')+'">'+item.stock+'</div><div style="font-size:11px;color:#888">'+(item.unit||'units')+' in stock</div></div><div style="background:#f5f5f5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:#555">'+item.minStock+'</div><div style="font-size:11px;color:#888">min level</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><span style="padding:4px 10px;background:#e8f5e9;color:#2d6a4f;border-radius:20px;font-size:12px">'+(item.category||'')+'</span>'+(item.location?'<span style="padding:4px 10px;background:#f3f4f6;color:#555;border-radius:20px;font-size:12px">📍 '+item.location+'</span>':'')+'<span style="padding:4px 10px;background:'+(low?'#fdecea':'#e8f5e9')+';color:'+(low?'#e53935':'#2d6a4f')+';border-radius:20px;font-size:12px;font-weight:700">'+(low?'⚠️ LOW STOCK':'✅ OK')+'</span></div><div style="font-size:11px;color:#aaa;margin-top:14px;text-align:center">View only • Sign in for full access</div>';
-  }).catch(()=>{ const c=document.getElementById('pubCard'); if(c)c.innerHTML='<div style="color:#e53935;text-align:center;padding:20px">❌ Could not load item</div>'; });
-}
-
-function showJoinGroup() {
-  _hideAllLoginSteps();
-  document.getElementById('loginStepJoin').style.display = 'block';
-  setTimeout(() => document.getElementById('manualInviteCode').focus(), 200);
-}
-
-// Override applyManualInvite to also handle 6-char group codes
-const _origApplyManualInvite = applyManualInvite;
-function applyManualInvite() {
-  const raw = document.getElementById('manualInviteCode').value.trim();
-  if (!raw) { toast('Paste an invite link or code', 'err'); return; }
-  // If it looks like a short group code (6 alphanumeric chars), find the group
-  if (/^[A-Z0-9]{6}$/i.test(raw)) {
-    const match = S.groups.find(g => getGroupCode(g.id) === raw.toUpperCase());
-    if (match) {
-      // Generate an invite link from this group and handle it
-      const link = generateInviteLink(match.id);
-      const url = new URL(link);
-      const code = url.searchParams.get('invite');
-      if (code) { handleInviteLink(code); return; }
-    }
-    // Code not found locally — try fetching from server
-    fetch(`${RAILWAY_URL}/api/lab-groups/by-code/${raw.toUpperCase()}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(g => {
-        if (g) {
-          const link = generateInviteLink(g.id);
-          const url = new URL(link);
-          const code = url.searchParams.get('invite');
-          if (code) handleInviteLink(code);
-        } else {
-          toast('Group code not found', 'err');
-        }
-      })
-      .catch(() => toast('Could not find group — try using the full invite link', 'err'));
-    return;
-  }
-  // Otherwise treat as full invite link
-  let code = raw;
-  try { const url = new URL(raw); code = url.searchParams.get('invite') || raw; } catch(e) {}
-  handleInviteLink(code);
-}
+// ── INIT ─────────────────────────────────────────────────
 load();
 // Check for invite link on page load
 detectInviteOnLoad();
 if (S.user) {
   showApp();
   startServerSync();
-  handleQRDeepLink();
-  updateRequestFlowUI();
-  setTimeout(checkExpiryAlerts, 2000);
 }
 </script>
 </body>
