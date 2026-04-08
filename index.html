@@ -2606,8 +2606,7 @@ async function renderPendingSheet() {
     </div>`).join('');
 }
 
-async 
-function shareInviteLink() {
+async function shareInviteLink() {
   if (!isAdmin()) { toast('Admin only', 'err'); return; }
   if (!S.activeGroupId) { toast('Select a group first', 'wrn'); return; }
   const link = generateInviteLink(S.activeGroupId);
