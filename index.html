@@ -4659,7 +4659,10 @@ function handleQRDeepLink() {
 }
 
 function _showPublicItemView(itemCode, groupId) {
-  const url = RAILWAY_URL+'/api/inventory/'+encodeURIComponent(itemCode)+(groupId?'?groupId='+encodeURIComponent(groupId):'');
+  // Try fetching all items for the group, then find by code or name
+  const url = groupId
+    ? RAILWAY_URL+'/api/inventory?groupId='+encodeURIComponent(groupId)
+    : RAILWAY_URL+'/api/inventory';
   const cleanUrl = window.location.href.split('?')[0];
   document.body.innerHTML = '<div style="min-height:100vh;background:#f5f3ee;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px"><div style="max-width:400px;width:100%">' +
     '<div style="text-align:center;margin-bottom:20px"><div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div><div style="font-size:12px;color:#888;margin-top:4px">Lab Inventory</div></div>' +
@@ -4667,9 +4670,16 @@ function _showPublicItemView(itemCode, groupId) {
     '<a href="' + cleanUrl + '" style="display:block;margin-top:16px;text-align:center;padding:14px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">🔑 Sign in for full access</a>' +
     '<p style="text-align:center;font-size:11px;color:#aaa;margin-top:10px">Scan again after signing in to manage stock</p>' +
     '</div></div>';
-  fetch(url).then(r=>r.ok?r.json():null).then(item=>{
+  fetch(url).then(r=>r.ok?r.json():[]).then(allItems=>{
     const c=document.getElementById('pubCard');
-    if(!item){c.innerHTML='<div style="text-align:center;color:#e53935;padding:20px">❌ Item not found</div>';return;}
+    // allItems is array — find by code or name
+    const item = Array.isArray(allItems)
+      ? allItems.find(i=>
+          (i.code&&i.code.toLowerCase()===itemCode.toLowerCase()) ||
+          i.name.toLowerCase()===decodeURIComponent(itemCode).toLowerCase()
+        )
+      : allItems; // fallback if single item returned
+    if(!item){c.innerHTML='<div style="text-align:center;color:#e53935;padding:20px;font-size:14px">❌ Item not found<br><span style="font-size:12px;color:#aaa;margin-top:6px;display:block">Code: '+itemCode+'</span></div>';return;}
     const low=item.stock<=item.minStock;
     c.innerHTML='<div style="font-size:20px;font-weight:800;margin-bottom:4px">'+item.name+'</div><div style="font-size:11px;color:#888;font-family:monospace;margin-bottom:16px">'+(item.code||'')+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px"><div style="background:#f5f5f5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:28px;font-weight:800;color:'+(low?'#e53935':'#2d6a4f')+'">'+item.stock+'</div><div style="font-size:11px;color:#888">'+(item.unit||'units')+' in stock</div></div><div style="background:#f5f5f5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:#555">'+item.minStock+'</div><div style="font-size:11px;color:#888">min level</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><span style="padding:4px 10px;background:#e8f5e9;color:#2d6a4f;border-radius:20px;font-size:12px">'+(item.category||'')+'</span>'+(item.location?'<span style="padding:4px 10px;background:#f3f4f6;color:#555;border-radius:20px;font-size:12px">📍 '+item.location+'</span>':'')+'<span style="padding:4px 10px;background:'+(low?'#fdecea':'#e8f5e9')+';color:'+(low?'#e53935':'#2d6a4f')+';border-radius:20px;font-size:12px;font-weight:700">'+(low?'⚠️ LOW STOCK':'✅ OK')+'</span></div><div style="font-size:11px;color:#aaa;margin-top:14px;text-align:center">View only • Sign in for full access</div>';
   }).catch(()=>{ const c=document.getElementById('pubCard'); if(c)c.innerHTML='<div style="color:#e53935;text-align:center;padding:20px">❌ Could not load item</div>'; });
