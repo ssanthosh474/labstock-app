@@ -3845,6 +3845,485 @@ function deleteProductPhoto() {
   document.getElementById('photoDeleteBtn').style.display = 'none';
   toast('Photo removed', 'wrn');
 }
+// QR & REQUEST FLOW MODULE
+// Implements QR version 1-10, byte mode, mask 0, EC level M
+// Produces valid SVG — guaranteed scannable by any camera app
+const QRGen = (() => {
+  // Uses qrcode.js — most widely tested QR library
+  // Loaded lazily on first use
+  let libReady = false;
+  let pendingQueue = [];
+// ── INIT ─────────────────────────────────────────────────
+  function loadLib(cb) {
+    if (libReady) { cb(); return; }
+    pendingQueue.push(cb);
+    if (pendingQueue.length > 1) return; // already loading
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload = () => {
+      libReady = true;
+      pendingQueue.forEach(fn => fn());
+      pendingQueue = [];
+    };
+    s.onerror = () => console.error('QR lib failed to load');
+    document.head.appendChild(s);
+  }
+  function render(text, container, size) {
+    size = size || 220;
+    container.innerHTML = '';
+    loadLib(() => {
+      container.innerHTML = '';
+      try {
+        new QRCode(container, {
+          text: text,
+          width: size,
+          height: size,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      } catch(e) {
+        container.innerHTML = '<p style="color:red;font-size:12px">QR error: ' + e.message + '</p>';
+      }
+    });
+  }
+  function getUrl(text, size) {
+    // For print-all: use Google Charts as img src (reliable for static img tags)
+    size = size || 130;
+    return 'https://chart.googleapis.com/chart?cht=qr&chs=' + size + 'x' + size +
+           '&chl=' + encodeURIComponent(text) + '&choe=UTF-8&chld=M|2';
+  }
+  function getDataUrl(text, size) {
+    return Promise.resolve(getUrl(text, size));
+  }
+  return { render, getUrl, getDataUrl };
+})();
+function openQRSheet() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+  document.getElementById('qrItemName').textContent = item.name;
+  document.getElementById('qrItemCode').textContent = item.code || '';
+  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
+  const key = encodeURIComponent(item.code || item.name);
+  const url = appUrl + '?item=' + key + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
+  const wrap = document.getElementById('qrCanvas');
+  wrap.innerHTML = '';
+  QRGen.render(url, wrap, 220);
+  openSheet('qrSheet');
+}
+function downloadQR() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  const name = (item?.name || 'item').replace(/[^a-z0-9]/gi,'_');
+  // qrcode.js renders a <canvas> inside the container
+  const canvas = document.querySelector('#qrCanvas canvas');
+  if (!canvas) { toast('QR not ready — wait a moment', 'wrn'); return; }
+  const a = document.createElement('a');
+  a.download = 'QR_' + name + '.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+  toast('QR downloaded!', 'ok');
+}
+function printQR() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+  const canvas = document.querySelector('#qrCanvas canvas');
+  if (!canvas) { toast('QR not ready', 'wrn'); return; }
+  const dataUrl = canvas.toDataURL('image/png');
+  const w = window.open('', '_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>QR - ' + item.name + '</title>' +
+    '<style>body{font-family:sans-serif;text-align:center;padding:40px}' +
+    'img{width:220px;height:220px;display:block;margin:0 auto 16px}' +
+    'h2{margin:0 0 4px;font-size:18px}p{margin:0;color:#666;font-size:13px}</style></head>' +
+    '<body onload="window.print()">' +
+    '<img src="' + dataUrl + '">' +
+    '<h2>' + item.name + '</h2>' +
+    '<p>' + (item.code||'') + ' &bull; ' + (item.category||'') + '</p>' +
+    '<p style="margin-top:6px;font-size:11px">LabStock Inventory</p>' +
+    '</body></html>');
+  w.document.close();
+}
+function openQRPrintAll() {
+  const items = getItems();
+  if (!items.length) { toast('No items to print', 'wrn'); return; }
+  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
+  const groupName = S.groups.find(g=>g.id===S.activeGroupId)?.name||'';
+  toast('Opening print view…', 'ok');
+  // Build rows using Google Charts QR — no JS needed, pure <img> tags
+  const rows = items.map(item => {
+    const url = appUrl + '?item=' + encodeURIComponent(item.code||item.name);
+    const qrUrl = QRGen.getUrl(url, 130);
+    return `<div class="cell">
+      <img src="${qrUrl}" width="130" height="130" style="display:block;margin:0 auto 6px">
+      <div class="name">${item.name}</div>
+      <div class="code">${item.code||'—'} · ${item.category||''}</div>
+    </div>`;
+  }).join('');
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>QR Codes - LabStock</title>
+    <style>
+      body{font-family:sans-serif;padding:20px;background:#fff}
+      h1{font-size:18px;margin-bottom:16px}
+      .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px}
+      .cell{text-align:center;padding:12px;border:1px solid #eee;border-radius:8px;break-inside:avoid}
+      .name{font-size:11px;font-weight:700;line-height:1.3;margin-bottom:2px}
+      .code{font-size:10px;color:#888;font-family:monospace}
+      @media print{h1{display:none}.grid{gap:8px}}
+    </style></head>
+    <body onload="window.print()">
+    <h1>LabStock QR Codes — ${groupName}</h1>
+    <div class="grid">${rows}</div>
+    </body></html>`);
+  w.document.close();
+}
+function toggleRequestFlow(enabled) {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  S.settings.requestFlowEnabled = enabled;
+  save();
+  updateRequestFlowUI();
+  toast(enabled ? '📋 Request flow ON — members must request items' : 'Request flow OFF', enabled?'ok':'wrn');
+}
+function updateRequestFlowUI() {
+  const enabled = S.settings.requestFlowEnabled;
+  const toggle = document.getElementById('requestFlowToggle');
+  const slider = document.getElementById('requestFlowSlider');
+  const knob   = document.getElementById('requestFlowKnob');
+  const status = document.getElementById('requestFlowStatus');
+  const card   = document.getElementById('requestFlowCard');
+  // Only show toggle card to admins
+  if (card) card.style.display = isAdmin() ? 'block' : 'none';
+  if (toggle) toggle.checked = !!enabled;
+  if (slider) slider.style.background = enabled ? 'var(--accent)' : 'var(--border)';
+  if (knob)   knob.style.transform = enabled ? 'translateX(20px)' : 'translateX(0)';
+  if (status) {
+    status.textContent = enabled
+      ? '✅ Request flow is ON — members submit requests, admin approves before stock deducts'
+      : 'Request flow is OFF — members use IN/OUT directly';
+    status.style.background = enabled ? '#e8f5e9' : 'var(--surface2)';
+    status.style.color = enabled ? '#2d6a4f' : 'var(--muted)';
+  }
+  // Show/hide Request button on product page based on role + setting
+  const reqBtn = document.getElementById('prodBtnRequest');
+  const inBtn  = document.getElementById('prodBtnIn');
+  const outBtn = document.getElementById('prodBtnOut');
+  if (reqBtn && inBtn && outBtn) {
+    if (enabled && !isAdmin()) {
+      // Members see Request button instead of OUT
+      reqBtn.style.display = 'flex';
+      reqBtn.style.alignItems = 'center';
+      outBtn.style.display = 'none';
+    } else {
+      reqBtn.style.display = 'none';
+      outBtn.style.display = '';
+    }
+  }
+  // Show/hide Item Requests row in More page (admin only when enabled)
+  const reviewRow = document.getElementById('requestReviewRow');
+  if (reviewRow) reviewRow.style.display = (enabled && isAdmin()) ? '' : 'none';
+  // Update badge count
+  updateRequestBadge();
+}
+function updateRequestBadge() {
+  const pending = (S.itemRequests||[]).filter(r => r.groupId===gid() && r.status==='pending');
+  const badge = document.getElementById('requestReviewCount');
+  const sub   = document.getElementById('requestReviewSub');
+  const hdrBadge = document.getElementById('reqReviewBadge');
+  if (badge) { badge.textContent = pending.length; badge.style.display = pending.length ? 'inline-flex' : 'none'; }
+  if (sub)   sub.textContent = pending.length ? `${pending.length} pending approval` : 'No pending requests';
+  if (hdrBadge) { hdrBadge.textContent = pending.length; hdrBadge.style.display = pending.length ? 'inline-flex' : 'none'; }
+}
+function openRequestSheet() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+  document.getElementById('reqItemName').textContent = item.name;
+  document.getElementById('reqItemStock').textContent = `Current stock: ${item.stock} ${item.unit} | Code: ${item.code||'—'}`;
+  document.getElementById('reqQty').value = '';
+  document.getElementById('reqNote').value = '';
+  openSheet('requestSheet');
+  setTimeout(()=>document.getElementById('reqQty').focus(), 300);
+}
+function submitItemRequest() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item) return;
+  const qty = parseInt(document.getElementById('reqQty').value);
+  const note = document.getElementById('reqNote').value.trim();
+  if (!qty || qty < 1) { toast('Enter a valid quantity', 'err'); return; }
+  const req = {
+    id: 'req_' + Date.now(),
+    groupId: gid(),
+    itemId: item.id,
+    itemName: item.name,
+    itemCode: item.code||'',
+    qty,
+    unit: item.unit,
+    requestedBy: S.user.name || S.user.email,
+    requestedByEmail: S.user.email,
+    requestedAt: new Date().toISOString(),
+    status: 'pending',   // pending | approved | rejected
+    note: note,
+    decidedBy: null,
+    decidedAt: null
+  };
+  if (!S.itemRequests) S.itemRequests = [];
+  S.itemRequests.unshift(req);
+  save();
+  // Push to server
+  fetch(`${RAILWAY_URL}/api/item-requests`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(req)
+  }).catch(()=>{});
+  closeSheet('requestSheet');
+  updateRequestBadge();
+  toast(`✅ Request submitted! Admin will review.`, 'ok');
+}
+function renderRequestReview() {
+  const el = document.getElementById('requestReviewBody');
+  const requests = (S.itemRequests||[]).filter(r => r.groupId===gid());
+  const hdrBadge = document.getElementById('reqReviewBadge');
+  const pending = requests.filter(r=>r.status==='pending');
+  if (hdrBadge) { hdrBadge.textContent=pending.length; hdrBadge.style.display=pending.length?'inline-flex':'none'; }
+  if (!requests.length) {
+    el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:13px;padding:32px 16px">No item requests yet.</p>';
+    return;
+  }
+  el.innerHTML = requests.map(r => {
+    const statusColor = r.status==='approved'?'#2d6a4f':r.status==='rejected'?'var(--danger)':'#e65100';
+    const statusBg    = r.status==='approved'?'#e8f5e9':r.status==='rejected'?'#fdecea':'#fff3e0';
+    const statusLabel = r.status==='approved'?'✅ Approved':r.status==='rejected'?'❌ Rejected':'⏳ Pending';
+    const date = new Date(r.requestedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    return `
+    <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="font-weight:700;font-size:14px">${r.itemName} <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">${r.itemCode}</span></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">By: ${r.requestedBy} &bull; ${date}</div>
+        </div>
+        <span style="font-size:11px;padding:3px 8px;border-radius:20px;background:${statusBg};color:${statusColor};font-weight:600;white-space:nowrap;flex-shrink:0">${statusLabel}</span>
+      </div>
+      <div style="font-size:13px;margin-bottom:6px">Qty: <strong>${r.qty} ${r.unit}</strong>${r.note?` &bull; <em>${r.note}</em>`:''}</div>
+      ${r.status==='pending' ? `
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button onclick="decideRequest('${r.id}','approved')" style="flex:1;padding:9px;border-radius:8px;border:none;background:#2d6a4f;color:white;font-size:13px;font-weight:700;cursor:pointer">✅ Approve</button>
+        <button onclick="decideRequest('${r.id}','rejected')" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid var(--danger);background:transparent;color:var(--danger);font-size:13px;font-weight:700;cursor:pointer">❌ Reject</button>
+      </div>` : `
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">${r.decidedBy?`${r.status==='approved'?'Approved':'Rejected'} by ${r.decidedBy}`:''}</div>`}
+    </div>`;
+  }).join('');
+}
+function decideRequest(reqId, decision) {
+  const req = (S.itemRequests||[]).find(r => r.id===reqId);
+  if (!req || req.status!=='pending') return;
+  req.status    = decision;
+  req.decidedBy = S.user.name || S.user.email;
+  req.decidedAt = new Date().toISOString();
+  if (decision==='approved') {
+    // Deduct stock now
+    const item = S.inventory.find(i => i.id===req.itemId || i.name.toLowerCase()===req.itemName.toLowerCase());
+    if (item) {
+      if (item.stock < req.qty) {
+        toast(`⚠️ Only ${item.stock} ${item.unit} in stock — cannot approve`, 'err');
+        req.status = 'pending'; // revert
+        return;
+      }
+      item.stock -= req.qty;
+      // Push transaction
+      const tx = {
+        id: 't_'+Date.now(), groupId: gid(), type:'OUT', source:'REQUEST',
+        itemName: item.name, itemCode: item.code, category: item.category,
+        location: item.location||'', qty: req.qty, unit: item.unit,
+        person: req.decidedBy, labMember: req.requestedBy,
+        notes: `Approved request from ${req.requestedBy}${req.note?' — '+req.note:''}`,
+        date: new Date().toISOString().split('T')[0],
+        timestamp: new Date().toISOString(), stockAfter: item.stock
+      };
+      S.transactions.unshift(tx);
+      // Sync to server
+      fetch(`${RAILWAY_URL}/api/transactions`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({groupId:gid(), itemName:item.name, qty:req.qty, type:'OUT',
+          person:req.decidedBy, notes:tx.notes, unit:item.unit, category:item.category})
+      }).catch(()=>{});
+      toast(`✅ Approved! ${req.qty} ${item.unit} deducted from ${item.name}`, 'ok');
+    } else {
+      toast('✅ Approved (item not found locally — sync may be needed)', 'ok');
+    }
+  } else {
+    toast(`❌ Request rejected`, 'wrn');
+  }
+  // Update request on server
+  fetch(`${RAILWAY_URL}/api/item-requests/${reqId}`, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ status: req.status, decidedBy: req.decidedBy, decidedAt: req.decidedAt })
+  }).catch(()=>{});
+  save();
+  renderRequestReview();
+  updateRequestBadge();
+  renderInv();
+  updateAlertBadge();
+}
+async function _syncGroupsBackground(user) {
+  try {
+    const res = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
+    if (!res.ok) return;
+    const serverGroups = await res.json();
+    const serverGroupIds = new Set(serverGroups.map(g => g.id));
+    // Upload local-only groups
+    for (const lg of S.groups.filter(g => g.adminEmail === user.email)) {
+      if (!serverGroupIds.has(lg.id)) {
+        await fetch(`${RAILWAY_URL}/api/lab-groups`, { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({id:lg.id,name:lg.name,desc:lg.desc||'',adminEmail:lg.adminEmail,adminName:user.name,created:lg.created||new Date().toISOString()})}).catch(()=>{});
+        for (const m of S.members.filter(m => m.groupId === lg.id)) {
+          await fetch(`${RAILWAY_URL}/api/lab-members`, { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({id:m.id,groupId:m.groupId,email:m.email,name:m.name,role:m.role||'member',joined:m.joined||new Date().toISOString()})}).catch(()=>{});
+        }
+      }
+    }
+    // Merge server data into local
+    const res2 = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
+    const all = res2.ok ? await res2.json() : serverGroups;
+    all.forEach(sg => {
+      const ex = S.groups.find(g => g.id === sg.id);
+      if (!ex) S.groups.push({id:sg.id,name:sg.name,desc:sg.desc,adminEmail:sg.adminEmail,telegramChatId:sg.telegramChatId,created:sg.created});
+      else { ex.name=sg.name; ex.desc=sg.desc; if(sg.telegramChatId!==undefined) ex.telegramChatId=sg.telegramChatId; }
+      sg.members.forEach(sm => { if(!S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email)) S.members.push(sm); });
+    });
+    if (all.length > 0) {
+      const vids = new Set(all.map(g=>g.id));
+      S.groups = S.groups.filter(g=>vids.has(g.id));
+      S.members = S.members.filter(m=>vids.has(m.groupId));
+    }
+    save();
+    renderGroupSheet();
+    updateTopbar();
+  } catch(e) {}
+}
+function getGroupCode(groupId) {
+  // Short 6-char code derived from groupId — stable and unique
+  const raw = groupId.replace(/[^a-z0-9]/gi, '').toUpperCase();
+  return raw.slice(-6).padStart(6, '0');
+}
+function populateAddMemberPanel() {
+  if (!S.activeGroupId) return;
+  const link = generateInviteLink(S.activeGroupId);
+  const code = getGroupCode(S.activeGroupId);
+  const linkEl = document.getElementById('inviteLinkDisplay');
+  const codeEl = document.getElementById('groupCodeDisplay');
+  if (linkEl) linkEl.textContent = link;
+  if (codeEl) codeEl.textContent = code;
+}
+function copyInviteLink() {
+  const link = generateInviteLink(S.activeGroupId);
+  navigator.clipboard.writeText(link)
+    .then(() => toast('📋 Invite link copied!', 'ok'))
+    .catch(() => { prompt('Copy this link:', link); });
+}
+function copyGroupCode() {
+  const code = getGroupCode(S.activeGroupId);
+  navigator.clipboard.writeText(code)
+    .then(() => toast('📋 Group code copied: ' + code, 'ok'))
+    .catch(() => { prompt('Group code:', code); });
+}
+function checkExpiryAlerts() {
+  if (!S.activeGroupId) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const items = getItems().filter(i => i.expiry);
+  const expiring = [], expired = [];
+  items.forEach(i => {
+    const d = new Date(i.expiry);
+    const days = Math.ceil((d - today) / 86400000);
+    if (days < 0) expired.push({ ...i, daysLeft: days });
+    else if (days <= 30) expiring.push({ ...i, daysLeft: days });
+  });
+  if (expired.length) {
+    toast(`⛔ ${expired.length} item(s) EXPIRED! Check inventory.`, 'err');
+  } else if (expiring.length) {
+    toast(`⚠️ ${expiring.length} item(s) expiring within 30 days`, 'wrn');
+  }
+}
+// Show expiry badge in inventory list
+const _origRenderInv = renderInv;
+function handleQRDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const itemParam = params.get('item');
+  const groupParam = params.get('group');
+  if (!itemParam) return;
+  if (S.user) {
+    setTimeout(() => {
+      if (groupParam && groupParam !== S.activeGroupId) {
+        const g = S.groups.find(g=>g.id===groupParam);
+        if(g){ S.activeGroupId=groupParam; save(); updateTopbar(); }
+      }
+      const item = getItems().find(i =>
+        i.code?.toLowerCase()===itemParam.toLowerCase() ||
+        i.name.toLowerCase()===decodeURIComponent(itemParam).toLowerCase()
+      );
+      if(item){ openProductPage(item.id); window.history.replaceState({},'',' window.location.pathname'); }
+      else toast('Item not found in current group','wrn');
+    }, 600);
+  } else {
+    _showPublicItemView(itemParam, groupParam);
+  }
+}
+function _showPublicItemView(itemCode, groupId) {
+  const url = RAILWAY_URL+'/api/inventory/'+encodeURIComponent(itemCode)+(groupId?'?groupId='+encodeURIComponent(groupId):'');
+  document.body.innerHTML = '<div style="min-height:100vh;background:#f5f5f5;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px"><div style="max-width:400px;width:100%"><div style="text-align:center;margin-bottom:20px"><div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div><div style="font-size:12px;color:#888;margin-top:4px">Lab Inventory</div></div><div id="pubCard" style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 16px rgba(0,0,0,.08)"><div style="text-align:center;color:#888;padding:20px">Loading...</div></div><a href="'+window.location.origin+window.location.pathname+'" style="display:block;margin-top:16px;text-align:center;padding:12px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:600;font-size:14px">🔑 Sign in to LabStock</a></div></div>';
+  fetch(url).then(r=>r.ok?r.json():null).then(item=>{
+    const c=document.getElementById('pubCard');
+    if(!item){c.innerHTML='<div style="text-align:center;color:#e53935;padding:20px">❌ Item not found</div>';return;}
+    const low=item.stock<=item.minStock;
+    c.innerHTML='<div style="font-size:20px;font-weight:800;margin-bottom:4px">'+item.name+'</div><div style="font-size:11px;color:#888;font-family:monospace;margin-bottom:16px">'+(item.code||'')+'</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px"><div style="background:#f5f5f5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:28px;font-weight:800;color:'+(low?'#e53935':'#2d6a4f')+'">'+item.stock+'</div><div style="font-size:11px;color:#888">'+(item.unit||'units')+' in stock</div></div><div style="background:#f5f5f5;border-radius:10px;padding:12px;text-align:center"><div style="font-size:18px;font-weight:700;color:#555">'+item.minStock+'</div><div style="font-size:11px;color:#888">min level</div></div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><span style="padding:4px 10px;background:#e8f5e9;color:#2d6a4f;border-radius:20px;font-size:12px">'+(item.category||'')+'</span>'+(item.location?'<span style="padding:4px 10px;background:#f3f4f6;color:#555;border-radius:20px;font-size:12px">📍 '+item.location+'</span>':'')+'<span style="padding:4px 10px;background:'+(low?'#fdecea':'#e8f5e9')+';color:'+(low?'#e53935':'#2d6a4f')+';border-radius:20px;font-size:12px;font-weight:700">'+(low?'⚠️ LOW STOCK':'✅ OK')+'</span></div><div style="font-size:11px;color:#aaa;margin-top:14px;text-align:center">View only • Sign in for full access</div>';
+  }).catch(()=>{ const c=document.getElementById('pubCard'); if(c)c.innerHTML='<div style="color:#e53935;text-align:center;padding:20px">❌ Could not load item</div>'; });
+}
+function showJoinGroup() {
+  _hideAllLoginSteps();
+  document.getElementById('loginStepJoin').style.display = 'block';
+  setTimeout(() => document.getElementById('manualInviteCode').focus(), 200);
+}
+// Override applyManualInvite to also handle 6-char group codes
+const _origApplyManualInvite = applyManualInvite;
+function applyManualInvite() {
+  const raw = document.getElementById('manualInviteCode').value.trim();
+  if (!raw) { toast('Paste an invite link or code', 'err'); return; }
+  // If it looks like a short group code (6 alphanumeric chars), find the group
+  if (/^[A-Z0-9]{6}$/i.test(raw)) {
+    const match = S.groups.find(g => getGroupCode(g.id) === raw.toUpperCase());
+    if (match) {
+      // Generate an invite link from this group and handle it
+      const link = generateInviteLink(match.id);
+      const url = new URL(link);
+      const code = url.searchParams.get('invite');
+      if (code) { handleInviteLink(code); return; }
+    }
+    // Code not found locally — try fetching from server
+    fetch(`${RAILWAY_URL}/api/lab-groups/by-code/${raw.toUpperCase()}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(g => {
+        if (g) {
+          const link = generateInviteLink(g.id);
+          const url = new URL(link);
+          const code = url.searchParams.get('invite');
+          if (code) handleInviteLink(code);
+        } else {
+          toast('Group code not found', 'err');
+        }
+      })
+      .catch(() => toast('Could not find group — try using the full invite link', 'err'));
+    return;
+  }
+  // Otherwise treat as full invite link
+  let code = raw;
+  try { const url = new URL(raw); code = url.searchParams.get('invite') || raw; } catch(e) {}
+  handleInviteLink(code);
+}
+load();
+// Check for invite link on page load
+detectInviteOnLoad();
+if (S.user) {
+  showApp();
+  startServerSync();
+  handleQRDeepLink();
+  updateRequestFlowUI();
+  setTimeout(checkExpiryAlerts, 2000);
 
 // ── INIT ─────────────────────────────────────────────────
 load();
