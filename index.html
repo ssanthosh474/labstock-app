@@ -732,10 +732,79 @@ select.form-input { cursor: pointer; }
 #toast.ok { border-left: 4px solid var(--accent-l); }
 #toast.err { border-left: 4px solid var(--danger); }
 #toast.wrn { border-left: 4px solid var(--warn); }
+  /* ── PROGRESSIVE LOADING ──────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #e2ddd6 25%, #ece9e3 50%, #e2ddd6 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 6px; display: block;
+}
+.skeleton-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border-bottom: 1px solid var(--border);
+}
+.skeleton-row:last-child { border-bottom: none; }
+.skeleton-icon { width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0; }
+.skeleton-body { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.skeleton-title { height: 13px; width: 60%; }
+.skeleton-sub   { height: 10px; width: 38%; }
+
+#appSpinner {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 18px;
+  transition: opacity .35s ease;
+}
+#appSpinner.hide { opacity: 0; pointer-events: none; }
+.spinner-logo { font-size: 52px; animation: logoPulse 1.3s ease-in-out infinite; }
+@keyframes logoPulse {
+  0%,100% { transform: scale(1); }
+  50%      { transform: scale(1.12) rotate(6deg); }
+}
+.spinner-bar {
+  width: 150px; height: 4px;
+  background: var(--border); border-radius: 2px; overflow: hidden;
+}
+.spinner-fill {
+  height: 100%; background: var(--accent); border-radius: 2px;
+  animation: fillBar 1.6s ease-in-out infinite;
+}
+@keyframes fillBar {
+  0%   { width: 0%;  margin-left: 0%; }
+  50%  { width: 55%; margin-left: 22%; }
+  100% { width: 0%;  margin-left: 100%; }
+}
+.spinner-text { font-size: 12px; color: var(--muted); font-family: var(--mono); letter-spacing: 1px; }
+.mini-spin {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: _spin .7s linear infinite;
+  vertical-align: middle;
+}
+@keyframes _spin { to { transform: rotate(360deg); } }
+.sheet-loading {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; padding: 28px; color: var(--muted); font-size: 13px;
+}
+.sheet-loading::before {
+  content: ''; width: 18px; height: 18px; flex-shrink: 0;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: _spin .7s linear infinite;
+}
 </style>
 </head>
 <body>
-
+<!-- ════════ APP LOADING SPINNER ════════ -->
+<div id="appSpinner">
+  <div class="spinner-logo">🧪</div>
+  <div class="spinner-bar"><div class="spinner-fill"></div></div>
+  <div class="spinner-text">LOADING LABSTOCK</div>
+</div>
 <!-- ════════ INSTALL BANNER ════════ -->
 <div id="installBanner">
   <span style="font-size:24px">🧪</span>
@@ -1679,6 +1748,27 @@ select.form-input { cursor: pointer; }
      SCRIPTS
 ════════════════════════════════════ -->
 <script>
+  // ── SKELETON / SPINNER HELPERS (defined first so all functions can use them) ──
+function skeletonRows(n) {
+  var rows = '';
+  var count = n || 4;
+  for (var i = 0; i < count; i++) {
+    rows += '<div class="skeleton-row">' +
+      '<div class="skeleton skeleton-icon"></div>' +
+      '<div class="skeleton-body">' +
+      '<div class="skeleton skeleton-title"></div>' +
+      '<div class="skeleton skeleton-sub"></div>' +
+      '</div></div>';
+  }
+  return rows;
+}
+
+function hideAppSpinner() {
+  var el = document.getElementById('appSpinner');
+  if (!el) return;
+  el.classList.add('hide');
+  setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 380);
+}
 let S = {
   user: null, activeGroupId: null,
   groups: [], inventory: [], transactions: [], members: [],
@@ -2130,9 +2220,16 @@ function showApp() {
   document.getElementById('app').classList.add('visible');
   updateTopbar();
   loadSettings();
+  var hr = document.getElementById('homeRecent');
+  if (hr) hr.innerHTML = skeletonRows(4);
+  var kpis = ['kpiItems','kpiLow','kpiIn','kpiOut'];
+  for (var k = 0; k < kpis.length; k++) {
+    var kel = document.getElementById(kpis[k]);
+    if (kel) kel.innerHTML = '<span class="mini-spin"></span>';
+  }
   renderHome();
   updateAlertBadge();
-  // Start syncing from Railway server
+  hideAppSpinner();
   setTimeout(startServerSync, 1000);
 }
 function updateTopbar() {
@@ -2498,8 +2595,12 @@ function renderMembersSheet() {
   const pendingTab = document.getElementById('memTab-pending');
   if(pendingTab) pendingTab.textContent = pendingCount>0 ? `⏳ Pending (${pendingCount})` : '⏳ Pending';
 
-  // Show cached members instantly
-  _renderMembersList(el);
+ // Show cached members or skeleton
+  if (S.members.filter(m => m.groupId === S.activeGroupId).length > 0) {
+    _renderMembersList(el);
+  } else {
+    el.innerHTML = skeletonRows(3);
+  }
 
   // Then refresh from server in background
   fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
@@ -2509,8 +2610,10 @@ function renderMembersSheet() {
       if (!sg) return;
       // Merge server members — server is source of truth
       const serverEmails = new Set(sg.members.map(m=>m.email));
-      // Remove members that server no longer has (for this group)
-      S.members = S.members.filter(m => m.groupId !== S.activeGroupId || serverEmails.has(m.email));
+     // Only remove if server returned data — prevents wipe on network error
+      if (serverEmails.size > 0) {
+        S.members = S.members.filter(m => m.groupId !== S.activeGroupId || serverEmails.has(m.email));
+      }
       // Add any new server members
       sg.members.forEach(sm => {
         const ex = S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email);
@@ -2526,7 +2629,13 @@ function renderMembersSheet() {
     .catch(()=>{});
 }
 function _renderMembersList(el) {
-  const mems = S.members.filter(m => m.groupId === S.activeGroupId);
+  const seen = new Set();
+  const mems = S.members.filter(m => {
+    if (m.groupId !== S.activeGroupId) return false;
+    if (seen.has(m.email)) return false;
+    seen.add(m.email);
+    return true;
+  });
   const grp = S.groups.find(g => g.id === S.activeGroupId);
   // Ensure admin always appears even if not in members array
   if (grp && !mems.find(m => m.email === grp.adminEmail)) {
@@ -4111,7 +4220,7 @@ function openQRSheet() {
   document.getElementById('qrItemName').textContent = item.name;
   document.getElementById('qrItemCode').textContent = item.code || '';
 
-  const appUrl = 'https://ssanthosh474/labstock-app';
+  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
   const key = encodeURIComponent(item.code || item.name);
   const url = appUrl + '?item=' + key + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
 
@@ -4602,6 +4711,8 @@ if (S.user) {
   handleQRDeepLink();
   updateRequestFlowUI();
   setTimeout(checkExpiryAlerts, 2000);
+} else {
+  hideAppSpinner();
 }
 </script>
 </body>
