@@ -2491,9 +2491,6 @@ function renderMembersSheet() {
     document.getElementById('memPanel-pending').style.display = 'none';
     document.getElementById('memPanel-list').style.display = 'block';
   }
-  if(!document.getElementById('memPanel-list').style.display || document.getElementById('memPanel-list').style.display==='none')
-    document.getElementById('memPanel-list').style.display='block';
-
   const pendingCount = (S.pendingInvites||[]).filter(p=>p.groupId===S.activeGroupId).length;
   const pendingTab = document.getElementById('memTab-pending');
   if(pendingTab) pendingTab.textContent = pendingCount>0 ? `⏳ Pending (${pendingCount})` : '⏳ Pending';
