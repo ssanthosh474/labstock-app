@@ -4629,29 +4629,44 @@ function handleQRDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const itemParam = params.get('item');
   const groupParam = params.get('group');
-  if (!itemParam) return;
+  if (!itemParam) return false;
 
   if (S.user) {
+    // Logged-in: open product page after app loads
     setTimeout(() => {
       if (groupParam && groupParam !== S.activeGroupId) {
-        const g = S.groups.find(g=>g.id===groupParam);
-        if(g){ S.activeGroupId=groupParam; save(); updateTopbar(); }
+        const g = S.groups.find(g => g.id === groupParam);
+        if (g) { S.activeGroupId = groupParam; save(); updateTopbar(); }
       }
       const item = getItems().find(i =>
-        i.code?.toLowerCase()===itemParam.toLowerCase() ||
-        i.name.toLowerCase()===decodeURIComponent(itemParam).toLowerCase()
+        i.code?.toLowerCase() === itemParam.toLowerCase() ||
+        i.name.toLowerCase() === decodeURIComponent(itemParam).toLowerCase()
       );
-      if(item){ openProductPage(item.id); window.history.replaceState({},'',' window.location.pathname'); }
-      else toast('Item not found in current group','wrn');
+      if (item) {
+        openProductPage(item.id);
+        window.history.replaceState({}, '', window.location.pathname);
+      } else {
+        toast('Item not found in current group', 'wrn');
+      }
     }, 600);
   } else {
+    // Not logged in: show public read-only view immediately, skip login screen
+    document.getElementById('loginScreen').style.display = 'none';
+    hideAppSpinner();
     _showPublicItemView(itemParam, groupParam);
   }
+  return true;
 }
 
 function _showPublicItemView(itemCode, groupId) {
   const url = RAILWAY_URL+'/api/inventory/'+encodeURIComponent(itemCode)+(groupId?'?groupId='+encodeURIComponent(groupId):'');
-  document.body.innerHTML = '<div style="min-height:100vh;background:#f5f5f5;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px"><div style="max-width:400px;width:100%"><div style="text-align:center;margin-bottom:20px"><div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div><div style="font-size:12px;color:#888;margin-top:4px">Lab Inventory</div></div><div id="pubCard" style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 16px rgba(0,0,0,.08)"><div style="text-align:center;color:#888;padding:20px">Loading...</div></div><a href="'+window.location.origin+window.location.pathname+'" style="display:block;margin-top:16px;text-align:center;padding:12px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:600;font-size:14px">🔑 Sign in to LabStock</a></div></div>';
+  const cleanUrl = window.location.href.split('?')[0];
+  document.body.innerHTML = '<div style="min-height:100vh;background:#f5f3ee;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px"><div style="max-width:400px;width:100%">' +
+    '<div style="text-align:center;margin-bottom:20px"><div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div><div style="font-size:12px;color:#888;margin-top:4px">Lab Inventory</div></div>' +
+    '<div id="pubCard" style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 16px rgba(0,0,0,.08)"><div style="text-align:center;color:#888;padding:20px">⏳ Loading item...</div></div>' +
+    '<a href="' + cleanUrl + '" style="display:block;margin-top:16px;text-align:center;padding:14px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">🔑 Sign in for full access</a>' +
+    '<p style="text-align:center;font-size:11px;color:#aaa;margin-top:10px">Scan again after signing in to manage stock</p>' +
+    '</div></div>';
   fetch(url).then(r=>r.ok?r.json():null).then(item=>{
     const c=document.getElementById('pubCard');
     if(!item){c.innerHTML='<div style="text-align:center;color:#e53935;padding:20px">❌ Item not found</div>';return;}
@@ -4705,13 +4720,15 @@ function applyManualInvite() {
 load();
 // Check for invite link on page load
 detectInviteOnLoad();
+// Check QR deep link first — non-users go to public view, not login
+const _isQRLink = handleQRDeepLink();
 if (S.user) {
   showApp();
   startServerSync();
-  handleQRDeepLink();
   updateRequestFlowUI();
   setTimeout(checkExpiryAlerts, 2000);
-} else {
+} else if (!_isQRLink) {
+  // Only show login if NOT a QR scan
   hideAppSpinner();
 }
 </script>
