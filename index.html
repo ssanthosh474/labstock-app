@@ -4142,17 +4142,45 @@ function printQR() {
   if (!canvas) { toast('QR not ready', 'wrn'); return; }
   const dataUrl = canvas.toDataURL('image/png');
   const w = window.open('', '_blank');
-  w.document.write('<!DOCTYPE html><html><head><title>QR - ' + item.name + '</title>' +
-    '<style>body{font-family:sans-serif;text-align:center;padding:40px}' +
-    'img{width:220px;height:220px;display:block;margin:0 auto 16px}' +
-    'h2{margin:0 0 4px;font-size:18px}p{margin:0;color:#666;font-size:13px}</style></head>' +
-    '<body onload="window.print()">' +
-    '<img src="' + dataUrl + '">' +
-    '<h2>' + item.name + '</h2>' +
-    '<p>' + (item.code||'') + ' &bull; ' + (item.category||'') + '</p>' +
-    '<p style="margin-top:6px;font-size:11px">LabStock Inventory</p>' +
-    '</body></html>');
-  w.document.close();
+  w.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+  <title>QR - ${item.name}</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 40px;
+    }
+    img {
+      width: 220px;
+      height: 220px;
+      display: block;
+      margin: 0 auto 16px;
+    }
+    h2 {
+      margin: 0 0 4px;
+      font-size: 18px;
+    }
+    p {
+      margin: 0;
+      color: #666;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body onload="window.print()">
+  <img src="${dataUrl}">
+  <h2>${item.name}</h2>
+  <p>${item.code || ''} &bull; ${item.category || ''}</p>
+  <p style="margin-top:6px;font-size:11px">
+    LabStock Inventory
+  </p>
+</body>
+</html>
+`);
+w.document.close();
 }
 
 function openQRPrintAll() {
