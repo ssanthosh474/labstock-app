@@ -4111,7 +4111,7 @@ function openQRSheet() {
   document.getElementById('qrItemName').textContent = item.name;
   document.getElementById('qrItemCode').textContent = item.code || '';
 
-  const appUrl = 'https://ssanthosh474.github.io/labstock-app/view.html';
+  const appUrl = 'https://ssanthosh474/labstock-app/blob/main/view.html';
   const key = encodeURIComponent(item.code || item.name);
   const url = appUrl + '?item=' + key + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
 
