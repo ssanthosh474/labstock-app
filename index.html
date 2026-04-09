@@ -2319,7 +2319,7 @@ function renderGroupSheet() {
     return `
     <div style="background:${active?'var(--accent-bg)':'var(--surface2)'};border:1.5px solid ${active?'var(--accent-l)':'var(--border)'};border-radius:var(--r);padding:14px;transition:box-shadow .15s">
       <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
-        <div onclick="setGroup('${g.id}')" style="font-weight:700;font-size:15px;cursor:pointer;flex:1;line-height:1.3">
+        <div onclick="setGroup('${g.id}')" style="font-weight:700;font-size:15px;cursor:pointer;flex:1;line-height:1.3;min-width:0;overflow:hidden;word-break:break-word;">
           🧪 ${g.name}
           ${active?'<span class="badge bg-green" style="font-size:10px;margin-left:5px;vertical-align:middle">Active</span>':''}
         </div>
