@@ -4756,14 +4756,8 @@ function _showPublicItemView(itemCode, groupId) {
     });
 }
 
-function showJoinGroup() {
-  _hideAllLoginSteps();
-  document.getElementById('loginStepJoin').style.display = 'block';
-  setTimeout(() => document.getElementById('manualInviteCode').focus(), 200);
-}
 
-// Override applyManualInvite to also handle 6-char group codes
-const _origApplyManualInvite = applyManualInvite;
+// applyManualInvite — handles both invite links and 6-char group codes
 function applyManualInvite() {
   const raw = document.getElementById('manualInviteCode').value.trim();
   if (!raw) { toast('Paste an invite link or code', 'err'); return; }
