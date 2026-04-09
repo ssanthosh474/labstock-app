@@ -4296,81 +4296,54 @@ w.document.close();
 function openQRPrintAll() {
   const items = getItems();
   if (!items.length) { toast('No items to print', 'wrn'); return; }
+  
   const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
   const groupName = S.groups.find(g => g.id === S.activeGroupId)?.name || '';
-  toast('Opening print view…', 'ok');
-
-  const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>QR Codes - LabStock</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; padding: 16px; background: #fff; }
-  h1 { font-size: 16px; margin-bottom: 14px; color: #2d6a4f; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
-  .cell { text-align: center; padding: 10px 6px; border: 1px solid #eee; border-radius: 8px; break-inside: avoid; }
-  .qr-wrap { width: 110px; height: 110px; margin: 0 auto 6px; display: flex; align-items: center; justify-content: center; }
-  .qr-wrap canvas, .qr-wrap img { max-width: 110px; max-height: 110px; }
-  .name { font-size: 10px; font-weight: 700; line-height: 1.3; margin-bottom: 2px; }
-  .code { font-size: 9px; color: #888; font-family: monospace; }
-  button { background: #2d6a4f; color: white; border: none; padding: 10px 24px; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 16px; }
-  @media print { button { display: none; } body { padding: 8px; } .grid { gap: 8px; } }
-</style>
-</head>
-<body>
-<h1>🧪 LabStock QR Codes — ${groupName}</h1>
-<button onclick="window.print()">🖨️ Print / Save as PDF</button>
-<div class="grid" id="grid"></div>
-<script>
-  const items = ${JSON.stringify(items.map(i => ({
-    id: i.id,
+  
+  // Prepare data in parent scope
+  const itemData = JSON.stringify(items.map(i => ({
     name: i.name,
     code: i.code || '',
     category: i.category || ''
-  })))};
-  const appUrl = '${appUrl}';
-  const grid = document.getElementById('grid');
+  })));
 
-  items.forEach(function(item) {
-    const url = appUrl + '?item=' + encodeURIComponent(item.code || item.name) +
-      '&name=' + encodeURIComponent(item.name);
+  const win = window.open('', '_blank');
+  if (!win) { toast('Allow popups for this site', 'err'); return; }
 
-    const cell = document.createElement('div');
-    cell.className = 'cell';
-
-    const wrap = document.createElement('div');
-    wrap.className = 'qr-wrap';
-
-    const nameEl = document.createElement('div');
-    nameEl.className = 'name';
-    nameEl.textContent = item.name;
-
-    const codeEl = document.createElement('div');
-    codeEl.className = 'code';
-    codeEl.textContent = (item.code || '—') + ' · ' + (item.category || '');
-
-    cell.appendChild(wrap);
-    cell.appendChild(nameEl);
-    cell.appendChild(codeEl);
-    grid.appendChild(cell);
-
-    new QRCode(wrap, {
-      text: url,
-      width: 110,
-      height: 110,
-      colorDark: '#000000',
-      colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
-    });
-  });
-<\/script>
-</body>
-</html>`);
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>QR Codes</title>' +
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>' +
+    '<style>' +
+    '* { box-sizing:border-box; margin:0; padding:0; }' +
+    'body { font-family:Arial,sans-serif; padding:16px; background:#fff; }' +
+    'h2 { font-size:16px; margin-bottom:12px; color:#2d6a4f; }' +
+    '.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; }' +
+    '.cell { text-align:center; padding:10px 6px; border:1px solid #eee; border-radius:8px; page-break-inside:avoid; break-inside:avoid; }' +
+    '.qr { width:120px; height:120px; margin:0 auto 6px; }' +
+    '.name { font-size:10px; font-weight:700; line-height:1.3; margin-bottom:2px; word-break:break-word; }' +
+    '.code { font-size:9px; color:#888; font-family:monospace; }' +
+    'button { background:#2d6a4f; color:white; border:none; padding:10px 24px; border-radius:6px; font-size:14px; cursor:pointer; margin-bottom:16px; display:block; }' +
+    '@media print { button{display:none} body{padding:4px} }' +
+    '<\/style><\/head><body>' +
+    '<h2>🧪 LabStock QR Codes — ' + groupName + '<\/h2>' +
+    '<button onclick="window.print()">🖨️ Print \/ Save as PDF<\/button>' +
+    '<div class="grid" id="qrGrid"><\/div>' +
+    '<script>' +
+    'var ITEMS = ' + itemData + ';' +
+    'var APP_URL = "' + appUrl + '";' +
+    'var grid = document.getElementById("qrGrid");' +
+    'ITEMS.forEach(function(item) {' +
+    '  var url = APP_URL + "?item=" + encodeURIComponent(item.code || item.name) + "&name=" + encodeURIComponent(item.name);' +
+    '  var cell = document.createElement("div"); cell.className = "cell";' +
+    '  var qDiv = document.createElement("div"); qDiv.className = "qr";' +
+    '  var nm = document.createElement("div"); nm.className = "name"; nm.textContent = item.name;' +
+    '  var cd = document.createElement("div"); cd.className = "code"; cd.textContent = (item.code||"—") + " · " + (item.category||"");' +
+    '  cell.appendChild(qDiv); cell.appendChild(nm); cell.appendChild(cd);' +
+    '  grid.appendChild(cell);' +
+    '  new QRCode(qDiv, { text: url, width: 120, height: 120, colorDark:"#000", colorLight:"#fff", correctLevel: QRCode.CorrectLevel.M });' +
+    '});' +
+    '<\/script><\/body><\/html>');
   win.document.close();
+  toast('Print view opened!', 'ok');
 }
 
 function toggleRequestFlow(enabled) {
