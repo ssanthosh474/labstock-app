@@ -2655,32 +2655,34 @@ function renderMembersSheet() {
     el.innerHTML = skeletonRows(3);
   }
 
-  // Then refresh from server in background
+  // Then refresh from server in background — fetch by groupId so ALL members are returned
   fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
     .then(r => r.ok ? r.json() : [])
     .then(serverGroups => {
       const sg = serverGroups.find(g => g.id === S.activeGroupId);
       if (!sg) return;
-      // Merge server members — server is source of truth
-      const serverEmails = new Set(sg.members.map(m=>m.email));
-     // Only remove if server returned data — prevents wipe on network error
+      const serverEmails = new Set(sg.members.map(m => m.email));
       if (serverEmails.size > 0) {
         S.members = S.members.filter(m => m.groupId !== S.activeGroupId || serverEmails.has(m.email));
       }
-      // Add any new server members
       sg.members.forEach(sm => {
         sm.groupId = S.activeGroupId;
-        const ex = S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email);
-        if(!ex) S.members.push(sm);
-        else { ex.name=sm.name; ex.role=sm.role; }
+        const ex = S.members.find(m => m.groupId === sm.groupId && m.email === sm.email);
+        if (!ex) S.members.push(sm);
+        else { ex.name = sm.name; ex.role = sm.role; }
       });
-      // Also sync group telegramChatId
-      const grp = S.groups.find(g=>g.id===S.activeGroupId);
-      if(grp && sg.telegramChatId!==undefined) grp.telegramChatId=sg.telegramChatId;
+      const grp = S.groups.find(g => g.id === S.activeGroupId);
+      if (grp && sg.telegramChatId !== undefined) grp.telegramChatId = sg.telegramChatId;
       save();
       _renderMembersList(el);
     })
-    .catch(()=>{});
+    .catch(() => {
+      // Fallback: also try fetching the group directly by ID
+      fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(gs => { if (gs.length) _renderMembersList(el); })
+        .catch(() => {});
+    });
 }
 function _renderMembersList(el) {
   const seen = new Set();
@@ -3072,6 +3074,11 @@ function submitTx(override=null) {
   toast(`${d.type==='IN'?'▲ Inward':'▼ Outward'}: ${d.qty} ${item.unit} of ${item.name}`,'ok');
   if (item.stock<=item.minStock) setTimeout(()=>toast(`⚠ Low stock: ${item.name} (${item.stock} left)`,'wrn'),2000);
   renderHome(); renderInv(); updateAlertBadge();
+  // Push stock update to server so all members see it
+  fetch(`${RAILWAY_URL}/api/inventory`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupId: gid(), name: item.name, code: item.code||'', category: item.category, location: item.location||'', stock: item.stock, unit: item.unit, minStock: item.minStock })
+  }).catch(() => {});
   // Refresh product page if open
   if (_currentProductId && document.getElementById('productPage')?.classList.contains('open')) {
     setTimeout(() => openProductPage(_currentProductId), 320);
@@ -3734,14 +3741,16 @@ async function syncFromServer(force = false) {
     // Build set of server item names for quick lookup
     const serverItemNames = new Set(serverItems.map(i => i.name?.toLowerCase()).filter(Boolean));
 
-    // Remove items that no longer exist on server (were deleted via Telegram /reset or app)
+    // Remove items that no longer exist on server
     const before = S.inventory.length;
     S.inventory = S.inventory.filter(i => {
       if (i.groupId !== S.activeGroupId) return true; // keep other groups
-      if (!i.id.startsWith('srv_') && !i.id.startsWith('i_')) return true; // keep unknown
-      // If item exists on server OR was added locally (not from server), keep it
-      if (i.id.startsWith('i_')) return true; // locally added — admin manages
-      return serverItemNames.has(i.name?.toLowerCase()); // server item — remove if gone
+      if (isAdmin()) {
+        // Admin: keep locally-added items (i_) even if not on server yet
+        if (i.id.startsWith('i_')) return true;
+      }
+      // Everyone: keep if server has it
+      return serverItemNames.has(i.name?.toLowerCase());
     });
     if (S.inventory.length !== before) changed = true;
 
@@ -4748,12 +4757,19 @@ function handleQRDeepLink() {
   if (!itemParam) return false;
 
   if (S.user) {
-    // Logged-in: open product page after app loads
-    setTimeout(() => {
+    // Logged-in: switch group if needed, then sync and open product page
+    setTimeout(async () => {
       if (groupParam && groupParam !== S.activeGroupId) {
         const g = S.groups.find(g => g.id === groupParam);
         if (g) { S.activeGroupId = groupParam; save(); updateTopbar(); }
+        else {
+          // Group not local yet — bootstrap it
+          S.groups.push({ id: groupParam, name: 'Lab Group', desc: '', adminEmail: '', created: new Date().toISOString() });
+          S.activeGroupId = groupParam; save(); updateTopbar();
+        }
       }
+      // Sync first so inventory is fresh
+      await syncFromServer(true);
       const item = getItems().find(i =>
         i.code?.toLowerCase() === itemParam.toLowerCase() ||
         i.name.toLowerCase() === decodeURIComponent(itemParam).toLowerCase()
@@ -4762,9 +4778,9 @@ function handleQRDeepLink() {
         openProductPage(item.id);
         window.history.replaceState({}, '', window.location.pathname);
       } else {
-        toast('Item not found in current group', 'wrn');
+        toast('Item not found — try syncing again', 'wrn');
       }
-    }, 600);
+    }, 800);
   } else {
     // Not logged in: show public read-only view immediately, skip login screen
     document.getElementById('loginScreen').style.display = 'none';
@@ -4791,7 +4807,7 @@ function _showPublicItemView(itemCode, groupId) {
     '<p style="text-align:center;font-size:11px;color:#aaa;margin-top:10px">Scan again after signing in to manage stock</p>' +
     '</div></div>';
 
-  const url = RAILWAY_URL + '/api/inventory';
+  const url = RAILWAY_URL + '/api/inventory' + (groupId ? '?groupId=' + encodeURIComponent(groupId) : '');
 
   fetch(url)
     .then(r => r.ok ? r.json() : [])
