@@ -1777,6 +1777,39 @@ let S = {
   itemRequests: [],   // { id, groupId, itemId, itemName, qty, unit, requestedBy, requestedAt, status, note, decidedBy, decidedAt }
   settings: { threshold: 10, channel: '#lab-inventory', webhook: '', notifyLow: true, requestFlowEnabled: false },
   txType: 'IN'
+  // ------------------------------
+// ONE-TIME MIGRATION FIX (v1)
+// Fixes missing groupId on members
+// ------------------------------
+(function migrate_v1() {
+  try {
+    const flag = localStorage.getItem('migrated_v1');
+    if (flag) return; // Already migrated
+
+    const raw = localStorage.getItem('ls2');
+    if (!raw) {
+      localStorage.setItem('migrated_v1', '1');
+      return; // Nothing to clean
+    }
+
+    const data = JSON.parse(raw);
+
+    // If members exist but any are missing groupId, clean and resync
+    const hasCorruptMembers = (data.members || []).some(m => !m.groupId);
+
+    if (hasCorruptMembers) {
+      console.warn('[MIGRATION] Corrupt members found — clearing ls2 and reloading...');
+      localStorage.removeItem('ls2');
+      localStorage.setItem('migrated_v1', '1'); // mark migration done
+      location.reload();
+    } else {
+      // Everything looks correct
+      localStorage.setItem('migrated_v1', '1');
+    }
+  } catch (e) {
+    console.error('Migration error:', e);
+  }
+})();
 };
 
 function save() { localStorage.setItem('ls2', JSON.stringify(S)); }
