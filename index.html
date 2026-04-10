@@ -2528,22 +2528,43 @@ function generateInviteLink(groupId) {
 
 function handleInviteLink(code) {
   try {
-    // Try new JSON format first
+    // Strip whitespace and any URL encoding
+    code = (code || '').trim();
+    // If a full URL was passed, extract the invite param
+    if (code.includes('?') || code.includes('invite=')) {
+      try {
+        const u = new URL(code.includes('://') ? code : 'https://x.com/?' + code.split('?').pop());
+        const extracted = u.searchParams.get('invite');
+        if (extracted) code = extracted;
+      } catch(e) {}
+    }
+
     let groupId, groupName, groupDesc, adminEmail;
     try {
-      const payload = JSON.parse(decodeURIComponent(escape(atob(code))));
-      groupId = payload.gid;
+      // Decode base64 safely without deprecated escape()
+      const jsonStr = decodeURIComponent(atob(code).split('').map(c =>
+        '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      ).join(''));
+      const payload = JSON.parse(jsonStr);
+      groupId   = payload.gid;
       groupName = payload.name;
       groupDesc = payload.desc || '';
       adminEmail = payload.adminEmail || '';
     } catch(e) {
       // Fallback: old format "groupId|timestamp"
-      const decoded = atob(code);
-      groupId = decoded.split('|')[0];
-      groupName = localStorage.getItem('invite_group_' + groupId) || 'Lab Group';
-      groupDesc = '';
-      adminEmail = '';
+      try {
+        const decoded = atob(code);
+        groupId   = decoded.split('|')[0];
+        groupName = 'Lab Group';
+        groupDesc = '';
+        adminEmail = '';
+      } catch(e2) {
+        toast('Invalid invite link or code', 'err');
+        return;
+      }
     }
+
+    if (!groupId) { toast('Invalid invite — missing group ID', 'err'); return; }
 
     // Bootstrap group on this device if not present
     let g = S.groups.find(g => g.id === groupId);
@@ -2552,7 +2573,7 @@ function handleInviteLink(code) {
       S.groups.push(g);
     }
 
-    // Check if already a member
+    // Add member locally
     const already = S.members.find(m => m.groupId === groupId && m.email === S.user?.email);
     if (!already) {
       S.members.push({
@@ -2567,12 +2588,21 @@ function handleInviteLink(code) {
 
     S.activeGroupId = groupId;
     save();
+
+    // Push member to server so admin sees them
+    fetch(`${RAILWAY_URL}/api/lab-members`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        groupId, email: S.user.email,
+        name: S.user.name, role: 'member',
+        joined: new Date().toISOString()
+      })
+    }).catch(() => {});
+
     showApp();
-    // Immediately sync inventory from server so member sees the group's stock
     setTimeout(() => syncFromServer(true), 800);
     toast(`✅ Joined "${groupName}"! Loading inventory...`, 'ok');
   } catch(e) {
-    showApp();
     toast('Invalid invite link', 'err');
   }
 }
@@ -4815,40 +4845,61 @@ function _showPublicItemView(itemCode, groupId) {
 }
 
 
-// applyManualInvite — handles both invite links and 6-char group codes
+// applyManualInvite — handles invite links AND 6-char group codes
 function applyManualInvite() {
   const raw = document.getElementById('manualInviteCode').value.trim();
   if (!raw) { toast('Paste an invite link or code', 'err'); return; }
-  // If it looks like a short group code (6 alphanumeric chars), find the group
-  if (/^[A-Z0-9]{6}$/i.test(raw)) {
-    const match = S.groups.find(g => getGroupCode(g.id) === raw.toUpperCase());
-    if (match) {
-      // Generate an invite link from this group and handle it
-      const link = generateInviteLink(match.id);
-      const url = new URL(link);
-      const code = url.searchParams.get('invite');
-      if (code) { handleInviteLink(code); return; }
+
+  // Extract invite param from URL if present
+  let code = raw;
+  if (raw.includes('invite=')) {
+    const match = raw.match(/[?&]invite=([^&]+)/);
+    if (match) code = decodeURIComponent(match[1]);
+  }
+
+  // 6-char group code
+  if (/^[A-Z0-9]{6}$/i.test(code)) {
+    // Check locally first
+    const localMatch = S.groups.find(g => getGroupCode(g.id) === code.toUpperCase());
+    if (localMatch) {
+      _joinGroupDirectly(localMatch.id, localMatch.name, localMatch.desc, localMatch.adminEmail);
+      return;
     }
-    // Code not found locally — try fetching from server
-    fetch(`${RAILWAY_URL}/api/lab-groups/by-code/${raw.toUpperCase()}`)
+    // Fetch from server
+    fetch(`${RAILWAY_URL}/api/lab-groups/by-code/${code.toUpperCase()}`)
       .then(r => r.ok ? r.json() : null)
       .then(g => {
-        if (g) {
-          const link = generateInviteLink(g.id);
-          const url = new URL(link);
-          const code = url.searchParams.get('invite');
-          if (code) handleInviteLink(code);
-        } else {
-          toast('Group code not found', 'err');
-        }
+        if (g) _joinGroupDirectly(g.id, g.name, g.desc, g.adminEmail);
+        else toast('Group code not found', 'err');
       })
-      .catch(() => toast('Could not find group — try using the full invite link', 'err'));
+      .catch(() => toast('Could not reach server — try the full invite link', 'err'));
     return;
   }
-  // Otherwise treat as full invite link
-  let code = raw;
-  try { const url = new URL(raw); code = url.searchParams.get('invite') || raw; } catch(e) {}
+
+  // Full invite link or bare base64 code
   handleInviteLink(code);
+}
+
+// Join a group directly by ID (used by group code path)
+function _joinGroupDirectly(groupId, groupName, groupDesc, adminEmail) {
+  let g = S.groups.find(g => g.id === groupId);
+  if (!g) {
+    g = { id: groupId, name: groupName || 'Lab Group', desc: groupDesc || '', adminEmail: adminEmail || '', created: new Date().toISOString() };
+    S.groups.push(g);
+  }
+  const already = S.members.find(m => m.groupId === groupId && m.email === S.user?.email);
+  if (!already) {
+    S.members.push({ id: 'm_' + Date.now(), groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() });
+  }
+  S.activeGroupId = groupId;
+  save();
+  fetch(`${RAILWAY_URL}/api/lab-members`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() })
+  }).catch(() => {});
+  showApp();
+  setTimeout(() => syncFromServer(true), 800);
+  toast(`✅ Joined "${groupName}"! Loading inventory...`, 'ok');
 }
 load();
 // Check for invite link on page load
