@@ -2589,14 +2589,19 @@ function handleInviteLink(code) {
     S.activeGroupId = groupId;
     save();
 
-    // Push member to server so admin sees them
+    // Push member to server — retry once after 3s if group not synced yet
+    const memberPayload = { groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() };
     fetch(`${RAILWAY_URL}/api/lab-members`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        groupId, email: S.user.email,
-        name: S.user.name, role: 'member',
-        joined: new Date().toISOString()
-      })
+      body: JSON.stringify(memberPayload)
+    }).then(r => {
+      if (r.status === 404) {
+        // Group not on server yet — retry after 4s (admin needs to login first)
+        setTimeout(() => fetch(`${RAILWAY_URL}/api/lab-members`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(memberPayload)
+        }).catch(() => {}), 4000);
+      }
     }).catch(() => {});
 
     showApp();
@@ -4909,9 +4914,17 @@ function _joinGroupDirectly(groupId, groupName, groupDesc, adminEmail) {
   }
   S.activeGroupId = groupId;
   save();
+  const memberPayload = { groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() };
   fetch(`${RAILWAY_URL}/api/lab-members`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() })
+    body: JSON.stringify(memberPayload)
+  }).then(r => {
+    if (r.status === 404) {
+      setTimeout(() => fetch(`${RAILWAY_URL}/api/lab-members`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(memberPayload)
+      }).catch(() => {}), 4000);
+    }
   }).catch(() => {});
   showApp();
   setTimeout(() => syncFromServer(true), 800);
