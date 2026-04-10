@@ -1,42 +1,28 @@
-const CACHE_NAME = 'labstock-v3';
+// ----------------------------------------
+// FIXED SERVICE WORKER (v4)
+// Prevents app from freezing on old cached HTML
+// ----------------------------------------
+
+const CACHE_NAME = 'labstock-v4';  // bump version so all devices update
 
 self.addEventListener('install', event => {
-  // Only cache the main page — no external URLs
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(['/labstock-app/', '/labstock-app/index.html']).catch(() => {});
-    })
-  );
-  self.skipWaiting();
+  // Do NOT cache index.html or app shell
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', event => {
+  // Delete ALL previous caches from v1 / v2 / v3
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      Promise.all(keys.map(k => caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
+// Always fetch fresh files; only fallback to cache if network fails
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
-  if (event.request.url.startsWith('chrome-extension')) return;
-  // Don't cache external APIs or Railway server
-  if (event.request.url.includes('railway.app')) return;
-  if (event.request.url.includes('api.telegram.org')) return;
-  if (event.request.url.includes('placeholder.com')) return;
-  if (event.request.url.includes('cdn-cgi')) return;
-
   event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone)).catch(() => {});
-        }
-        return response;
-      })
-      .catch(() => caches.match(event.request))
+    fetch(event.request).catch(() => caches.match(event.request))
   );
 });
