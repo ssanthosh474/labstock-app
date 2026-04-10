@@ -2617,6 +2617,7 @@ function renderMembersSheet() {
       }
       // Add any new server members
       sg.members.forEach(sm => {
+        sm.groupId = S.activeGroupId;
         const ex = S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email);
         if(!ex) S.members.push(sm);
         else { ex.name=sm.name; ex.role=sm.role; }
