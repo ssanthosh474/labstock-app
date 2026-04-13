@@ -1580,6 +1580,7 @@ select.form-input { cursor: pointer; }
     </div>
     <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
       <button class="btn btn-danger btn-full" onclick="logout()">Sign Out</button>
+      <button class="btn btn-ghost btn-full" onclick="fixMyAccount()" style="font-size:13px;color:var(--warn);border-color:var(--warn)">🔧 Fix My Account</button>
       <button class="btn btn-ghost btn-full" onclick="closeSheet('profileSheet')">Close</button>
     </div>
   </div>
@@ -2273,6 +2274,21 @@ function logout() {
   document.getElementById('loginStep1').style.display = 'block';
   document.getElementById('loginFootnote').textContent = 'Sign in with Google or email. Members join via invite link.';
   closeSheet('profileSheet');
+}
+
+function fixMyAccount() {
+  if (!confirm('This will clear your local data and re-sync from the server.\n\nYour account and group data are safe on the server. Continue?')) return;
+  // Preserve user identity so they auto-login after reload
+  const user = S.user ? { email: S.user.email, name: S.user.name, picture: S.user.picture } : null;
+  // Clear everything local
+  localStorage.clear();
+  // Re-save just the user so login is automatic
+  if (user) {
+    const fresh = { user, activeGroupId: null, groups: [], inventory: [], transactions: [], members: [], pendingInvites: [], itemRequests: [], settings: { threshold: 10, channel: '#lab-inventory', webhook: '', notifyLow: true, requestFlowEnabled: false }, txType: 'IN' };
+    localStorage.setItem('ls2', JSON.stringify(fresh));
+  }
+  toast('🔧 Fixing account — reloading...', 'ok');
+  setTimeout(() => location.reload(), 800);
 }
 
 function showApp() {
