@@ -4818,18 +4818,31 @@ async function _syncGroupsBackground(user) {
     // Upload local-only groups (admin's groups not on server — happens after Railway restart)
     for (const lg of S.groups.filter(g => g.adminEmail === user.email)) {
       if (!serverGroupIds.has(lg.id)) {
+        // Group missing from server entirely — push everything
         await fetch(`${RAILWAY_URL}/api/lab-groups`, { method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({id:lg.id,name:lg.name,desc:lg.desc||'',adminEmail:lg.adminEmail,adminName:user.name,created:lg.created||new Date().toISOString()})}).catch(()=>{});
         for (const m of S.members.filter(m => m.groupId === lg.id)) {
           await fetch(`${RAILWAY_URL}/api/lab-members`, { method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({id:m.id,groupId:m.groupId,email:m.email,name:m.name,role:m.role||'member',joined:m.joined||new Date().toISOString()})}).catch(()=>{});
         }
+        // Push Telegram link if exists
+        if (lg.telegramChatId) {
+          await fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(lg.id)}/telegram`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({chatId: lg.telegramChatId})}).catch(()=>{});
+        }
       } else {
-        // Group exists on server — but check if inventory is missing (post-crash)
+        // Group exists on server — always re-push telegramChatId (may be lost after crash)
+        const sg = serverGroups.find(g => g.id === lg.id);
+        if (lg.telegramChatId && lg.telegramChatId !== sg?.telegramChatId) {
+          await fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(lg.id)}/telegram`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({chatId: lg.telegramChatId})}).catch(()=>{});
+        }
+        // Re-push inventory if server has none (post-crash recovery)
         const invRes = await fetch(`${RAILWAY_URL}/api/inventory?groupId=${encodeURIComponent(lg.id)}`);
         const serverItems = invRes.ok ? await invRes.json() : [];
         if (serverItems.length === 0) {
-          // Server has no inventory for this group — re-push all local items
           const localItems = S.inventory.filter(i => i.groupId === lg.id);
           if (localItems.length > 0) {
             console.log(`[SYNC] Re-pushing ${localItems.length} items to server after crash`);
@@ -4842,8 +4855,7 @@ async function _syncGroupsBackground(user) {
             }).catch(()=>{});
           }
         }
-        // Also re-push members if server has fewer than local
-        const sg = serverGroups.find(g => g.id === lg.id);
+        // Re-push any members missing from server
         const serverMemberEmails = new Set((sg?.members||[]).map(m => m.email));
         for (const m of S.members.filter(m => m.groupId === lg.id)) {
           if (!serverMemberEmails.has(m.email)) {
