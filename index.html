@@ -2649,7 +2649,6 @@ function handleInviteLink(code) {
       body: JSON.stringify(memberPayload)
     }).then(r => {
       if (r.status === 404) {
-        // Group not on server yet — retry after 4s (admin needs to login first)
         setTimeout(() => fetch(`${RAILWAY_URL}/api/lab-members`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(memberPayload)
@@ -2658,7 +2657,39 @@ function handleInviteLink(code) {
     }).catch(() => {});
 
     showApp();
-    setTimeout(() => syncFromServer(true), 800);
+
+    // Fetch full group data from server to replace the bare invite stub
+    // This gets real telegramChatId, all members, correct name etc.
+    fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user.email)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(serverGroups => {
+        const sg = serverGroups.find(g => g.id === groupId);
+        if (sg) {
+          // Update local group with real server data
+          const localG = S.groups.find(g => g.id === groupId);
+          if (localG) {
+            localG.name = sg.name;
+            localG.desc = sg.desc || '';
+            localG.adminEmail = sg.adminEmail || '';
+            localG.telegramChatId = sg.telegramChatId || null;
+          }
+          // Merge all members
+          (sg.members || []).forEach(sm => {
+            sm.groupId = groupId;
+            const ex = S.members.find(m => m.groupId === groupId && m.email === sm.email);
+            if (!ex) S.members.push(sm);
+            else { ex.name = sm.name; ex.role = sm.role; }
+          });
+          save();
+          updateTopbar();
+          renderHome();
+          updateAlertBadge();
+        }
+        // Sync inventory after group is updated
+        syncFromServer(true);
+      })
+      .catch(() => syncFromServer(true));
+
     toast(`✅ Joined "${groupName}"! Loading inventory...`, 'ok');
   } catch(e) {
     toast('Invalid invite link', 'err');
@@ -4980,7 +5011,33 @@ function _joinGroupDirectly(groupId, groupName, groupDesc, adminEmail) {
     }
   }).catch(() => {});
   showApp();
-  setTimeout(() => syncFromServer(true), 800);
+  // Fetch full group data from server — fixes telegramChatId, members, real name
+  fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user.email)}`)
+    .then(r => r.ok ? r.json() : [])
+    .then(serverGroups => {
+      const sg = serverGroups.find(g => g.id === groupId);
+      if (sg) {
+        const localG = S.groups.find(g => g.id === groupId);
+        if (localG) {
+          localG.name = sg.name;
+          localG.desc = sg.desc || '';
+          localG.adminEmail = sg.adminEmail || '';
+          localG.telegramChatId = sg.telegramChatId || null;
+        }
+        (sg.members || []).forEach(sm => {
+          sm.groupId = groupId;
+          const ex = S.members.find(m => m.groupId === groupId && m.email === sm.email);
+          if (!ex) S.members.push(sm);
+          else { ex.name = sm.name; ex.role = sm.role; }
+        });
+        save();
+        updateTopbar();
+        renderHome();
+        updateAlertBadge();
+      }
+      syncFromServer(true);
+    })
+    .catch(() => syncFromServer(true));
   toast(`✅ Joined "${groupName}"! Loading inventory...`, 'ok');
 }
 load();
