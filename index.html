@@ -2276,19 +2276,77 @@ function logout() {
   closeSheet('profileSheet');
 }
 
-function fixMyAccount() {
-  if (!confirm('This will clear your local data and re-sync from the server.\n\nYour account and group data are safe on the server. Continue?')) return;
-  // Preserve user identity so they auto-login after reload
-  const user = S.user ? { email: S.user.email, name: S.user.name, picture: S.user.picture } : null;
-  // Clear everything local
-  localStorage.clear();
-  // Re-save just the user so login is automatic
-  if (user) {
-    const fresh = { user, activeGroupId: null, groups: [], inventory: [], transactions: [], members: [], pendingInvites: [], itemRequests: [], settings: { threshold: 10, channel: '#lab-inventory', webhook: '', notifyLow: true, requestFlowEnabled: false }, txType: 'IN' };
+async function fixMyAccount() {
+  if (!confirm('This will clear your local data and re-sync from the server.\n\nContinue?')) return;
+  const user = S.user;
+  if (!user) { toast('Not logged in', 'err'); return; }
+
+  toast('🔧 Fetching your account from server...', 'ok');
+
+  try {
+    // Step 1: fetch groups from server for this user
+    const res = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
+    const serverGroups = res.ok ? await res.json() : [];
+
+    if (!serverGroups.length) {
+      // Server has no groups for this user — show invite input
+      toast('No groups found on server. Ask admin to share the invite link again.', 'wrn');
+      // Still clear and reload so they can join fresh
+      const fresh = { user: { email: user.email, name: user.name, picture: user.picture }, activeGroupId: null, groups: [], inventory: [], transactions: [], members: [], pendingInvites: [], itemRequests: [], settings: S.settings, txType: 'IN' };
+      localStorage.clear();
+      localStorage.setItem('ls2', JSON.stringify(fresh));
+      setTimeout(() => location.reload(), 1500);
+      return;
+    }
+
+    // Step 2: Find the group this user belongs to (not as admin)
+    const myGroup = serverGroups.find(g =>
+      g.adminEmail === user.email ||
+      (g.members || []).some(m => m.email === user.email)
+    );
+
+    if (!myGroup) {
+      toast('Server found groups but you are not a member. Contact admin.', 'err');
+      return;
+    }
+
+    // Step 3: Rebuild clean local state from server data
+    const cleanGroups = serverGroups.map(g => ({
+      id: g.id, name: g.name, desc: g.desc || '',
+      adminEmail: g.adminEmail, telegramChatId: g.telegramChatId || null,
+      created: g.created || new Date().toISOString()
+    }));
+
+    const cleanMembers = [];
+    serverGroups.forEach(g => {
+      (g.members || []).forEach(m => {
+        if (!cleanMembers.find(x => x.groupId === g.id && x.email === m.email)) {
+          cleanMembers.push({ ...m, groupId: g.id });
+        }
+      });
+    });
+
+    const fresh = {
+      user: { email: user.email, name: user.name, picture: user.picture },
+      activeGroupId: myGroup.id,
+      groups: cleanGroups,
+      members: cleanMembers,
+      inventory: [], transactions: [],
+      pendingInvites: [], itemRequests: [],
+      settings: S.settings,
+      txType: 'IN'
+    };
+
+    localStorage.clear();
     localStorage.setItem('ls2', JSON.stringify(fresh));
+    localStorage.setItem('migrated_v1', '1');
+
+    toast(`✅ Fixed! Found "${myGroup.name}" with ${cleanMembers.filter(m=>m.groupId===myGroup.id).length} members. Reloading...`, 'ok');
+    setTimeout(() => location.reload(), 1200);
+
+  } catch(e) {
+    toast('Server unreachable. Check connection and try again.', 'err');
   }
-  toast('🔧 Fixing account — reloading...', 'ok');
-  setTimeout(() => location.reload(), 800);
 }
 
 function showApp() {
@@ -4756,7 +4814,8 @@ async function _syncGroupsBackground(user) {
     if (!res.ok) return;
     const serverGroups = await res.json();
     const serverGroupIds = new Set(serverGroups.map(g => g.id));
-    // Upload local-only groups
+
+    // Upload local-only groups (admin's groups not on server — happens after Railway restart)
     for (const lg of S.groups.filter(g => g.adminEmail === user.email)) {
       if (!serverGroupIds.has(lg.id)) {
         await fetch(`${RAILWAY_URL}/api/lab-groups`, { method:'POST', headers:{'Content-Type':'application/json'},
@@ -4765,8 +4824,36 @@ async function _syncGroupsBackground(user) {
           await fetch(`${RAILWAY_URL}/api/lab-members`, { method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({id:m.id,groupId:m.groupId,email:m.email,name:m.name,role:m.role||'member',joined:m.joined||new Date().toISOString()})}).catch(()=>{});
         }
+      } else {
+        // Group exists on server — but check if inventory is missing (post-crash)
+        const invRes = await fetch(`${RAILWAY_URL}/api/inventory?groupId=${encodeURIComponent(lg.id)}`);
+        const serverItems = invRes.ok ? await invRes.json() : [];
+        if (serverItems.length === 0) {
+          // Server has no inventory for this group — re-push all local items
+          const localItems = S.inventory.filter(i => i.groupId === lg.id);
+          if (localItems.length > 0) {
+            console.log(`[SYNC] Re-pushing ${localItems.length} items to server after crash`);
+            await fetch(`${RAILWAY_URL}/api/inventory/bulk`, {
+              method: 'POST', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify({ groupId: lg.id, items: localItems.map(i => ({
+                name: i.name, code: i.code||'', category: i.category,
+                location: i.location||'', stock: i.stock, unit: i.unit, minStock: i.minStock
+              }))})
+            }).catch(()=>{});
+          }
+        }
+        // Also re-push members if server has fewer than local
+        const sg = serverGroups.find(g => g.id === lg.id);
+        const serverMemberEmails = new Set((sg?.members||[]).map(m => m.email));
+        for (const m of S.members.filter(m => m.groupId === lg.id)) {
+          if (!serverMemberEmails.has(m.email)) {
+            await fetch(`${RAILWAY_URL}/api/lab-members`, { method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({id:m.id,groupId:m.groupId,email:m.email,name:m.name,role:m.role||'member',joined:m.joined||new Date().toISOString()})}).catch(()=>{});
+          }
+        }
       }
     }
+
     // Merge server data into local
     const res2 = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(user.email)}`);
     const all = res2.ok ? await res2.json() : serverGroups;
