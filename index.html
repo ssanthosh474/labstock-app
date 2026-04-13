@@ -1956,8 +1956,16 @@ async function doLogin(user, firstGroup = null, inviteCode = null) {
     const hasGroupLocal = S.groups.some(g => g.adminEmail === user.email) ||
                           S.members.some(m => m.email === user.email);
     if (hasGroupLocal) {
-      if (!S.activeGroupId || !S.groups.find(g => g.id === S.activeGroupId)) {
-        const g = S.groups.find(g => g.adminEmail === user.email || S.members.find(m => m.groupId === g.id && m.email === user.email));
+      // Validate activeGroupId — user must actually belong to it
+      const activeOk = S.activeGroupId &&
+        S.groups.find(g => g.id === S.activeGroupId) &&
+        (S.groups.find(g => g.id === S.activeGroupId)?.adminEmail === user.email ||
+         S.members.some(m => m.groupId === S.activeGroupId && m.email === user.email));
+      if (!activeOk) {
+        const g = S.groups.find(g =>
+          g.adminEmail === user.email ||
+          S.members.some(m => m.groupId === g.id && m.email === user.email)
+        );
         if (g) S.activeGroupId = g.id;
       }
       save(); showApp();
@@ -2031,6 +2039,19 @@ async function doLogin(user, firstGroup = null, inviteCode = null) {
           S.members = S.members.filter(m => validIds.has(m.groupId));
           S.inventory = S.inventory.filter(i => validIds.has(i.groupId));
           S.transactions = S.transactions.filter(t => validIds.has(t.groupId));
+
+          // Always validate activeGroupId — fix stale/wrong group pointer
+          const activeIsValid = S.activeGroupId && validIds.has(S.activeGroupId) &&
+            allServerGroups.find(g => g.id === S.activeGroupId &&
+              (g.adminEmail === user.email || (g.members||[]).some(m => m.email === user.email))
+            );
+          if (!activeIsValid) {
+            // Pick the correct group for this user from server
+            const myServerGroup = allServerGroups.find(g =>
+              g.adminEmail === user.email || (g.members||[]).some(m => m.email === user.email)
+            );
+            if (myServerGroup) S.activeGroupId = myServerGroup.id;
+          }
         }
       }
     } catch(e) { /* server unreachable — use local cache */ }
@@ -2049,11 +2070,27 @@ async function doLogin(user, firstGroup = null, inviteCode = null) {
       body: JSON.stringify({ id: newGid, name: firstGroup.name, desc: firstGroup.desc||'', adminEmail: user.email, adminName: user.name, created: now })
     }).catch(() => {});
   } else if (!S.activeGroupId || !S.groups.find(g => g.id === S.activeGroupId)) {
+    // No valid activeGroupId — pick any group this user belongs to
     const myGroup = S.groups.find(g =>
       g.adminEmail === user.email ||
-      S.members.find(m => m.groupId === g.id && m.email === user.email)
+      S.members.some(m => m.groupId === g.id && m.email === user.email)
     );
     if (myGroup) S.activeGroupId = myGroup.id;
+  } else {
+    // activeGroupId exists — but verify user actually belongs to it
+    const activeGroup = S.groups.find(g => g.id === S.activeGroupId);
+    const belongsToActive = activeGroup && (
+      activeGroup.adminEmail === user.email ||
+      S.members.some(m => m.groupId === S.activeGroupId && m.email === user.email)
+    );
+    if (!belongsToActive) {
+      // User doesn't belong to active group — find the right one
+      const myGroup = S.groups.find(g =>
+        g.adminEmail === user.email ||
+        S.members.some(m => m.groupId === g.id && m.email === user.email)
+      );
+      if (myGroup) S.activeGroupId = myGroup.id;
+    }
   }
 
   save();
