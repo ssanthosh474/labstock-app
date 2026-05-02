@@ -3860,10 +3860,13 @@ function seedDemo() {
     {id:'t2',groupId:id,type:'OUT',source:'TELEGRAM',itemId:'i6',itemName:'Agar Powder',category:'Reagents',qty:50,unit:'g',person:'Dr. Priya Sharma',date:today,notes:'Batch #7',timestamp:new Date().toISOString()},
   ];
 }
-const RAILWAY_URL = 'https://labstockserver-production.up.railway.app';
+// ── SERVER CONFIG (Supabase + Render) ────────────────────────
+const RAILWAY_URL     = 'https://YOUR-APP.onrender.com'; // ← replace after Render deploy
+const SUPABASE_URL    = 'https://YOUR-PROJECT-ID.supabase.co'; // ← from supabase.com
+const SUPABASE_ANON   = 'YOUR-ANON-KEY'; // ← Settings → API → anon public key
 let syncInterval = null;
-let sseConnection = null;
-let sseReconnectTimer = null;
+let realtimeWs = null;
+let realtimeReconnectTimer = null;
 let lastSyncTime = 0;
 
 async function syncFromServer(force = false) {
@@ -4066,73 +4069,77 @@ function refreshCurrentView() {
 }
 
 function connectSSE() {
-  if (sseConnection) { sseConnection.close(); sseConnection = null; }
-  clearTimeout(sseReconnectTimer);
+  // Supabase Realtime replaces SSE
+  if (!S.activeGroupId || !SUPABASE_URL || SUPABASE_URL.includes('YOUR-PROJECT')) return;
+  _connectRealtime(S.activeGroupId);
+}
 
-  // Exponential backoff state
-  if (typeof connectSSE._retries === 'undefined') connectSSE._retries = 0;
-  const MAX_RETRIES = 5;
-  const BASE_DELAY = 5000; // 5s
-
-  if (!S.activeGroupId) return;
-
-  try {
-    sseConnection = new EventSource(`${RAILWAY_URL}/stream?groupId=${encodeURIComponent(S.activeGroupId)}`);
-
-    sseConnection.onopen = () => {
-      console.log('[SSE] Connected ✅');
-      connectSSE._retries = 0; // reset on success
-    };
-
-    sseConnection.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === 'CONNECTED') {
-          syncFromServer(true);
-          return;
-        }
-        applyInstantUpdate(data);
-      } catch(err) {
-        console.log('[SSE] Parse error:', err);
+function _connectRealtime(groupId) {
+  if (realtimeWs) { try { realtimeWs.close(); } catch(e) {} realtimeWs = null; }
+  clearTimeout(realtimeReconnectTimer);
+  if (!groupId) return;
+  const wsUrl = SUPABASE_URL.replace('https://', 'wss://') +
+    '/realtime/v1/websocket?apikey=' + SUPABASE_ANON + '&vsn=1.0.0';
+  let ws;
+  try { ws = new WebSocket(wsUrl); } catch(e) { console.warn('[Realtime] WebSocket unavailable'); return; }
+  let heartbeat;
+  let retries = 0;
+  ws.onopen = () => {
+    console.log('[Realtime] Connected ✅');
+    retries = 0;
+    ws.send(JSON.stringify({
+      topic: `realtime:public:inventory:group_id=eq.${groupId}`,
+      event: 'phx_join',
+      payload: { config: { postgres_changes: [
+        { event: '*', schema: 'public', table: 'inventory',    filter: `group_id=eq.${groupId}` },
+        { event: '*', schema: 'public', table: 'transactions', filter: `group_id=eq.${groupId}` }
+      ]}},
+      ref: '1'
+    }));
+    heartbeat = setInterval(() => {
+      if (ws.readyState === 1) ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: '0' }));
+    }, 30000);
+  };
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.event === 'postgres_changes' || msg.payload?.data) {
+        clearTimeout(window._rtSyncTimer);
+        window._rtSyncTimer = setTimeout(() => syncFromServer(false), 400);
       }
-    };
-
-    sseConnection.onerror = () => {
-      sseConnection.close();
-      sseConnection = null;
-      connectSSE._retries++;
-      if (connectSSE._retries > MAX_RETRIES) {
-        console.log('[SSE] Max retries reached — polling only');
-        return; // give up SSE, polling interval still runs
-      }
-      const delay = BASE_DELAY * Math.pow(2, connectSSE._retries - 1); // 5s, 10s, 20s, 40s, 80s
-      console.log(`[SSE] Retry ${connectSSE._retries}/${MAX_RETRIES} in ${delay/1000}s`);
-      sseReconnectTimer = setTimeout(connectSSE, delay);
-    };
-
-  } catch(e) {
-    console.log('[SSE] Not available, polling only');
-  }
+    } catch(err) {}
+  };
+  ws.onerror = () => console.warn('[Realtime] WS error');
+  ws.onclose = () => {
+    clearInterval(heartbeat);
+    realtimeWs = null;
+    retries++;
+    const delay = Math.min(5000 * Math.pow(2, retries - 1), 60000);
+    console.log(`[Realtime] Reconnecting in ${delay / 1000}s`);
+    realtimeReconnectTimer = setTimeout(() => _connectRealtime(groupId), delay);
+  };
+  realtimeWs = ws;
 }
 
 function startServerSync() {
   // Immediate full sync
   syncFromServer(true);
 
-  // Faster polling fallback: every 10 seconds (in case SSE misses something)
+  // Polling fallback every 30s (Realtime handles instant updates)
   if (syncInterval) clearInterval(syncInterval);
-  syncInterval = setInterval(() => syncFromServer(), 10000);
+  syncInterval = setInterval(() => syncFromServer(), 30000);
 
-  // SSE for instant updates
+  // Supabase Realtime for instant updates
   connectSSE();
+
+  // Keepalive ping — prevents Render free tier sleep (every 10 min)
+  setInterval(() => fetch(RAILWAY_URL + '/').catch(() => {}), 10 * 60 * 1000);
 
   // Re-sync when tab becomes visible again
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {
       syncFromServer(true);
-      if (!sseConnection || sseConnection.readyState === EventSource.CLOSED) {
-        connectSSE();
-      }
+      if (!realtimeWs || realtimeWs.readyState === WebSocket.CLOSED) connectSSE();
     }
   });
 }
