@@ -3,7 +3,7 @@
 // Force-clears ALL old caches, always serves fresh HTML
 // ----------------------------------------
 
-const CACHE_NAME = 'labstock-v5';
+const CACHE_NAME = 'labstock-v6';
 
 self.addEventListener('install', event => {
   // Skip waiting immediately — don't hold on to old SW
