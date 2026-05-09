@@ -2802,34 +2802,21 @@ function renderMembersSheet() {
     el.innerHTML = skeletonRows(3);
   }
 
-  // Then refresh from server in background — fetch by groupId so ALL members are returned
+  // Refresh from server — replace local cache so all devices see the same members
   fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
     .then(r => r.ok ? r.json() : [])
     .then(serverGroups => {
       const sg = serverGroups.find(g => g.id === S.activeGroupId);
-      if (!sg) return;
-      const serverEmails = new Set(sg.members.map(m => m.email));
-      if (serverEmails.size > 0) {
-        S.members = S.members.filter(m => m.groupId !== S.activeGroupId || serverEmails.has(m.email));
-      }
-      sg.members.forEach(sm => {
-        sm.groupId = S.activeGroupId;
-        const ex = S.members.find(m => m.groupId === sm.groupId && m.email === sm.email);
-        if (!ex) S.members.push(sm);
-        else { ex.name = sm.name; ex.role = sm.role; }
-      });
+      if (!sg || !sg.members) return;
+      // Replace ALL local members for this group with server's authoritative list
+      S.members = S.members.filter(m => m.groupId !== S.activeGroupId);
+      sg.members.forEach(sm => S.members.push({ ...sm, groupId: S.activeGroupId }));
       const grp = S.groups.find(g => g.id === S.activeGroupId);
       if (grp && sg.telegramChatId !== undefined) grp.telegramChatId = sg.telegramChatId;
       save();
       _renderMembersList(el);
     })
-    .catch(() => {
-      // Fallback: also try fetching the group directly by ID
-      fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user?.email||'')}`)
-        .then(r => r.ok ? r.json() : [])
-        .then(gs => { if (gs.length) _renderMembersList(el); })
-        .catch(() => {});
-    });
+    .catch(() => {});
 }
 function _renderMembersList(el) {
   const seen = new Set();
@@ -3208,8 +3195,10 @@ function submitTx(override=null) {
   const item = S.inventory.find(i=>i.id===d.itemId); if (!item) return false;
   if (d.type==='OUT'&&d.qty>item.stock) { toast(`Only ${item.stock} ${item.unit} available`,'err'); return false; }
   if (d.type==='IN') item.stock+=d.qty; else item.stock-=d.qty;
+  const _localTxId = 'tx_'+Date.now();
+  d._localId = _localTxId;
   S.transactions.unshift({
-    id:'tx_'+Date.now(), groupId:gid(), ...d,
+    id: _localTxId, _localId: _localTxId, groupId:gid(), ...d,
     itemName:item.name, itemCode:item.code||'',
     category:item.category, unit:item.unit,
     labMember: d.labMember || S.user?.name || '',
@@ -3221,15 +3210,27 @@ function submitTx(override=null) {
   toast(`${d.type==='IN'?'▲ Inward':'▼ Outward'}: ${d.qty} ${item.unit} of ${item.name}`,'ok');
   if (item.stock<=item.minStock) setTimeout(()=>toast(`⚠ Low stock: ${item.name} (${item.stock} left)`,'wrn'),2000);
   renderHome(); renderInv(); updateAlertBadge();
-  // Push stock update to server so all members see it
-  fetch(`${RAILWAY_URL}/api/inventory`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ groupId: gid(), name: item.name, code: item.code||'', category: item.category, location: item.location||'', stock: item.stock, unit: item.unit, minStock: item.minStock })
-  }).catch(() => {});
-  // Refresh product page if open
+  // Refresh product page immediately (stock number update)
   if (_currentProductId && document.getElementById('productPage')?.classList.contains('open')) {
-    setTimeout(() => openProductPage(_currentProductId), 320);
+    openProductPage(_currentProductId);
   }
+  // Block sync for 6s so race condition doesn't overwrite local stock with stale server value
+  lastSyncTime = Date.now() + 6000;
+  // Push to server via /api/transactions so server applies delta correctly
+  fetch(`${RAILWAY_URL}/api/transactions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      groupId: gid(), itemName: item.name, qty: d.qty, type: d.type,
+      person: d.person, notes: d.notes||'', unit: item.unit,
+      category: item.category, location: item.location||'', code: item.code||''
+    })
+  }).then(r => r.ok ? r.json() : null).then(result => {
+    // After server confirms, store server's transaction id for dedup
+    if (result?.tx?.id) {
+      const local = S.transactions.find(t => t.id === d._localId);
+      if (local) { local._serverId = String(result.tx.id); save(); }
+    }
+  }).catch(() => {});
   return true;
 }
 
@@ -3934,14 +3935,18 @@ async function syncFromServer(force = false) {
       }
     });
 
-    // Merge server transactions
+    // Merge server transactions — deduplicate using _serverId to avoid local/server id mismatch
     serverTx.forEach(tx => {
       if (!tx.itemName) return;
-      const exists = S.transactions.find(t => String(t.id) === String(tx.id));
+      const sid = String(tx.id);
+      const exists = S.transactions.find(t =>
+        String(t.id) === sid || String(t._serverId) === sid
+      );
       if (!exists) {
         S.transactions.unshift({
           ...tx,
-          id: String(tx.id),
+          id: 'srv_' + sid,
+          _serverId: sid,
           groupId: S.activeGroupId,
           source: tx.source || 'TELEGRAM'
         });
