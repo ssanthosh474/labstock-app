@@ -3948,13 +3948,22 @@ async function syncFromServer(force = false) {
       }
     });
 
-    // Merge server transactions — deduplicate using _serverId to avoid local/server id mismatch
+    // Merge server transactions — deduplicate by id, _serverId, or fingerprint (for APP transactions)
     serverTx.forEach(tx => {
       if (!tx.itemName) return;
       const sid = String(tx.id);
-      const exists = S.transactions.find(t =>
-        String(t.id) === sid || String(t._serverId) === sid
-      );
+      const exists = S.transactions.find(t => {
+        if (String(t.id) === sid || String(t._serverId) === sid) return true;
+        // Fingerprint match: same item+qty+type+person+date from APP avoids duplicating local entry
+        if (t.source === 'APP' && tx.source === 'APP' &&
+            t.itemName === tx.itemName && t.qty == tx.qty &&
+            t.type === tx.type && t.person === tx.person && t.date === tx.date) {
+          // Tag it so future syncs match by id
+          t._serverId = sid; save();
+          return true;
+        }
+        return false;
+      });
       if (!exists) {
         S.transactions.unshift({
           ...tx,
