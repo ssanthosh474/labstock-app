@@ -3004,6 +3004,8 @@ function saveItem() {
   const expiry = document.getElementById('iExpiry')?.value || '';
   if (!name||!cat||!unit) { toast('Fill required fields', 'err'); return; }
   const eid = document.getElementById('editId').value;
+  const _editItem = eid ? S.inventory.find(i => i.id === eid) : null;   // ADD
+  const _prevStockBeforeEdit = _editItem ? _editItem.stock : 0;  
   if (eid) {
     const item = S.inventory.find(i=>i.id===eid);
     // Check code uniqueness if changed
@@ -3011,6 +3013,7 @@ function saveItem() {
       const duplicate = getItems().find(i => i.id !== eid && i.code === code);
       if (duplicate) { toast(`Code "${code}" already used by ${duplicate.name}`, 'err'); return; }
     }
+    item._prevStock = item.stock;
     Object.assign(item, {name, code, category:cat, location:loc, stock, unit, minStock:min, expiry});
     logAct(`Edited: ${name}`); toast('Item updated','ok');
   } else {
@@ -3037,6 +3040,48 @@ function saveItem() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ groupId: S.activeGroupId, name, code, category: cat, location: loc, stock, unit, minStock: min })
+    }).catch(() => {});
+  }
+if (eid) {
+    const diff = stock - _prevStockBeforeEdit;
+    if (diff !== 0) {
+      const txType = diff > 0 ? 'IN' : 'OUT';
+      const txQty  = Math.abs(diff);
+      S.transactions.unshift({
+        id: 'tx_edit_' + Date.now(), groupId: gid(), type: txType, source: 'APP',
+        itemName: name, itemCode: code, category: cat, unit,
+        qty: txQty, person: S.user?.name || S.user?.email || 'Admin',
+        labMember: S.user?.name || S.user?.email || '',
+        notes: 'Stock updated via Edit',
+        date: new Date().toISOString().split('T')[0],
+        timestamp: new Date().toISOString()
+      });
+      fetch(`${RAILWAY_URL}/api/transactions`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId: S.activeGroupId, itemName: name, qty: txQty,
+          type: txType, person: S.user?.name || S.user?.email || 'Admin',
+          notes: 'Stock updated via Edit', unit, category: cat
+        })
+      }).catch(() => {});
+    }
+  } else if (stock > 0) {
+    S.transactions.unshift({
+      id: 'tx_init_' + Date.now(), groupId: gid(), type: 'IN', source: 'APP',
+      itemName: name, itemCode: code, category: cat, unit,
+      qty: stock, person: S.user?.name || S.user?.email || 'Admin',
+      labMember: S.user?.name || S.user?.email || '',
+      notes: 'Initial stock via Add Item',
+      date: new Date().toISOString().split('T')[0],
+      timestamp: new Date().toISOString()
+    });
+    fetch(`${RAILWAY_URL}/api/transactions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        groupId: S.activeGroupId, itemName: name, qty: stock,
+        type: 'IN', person: S.user?.name || S.user?.email || 'Admin',
+        notes: 'Initial stock via Add Item', unit, category: cat
+      })
     }).catch(() => {});
   }
 }
