@@ -3023,11 +3023,22 @@ function saveItem() {
   }
   document.getElementById('editId').value = ''; // reset for next Add
   save(); closeSheet('addItemSheet'); renderInv(); updateAlertBadge();
-  fetch(`${RAILWAY_URL}/api/inventory`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ groupId: S.activeGroupId, name, code, category: cat, location: loc, stock, unit, minStock: min })
-  }).catch(() => {});
+  // Block sync for 6s so race condition doesn't overwrite local edit with stale server value
+  lastSyncTime = Date.now() + 6000;
+  if (eid) {
+    // PUT updates existing item by name — more reliable than POST upsert for stock edits
+    fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(name)}?groupId=${encodeURIComponent(S.activeGroupId||'')}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min, groupId: S.activeGroupId })
+    }).catch(() => {});
+  } else {
+    fetch(`${RAILWAY_URL}/api/inventory`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId: S.activeGroupId, name, code, category: cat, location: loc, stock, unit, minStock: min })
+    }).catch(() => {});
+  }
 }
 
 function editItem(id) {
@@ -3873,6 +3884,8 @@ let lastSyncTime = 0;
 async function syncFromServer(force = false) {
   // Debounce — don't sync more than once every 3 seconds
   const now = Date.now();
+  // lastSyncTime set to future = local write in progress — block ALL syncs including forced
+  if (lastSyncTime > now) return;
   if (!force && now - lastSyncTime < 3000) return;
   lastSyncTime = now;
 
