@@ -1624,18 +1624,36 @@ select.form-input { cursor: pointer; }
         <input class="form-input" id="gfDesc" placeholder="e.g. Main research lab, Floor 3" autocomplete="off">
       </div>
 
-      <!-- Telegram linking -->
+      <!-- Telegram linking (optional) -->
       <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:14px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:4px">🤖 Telegram Chat Link</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <div style="font-size:13px;font-weight:700">🤖 Telegram Inventory Sync</div>
+          <span style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:2px 8px">Optional</span>
+        </div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">
-          Each group can have its own Telegram chat. Send <code style="background:var(--bg);padding:1px 5px;border-radius:4px;font-family:var(--mono)">/whoami</code> in your Telegram group to get the Chat ID.
+          Link a Telegram group chat so stock updates sent via bot are synced here. Send <code style="background:var(--bg);padding:1px 5px;border-radius:4px;font-family:var(--mono)">/chatinfo</code> in your Telegram group to get the Chat ID.
         </div>
         <div class="form-group" style="margin-bottom:8px">
-          <label class="form-label">Telegram Chat ID</label>
-          <input class="form-input" id="gfChatId" placeholder="e.g. -1003513959136" autocomplete="off" inputmode="numeric" style="font-family:var(--mono);font-size:14px;letter-spacing:.5px">
+          <label class="form-label">Inventory Chat ID</label>
+          <input class="form-input" id="gfChatId" placeholder="e.g. -1003513959136 (leave blank to skip)" autocomplete="off" inputmode="numeric" style="font-family:var(--mono);font-size:14px;letter-spacing:.5px">
         </div>
         <div id="gfTelegramStatus" style="display:none;font-size:12px;padding:7px 10px;border-radius:6px;margin-top:2px"></div>
         <button id="gfUnlinkBtn" style="display:none;margin-top:10px;font-size:12px;padding:6px 14px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;cursor:pointer;width:100%" onclick="unlinkTelegramFromForm()">🔗 Unlink Telegram Chat</button>
+      </div>
+
+      <!-- Backup Chat (separate optional) -->
+      <div style="background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <div style="font-size:13px;font-weight:700">🔒 Backup Chat</div>
+          <span style="font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:2px 8px">Optional</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+          A separate Telegram chat (can be a private group or saved messages) where full data backups are sent automatically every hour.
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Backup Chat ID</label>
+          <input class="form-input" id="gfBackupChatId" placeholder="e.g. -1009999999999 (leave blank to skip)" autocomplete="off" inputmode="numeric" style="font-family:var(--mono);font-size:14px;letter-spacing:.5px">
+        </div>
       </div>
 
       <button class="btn btn-primary btn-full" onclick="saveGroupForm()">💾 Save Group</button>
@@ -2026,10 +2044,10 @@ async function doLogin(user, firstGroup = null, inviteCode = null) {
             // Always take telegramChatId from server — it's the source of truth
             if (sg.telegramChatId !== undefined) existing.telegramChatId = sg.telegramChatId;
           }
-          (sg.members || sg.lab_members || []).forEach(sm => {
-            const smGroupId = sm.groupId || sm.group_id || sg.id;
-            if (!S.members.find(m => m.groupId === smGroupId && m.email === sm.email)) {
-              S.members.push({...sm, groupId: smGroupId});
+          (sg.members||sg.lab_members||[]).forEach(sm => {
+            const smGid = sm.groupId||sm.group_id||sg.id;
+            if (!S.members.find(m => m.groupId === smGid && m.email === sm.email)) {
+              S.members.push({...sm, groupId: smGid});
             }
           });
         });
@@ -2417,7 +2435,6 @@ function openSheet(id) {
     setTxType('IN');
   }
   if (id === 'addItemSheet') {
-    // Only reset to "Add" mode if not already populated for editing
     const existingEditId = document.getElementById('editId').value;
     if (!existingEditId) {
       document.getElementById('itemSheetTitle').textContent = 'Add Item';
@@ -2427,18 +2444,39 @@ function openSheet(id) {
     }
     const cats = [...new Set(getItems().map(i => i.category))];
     document.getElementById('catDL').innerHTML = cats.map(c => `<option value="${c}">`).join('');
-    // Clear edit id after use so next open is fresh Add mode
     if (existingEditId) setTimeout(() => document.getElementById('editId').value = existingEditId, 0);
   }
   if (id === 'groupSheet') renderGroupSheet();
-  if (id === 'membersSheet') { switchMemTab('list'); renderMembersSheet(); return document.getElementById(id).classList.add('open'); }
+  if (id === 'membersSheet') { switchMemTab('list'); renderMembersSheet(); }
   if (id === 'activitySheet') { if(typeof _selectedLogs!=='undefined') _selectedLogs.clear(); renderActivity(); }
   if (id === 'settingsSheet') loadSettings();
   document.getElementById(id).classList.add('open');
+  // Push history state so Android/iOS back button closes the sheet
+  history.pushState({ sheet: id }, '', '');
 }
 
-function closeSheet(id) { document.getElementById(id).classList.remove('open'); }
+function closeSheet(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const wasOpen = el.classList.contains('open');
+  el.classList.remove('open');
+  // If the sheet was open and we closed it programmatically (not via popstate),
+  // go back in history to keep the stack in sync
+  if (wasOpen && history.state && history.state.sheet === id) {
+    history.back();
+  }
+}
 function sheetBgClose(e, id) { if (e.target === e.currentTarget) closeSheet(id); }
+
+// Handle Android/browser back button — close topmost open sheet
+window.addEventListener('popstate', function(e) {
+  // Find the topmost open sheet
+  const openSheets = [...document.querySelectorAll('.sheet-overlay.open')];
+  if (openSheets.length > 0) {
+    const topSheet = openSheets[openSheets.length - 1];
+    topSheet.classList.remove('open');
+  }
+});
 
 function renderGroupSheet() {
   const el = document.getElementById('groupSheetBody');
@@ -2494,6 +2532,7 @@ function showGroupForm(id) {
   document.getElementById('gfName').value   = g?.name || '';
   document.getElementById('gfDesc').value   = g?.desc || '';
   document.getElementById('gfChatId').value = g?.telegramChatId || '';
+  document.getElementById('gfBackupChatId').value = g?.backupChatId || '';
   document.getElementById('gfName').style.borderColor = '';
   const statusEl  = document.getElementById('gfTelegramStatus');
   const unlinkBtn = document.getElementById('gfUnlinkBtn');
@@ -2526,6 +2565,7 @@ async function saveGroupForm() {
     // Edit mode
     const g = S.groups.find(x => x.id === _gfEditId); if (!g) return;
     g.name = name; g.desc = desc;
+    const backupChatId = document.getElementById('gfBackupChatId').value.trim();
     const oldChatId = g.telegramChatId || '';
     if (chatId && chatId !== oldChatId) {
       const ok = await _linkTG(_gfEditId, chatId);
@@ -2534,6 +2574,13 @@ async function saveGroupForm() {
       await _unlinkTG(_gfEditId);
       g.telegramChatId = null;
       toast('Telegram unlinked', 'wrn');
+    }
+    g.backupChatId = backupChatId || null;
+    if (backupChatId) {
+      fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(_gfEditId)}/backup-chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backupChatId })
+      }).catch(() => {});
     }
     logAct(`Edited group: ${g.name}`); save();
     renderGroupSheet(); updateTopbar();
@@ -2547,13 +2594,20 @@ async function saveGroupForm() {
     // Create mode
     const id = 'g_' + Date.now();
     const now = new Date().toISOString();
-    const newG = { id, name, desc, adminEmail: S.user.email, created: now, telegramChatId: null };
+    const backupChatId = document.getElementById('gfBackupChatId').value.trim();
+    const newG = { id, name, desc, adminEmail: S.user.email, created: now, telegramChatId: null, backupChatId: backupChatId || null };
     S.groups.push(newG);
     S.members.push({ id: 'm_' + Date.now(), groupId: id, email: S.user.email, name: S.user.name, role: 'admin', joined: now });
     S.activeGroupId = id;
     if (chatId) {
       const ok = await _linkTG(id, chatId);
       if (ok) newG.telegramChatId = chatId;
+    }
+    if (backupChatId) {
+      fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(id)}/backup-chat`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backupChatId })
+      }).catch(() => {});
     }
     save(); renderGroupSheet(); updateTopbar();
     // Push to server so other devices see it
@@ -2810,9 +2864,9 @@ function renderMembersSheet() {
       const sg = serverGroups.find(g => g.id === S.activeGroupId);
       if (!sg || !(sg.members || sg.lab_members)) return;
       S.members = S.members.filter(m => m.groupId !== S.activeGroupId);
-      (sg.members || sg.lab_members || []).forEach(sm => {
-        const smGroupId = sm.groupId || sm.group_id || S.activeGroupId;
-        S.members.push({ ...sm, groupId: smGroupId });
+      (sg.members||sg.lab_members||[]).forEach(sm => {
+        const smGid = sm.groupId||sm.group_id||S.activeGroupId;
+        S.members.push({...sm, groupId: smGid});
       });
       const grp = S.groups.find(g => g.id === S.activeGroupId);
       if (grp && sg.telegramChatId !== undefined) grp.telegramChatId = sg.telegramChatId;
@@ -4956,8 +5010,8 @@ async function _syncGroupsBackground(user) {
       if (!ex) S.groups.push({id:sg.id,name:sg.name,desc:sg.desc,adminEmail:sg.adminEmail,telegramChatId:sg.telegramChatId,created:sg.created});
       else { ex.name=sg.name; ex.desc=sg.desc; if(sg.telegramChatId!==undefined) ex.telegramChatId=sg.telegramChatId; }
       (sg.members||sg.lab_members||[]).forEach(sm => {
-        const smGroupId = sm.groupId || sm.group_id || sg.id;
-        if(!S.members.find(m=>m.groupId===smGroupId&&m.email===sm.email)) S.members.push({...sm, groupId:smGroupId});
+        const smGid = sm.groupId||sm.group_id||sg.id;
+        if(!S.members.find(m=>m.groupId===smGid&&m.email===sm.email)) S.members.push({...sm,groupId:smGid});
       });
     });
     if (all.length > 0) {
@@ -5170,10 +5224,10 @@ function applyManualInvite() {
 }
 
 // Join a group directly by ID (used by group code path)
-function _joinGroupDirectly(groupId, groupName, groupDesc, adminEmail) {
+async function _joinGroupDirectly(groupId, groupName, groupDesc, adminEmail) {
   let g = S.groups.find(g => g.id === groupId);
   if (!g) {
-    g = { id: groupId, name: groupName || 'Lab Group', desc: groupDesc || '', adminEmail: adminEmail || '', created: new Date().toISOString() };
+    g = { id: groupId, name: groupName || 'Lab Group', desc: groupDesc || '', adminEmail: adminEmail || '', telegramChatId: null, created: new Date().toISOString() };
     S.groups.push(g);
   }
   const already = S.members.find(m => m.groupId === groupId && m.email === S.user?.email);
@@ -5182,46 +5236,54 @@ function _joinGroupDirectly(groupId, groupName, groupDesc, adminEmail) {
   }
   S.activeGroupId = groupId;
   save();
+
+  // Push member to server — await so record exists before sync validation
   const memberPayload = { groupId, email: S.user.email, name: S.user.name, role: 'member', joined: new Date().toISOString() };
-  fetch(`${RAILWAY_URL}/api/lab-members`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(memberPayload)
-  }).then(r => {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/lab-members`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(memberPayload)
+    });
     if (r.status === 404) {
-      setTimeout(() => fetch(`${RAILWAY_URL}/api/lab-members`, {
+      await fetch(`${RAILWAY_URL}/api/lab-groups`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: groupId, name: groupName || 'Lab Group', desc: groupDesc || '', adminEmail: adminEmail || '', adminName: '', created: g.created })
+      }).catch(() => {});
+      await fetch(`${RAILWAY_URL}/api/lab-members`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(memberPayload)
-      }).catch(() => {}), 4000);
+      }).catch(() => {});
     }
-  }).catch(() => {});
+  } catch(e) {}
+
   showApp();
-  // Fetch full group data from server — fixes telegramChatId, members, real name
-  fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user.email)}`)
-    .then(r => r.ok ? r.json() : [])
-    .then(serverGroups => {
-      const sg = serverGroups.find(g => g.id === groupId);
-      if (sg) {
-        const localG = S.groups.find(g => g.id === groupId);
-        if (localG) {
-          localG.name = sg.name;
-          localG.desc = sg.desc || '';
-          localG.adminEmail = sg.adminEmail || '';
-          localG.telegramChatId = sg.telegramChatId || null;
-        }
-        (sg.members || []).forEach(sm => {
-          sm.groupId = groupId;
-          const ex = S.members.find(m => m.groupId === groupId && m.email === sm.email);
-          if (!ex) S.members.push(sm);
-          else { ex.name = sm.name; ex.role = sm.role; }
-        });
-        save();
-        updateTopbar();
-        renderHome();
-        updateAlertBadge();
+
+  try {
+    const r2 = await fetch(`${RAILWAY_URL}/api/lab-groups?email=${encodeURIComponent(S.user.email)}`);
+    const serverGroups = r2.ok ? await r2.json() : [];
+    const sg = serverGroups.find(g => g.id === groupId);
+    if (sg) {
+      const localG = S.groups.find(g => g.id === groupId);
+      if (localG) {
+        localG.name = sg.name;
+        localG.desc = sg.desc || '';
+        localG.adminEmail = sg.adminEmail || '';
+        localG.telegramChatId = sg.telegramChatId !== undefined ? sg.telegramChatId : null;
       }
-      syncFromServer(true);
-    })
-    .catch(() => syncFromServer(true));
+      (sg.members || []).forEach(sm => {
+        const smGid = sm.groupId || groupId;
+        const ex = S.members.find(m => m.groupId === smGid && m.email === sm.email);
+        if (!ex) S.members.push({...sm, groupId: smGid});
+        else { ex.name = sm.name; ex.role = sm.role; }
+      });
+      S.activeGroupId = groupId;
+      save();
+      updateTopbar();
+      renderHome();
+      updateAlertBadge();
+    }
+  } catch(e) {}
+  syncFromServer(true);
   toast(`✅ Joined "${groupName}"! Loading inventory...`, 'ok');
 }
 load();
