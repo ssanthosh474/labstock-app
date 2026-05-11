@@ -2680,7 +2680,7 @@ function handleInviteLink(code) {
     // Bootstrap group on this device if not present
     let g = S.groups.find(g => g.id === groupId);
     if (!g) {
-      g = { id: groupId, name: groupName, desc: groupDesc, adminEmail, telegramChatId: null, created: new Date().toISOString() };
+      g = { id: groupId, name: groupName, desc: groupDesc, adminEmail, created: new Date().toISOString() };
       S.groups.push(g);
     }
 
@@ -2729,7 +2729,7 @@ function handleInviteLink(code) {
             localG.name = sg.name;
             localG.desc = sg.desc || '';
             localG.adminEmail = sg.adminEmail || '';
-            localG.telegramChatId = sg.telegramChatId !== undefined ? sg.telegramChatId : null;
+            localG.telegramChatId = sg.telegramChatId || null;
           }
           // Merge all members
           (sg.members || []).forEach(sm => {
@@ -2740,8 +2740,11 @@ function handleInviteLink(code) {
           });
           save();
           updateTopbar();
+          renderHome();
           updateAlertBadge();
-          syncFromServer(true).finally(() => renderHome());
+        }
+        // Sync inventory after group is updated
+        syncFromServer(true);
       })
       .catch(() => syncFromServer(true));
 
