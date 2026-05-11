@@ -2026,9 +2026,10 @@ async function doLogin(user, firstGroup = null, inviteCode = null) {
             // Always take telegramChatId from server — it's the source of truth
             if (sg.telegramChatId !== undefined) existing.telegramChatId = sg.telegramChatId;
           }
-          sg.members.forEach(sm => {
-            if (!S.members.find(m => m.groupId === sm.groupId && m.email === sm.email)) {
-              S.members.push(sm);
+          (sg.members || sg.lab_members || []).forEach(sm => {
+            const smGroupId = sm.groupId || sm.group_id || sg.id;
+            if (!S.members.find(m => m.groupId === smGroupId && m.email === sm.email)) {
+              S.members.push({...sm, groupId: smGroupId});
             }
           });
         });
@@ -2807,10 +2808,12 @@ function renderMembersSheet() {
     .then(r => r.ok ? r.json() : [])
     .then(serverGroups => {
       const sg = serverGroups.find(g => g.id === S.activeGroupId);
-      if (!sg || !sg.members) return;
-      // Replace ALL local members for this group with server's authoritative list
+      if (!sg || !(sg.members || sg.lab_members)) return;
       S.members = S.members.filter(m => m.groupId !== S.activeGroupId);
-      sg.members.forEach(sm => S.members.push({ ...sm, groupId: S.activeGroupId }));
+      (sg.members || sg.lab_members || []).forEach(sm => {
+        const smGroupId = sm.groupId || sm.group_id || S.activeGroupId;
+        S.members.push({ ...sm, groupId: smGroupId });
+      });
       const grp = S.groups.find(g => g.id === S.activeGroupId);
       if (grp && sg.telegramChatId !== undefined) grp.telegramChatId = sg.telegramChatId;
       save();
@@ -4952,7 +4955,10 @@ async function _syncGroupsBackground(user) {
       const ex = S.groups.find(g => g.id === sg.id);
       if (!ex) S.groups.push({id:sg.id,name:sg.name,desc:sg.desc,adminEmail:sg.adminEmail,telegramChatId:sg.telegramChatId,created:sg.created});
       else { ex.name=sg.name; ex.desc=sg.desc; if(sg.telegramChatId!==undefined) ex.telegramChatId=sg.telegramChatId; }
-      sg.members.forEach(sm => { if(!S.members.find(m=>m.groupId===sm.groupId&&m.email===sm.email)) S.members.push(sm); });
+      (sg.members||sg.lab_members||[]).forEach(sm => {
+        const smGroupId = sm.groupId || sm.group_id || sg.id;
+        if(!S.members.find(m=>m.groupId===smGroupId&&m.email===sm.email)) S.members.push({...sm, groupId:smGroupId});
+      });
     });
     if (all.length > 0) {
       const vids = new Set(all.map(g=>g.id));
