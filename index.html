@@ -3096,7 +3096,7 @@ function saveItem() {
     fetch(`${RAILWAY_URL}/api/inventory`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupId: S.activeGroupId, name, code, category: cat, location: loc, stock, unit, minStock: min })
+      body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min, groupId: S.activeGroupId, updated_by: S.user?.name || S.user?.email || 'unknown' })
     }).catch(() => {});
   }
 if (eid) {
