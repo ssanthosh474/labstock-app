@@ -3335,7 +3335,8 @@ function submitTx(override=null) {
     body: JSON.stringify({
       groupId: gid(), itemName: item.name, qty: d.qty, type: d.type,
       person: d.person, notes: d.notes||'', unit: item.unit,
-      category: item.category, location: item.location||'', code: item.code||''
+      category: item.category, location: item.location||'', code: item.code||'',
+      updated_by: S.user?.name || S.user?.email || d.person
     })
   }).then(r => r.ok ? r.json() : null).then(result => {
     // After server confirms, store server's transaction id for dedup
