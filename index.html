@@ -3090,7 +3090,7 @@ function saveItem() {
     fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(name)}?groupId=${encodeURIComponent(S.activeGroupId||'')}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min, groupId: S.activeGroupId })
+      body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min, groupId: S.activeGroupId, updated_by: S.user?.name || S.user?.email || 'unknown'  // ADD THIS })
     }).catch(() => {});
   } else {
     fetch(`${RAILWAY_URL}/api/inventory`, {
