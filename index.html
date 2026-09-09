@@ -1428,21 +1428,32 @@ select.form-input { cursor: pointer; }
         <input class="form-input" id="iCode" placeholder="e.g. CHM-001, SKU123">
       </div>
       <div class="form-group">
-        <label class="form-label">Category *</label>
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;text-transform:none;letter-spacing:0">
+          <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Category *</span>
+          <button type="button" onclick="openTaxonomyManage('category')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">⚙ Manage</button>
+        </label>
         <input class="form-input" id="iCat" placeholder="e.g. Chemicals" list="catDL">
         <datalist id="catDL"></datalist>
       </div>
       <div class="form-group">
-        <label class="form-label">Location</label>
-        <input class="form-input" id="iLoc" placeholder="e.g. Shelf A3, Cabinet 2, Fridge">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;text-transform:none;letter-spacing:0">
+          <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Location</span>
+          <button type="button" onclick="openTaxonomyManage('location')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">⚙ Manage</button>
+        </label>
+        <input class="form-input" id="iLoc" placeholder="e.g. Shelf A3, Cabinet 2, Fridge" list="locDL">
+        <datalist id="locDL"></datalist>
       </div>
       <div class="form-group">
         <label class="form-label">Current Stock</label>
         <input class="form-input" type="number" id="iStock" placeholder="0" min="0" inputmode="numeric">
       </div>
       <div class="form-group">
-        <label class="form-label">Unit *</label>
-        <input class="form-input" id="iUnit" placeholder="e.g. mL, pcs, kg, box">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;text-transform:none;letter-spacing:0">
+          <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Unit *</span>
+          <button type="button" onclick="openTaxonomyManage('unit')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">⚙ Manage</button>
+        </label>
+        <input class="form-input" id="iUnit" placeholder="e.g. mL, pcs, kg, box" list="unitDL">
+        <datalist id="unitDL"></datalist>
       </div>
       <div class="form-group">
         <label class="form-label">Min Stock (Alert Level)</label>
@@ -1456,6 +1467,24 @@ select.form-input { cursor: pointer; }
     <div class="sheet-footer">
       <button class="btn btn-primary btn-full" onclick="saveItem()">Save Item</button>
       <button class="btn btn-ghost btn-full" onclick="document.getElementById('editId').value='';closeSheet('addItemSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Taxonomy Manage Sheet (Category / Location / Unit) -->
+<div class="sheet-overlay" id="taxManageSheet" onclick="sheetBgClose(event,'taxManageSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="taxManageTitle">Manage</div>
+      <button class="sheet-close" onclick="closeSheet('taxManageSheet')">✕</button>
+    </div>
+    <div style="padding:16px">
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <input class="form-input" id="taxNewValue" placeholder="Add new...">
+        <button class="btn btn-primary btn-sm" onclick="addTaxonomyValue()" style="flex-shrink:0">+ Add</button>
+      </div>
+      <div id="taxManageList" style="display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow-y:auto"></div>
     </div>
   </div>
 </div>
@@ -2444,10 +2473,10 @@ function openSheet(id) {
       document.getElementById('iStock').value = 0;
       document.getElementById('iMin').value = S.settings.threshold;
     }
-    const cats = [...new Set(getItems().map(i => i.category))];
-    document.getElementById('catDL').innerHTML = cats.map(c => `<option value="${c}">`).join('');
+    refreshTaxonomyDatalists();
     if (existingEditId) setTimeout(() => document.getElementById('editId').value = existingEditId, 0);
   }
+  if (id === 'taxManageSheet') renderTaxonomyManage();
   if (id === 'groupSheet') renderGroupSheet();
   if (id === 'membersSheet') { switchMemTab('list'); renderMembersSheet(); }
   if (id === 'activitySheet') { if(typeof _selectedLogs!=='undefined') _selectedLogs.clear(); renderActivity(); }
@@ -3051,6 +3080,124 @@ function removeMem(id) {
 function promptInvite() { switchMemTab('add'); }
 function gid() { return S.activeGroupId; }
 function getItems() { return S.inventory.filter(i => i.groupId === gid()); }
+
+// ── TAXONOMY (Category / Location / Unit) ──────────────────────
+// Lists are derived from values already on items, plus a per-group
+// "reserved" list for names added before any item uses them.
+// NOTE: the reserved list is local-only (localStorage) — there is no
+// server endpoint for it yet, so it does not sync across devices.
+const TAX_FIELD      = { category: 'category', location: 'location', unit: 'unit' };
+const TAX_CUSTOM_KEY = { category: 'customCategories', location: 'customLocations', unit: 'customUnits' };
+const TAX_LABEL      = { category: 'Categories', location: 'Locations', unit: 'Units' };
+let _taxKind = null;
+
+function getTaxonomyValues(kind) {
+  const field = TAX_FIELD[kind];
+  const used = getItems().map(i => i[field]).filter(Boolean);
+  const g = S.groups.find(g => g.id === gid());
+  const custom = (g && g[TAX_CUSTOM_KEY[kind]]) || [];
+  return [...new Set([...used, ...custom])].sort((a,b) => a.localeCompare(b));
+}
+
+function refreshTaxonomyDatalists() {
+  const catDL  = document.getElementById('catDL');
+  const locDL  = document.getElementById('locDL');
+  const unitDL = document.getElementById('unitDL');
+  if (catDL)  catDL.innerHTML  = getTaxonomyValues('category').map(v => `<option value="${v}">`).join('');
+  if (locDL)  locDL.innerHTML  = getTaxonomyValues('location').map(v => `<option value="${v}">`).join('');
+  if (unitDL) unitDL.innerHTML = getTaxonomyValues('unit').map(v => `<option value="${v}">`).join('');
+}
+
+function openTaxonomyManage(kind) {
+  _taxKind = kind;
+  document.getElementById('taxManageTitle').textContent = 'Manage ' + TAX_LABEL[kind];
+  const input = document.getElementById('taxNewValue');
+  input.value = '';
+  input.placeholder = 'Add new ' + kind + '...';
+  renderTaxonomyManage();
+  openSheet('taxManageSheet');
+  setTimeout(() => input.focus(), 300);
+}
+
+function renderTaxonomyManage() {
+  const kind = _taxKind; if (!kind) return;
+  const field = TAX_FIELD[kind];
+  const values = getTaxonomyValues(kind);
+  const el = document.getElementById('taxManageList');
+  if (!values.length) {
+    el.innerHTML = `<p style="text-align:center;color:var(--muted);font-size:13px;padding:20px">No ${kind}s yet. Add one above.</p>`;
+    return;
+  }
+  el.innerHTML = values.map(v => {
+    const count = getItems().filter(i => i[field] === v).length;
+    const safe = v.replace(/'/g, "\\'");
+    return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v}</div>
+        <div style="font-size:11px;color:var(--muted)">${count} item${count!==1?'s':''}</div>
+      </div>
+      <button onclick="renameTaxonomyValue('${safe}')" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;flex-shrink:0">✏️</button>
+      <button onclick="deleteTaxonomyValue('${safe}')" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:12px;cursor:pointer;flex-shrink:0">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+function addTaxonomyValue() {
+  const kind = _taxKind; if (!kind) return;
+  const input = document.getElementById('taxNewValue');
+  const val = input.value.trim();
+  if (!val) { toast('Enter a value first', 'err'); return; }
+  const existing = getTaxonomyValues(kind);
+  if (existing.some(v => v.toLowerCase() === val.toLowerCase())) { toast('Already exists', 'wrn'); return; }
+  const g = S.groups.find(g => g.id === gid()); if (!g) return;
+  const key = TAX_CUSTOM_KEY[kind];
+  if (!g[key]) g[key] = [];
+  g[key].push(val);
+  save();
+  input.value = '';
+  renderTaxonomyManage();
+  refreshTaxonomyDatalists();
+  toast(`"${val}" added`, 'ok');
+}
+
+function renameTaxonomyValue(oldVal) {
+  const kind = _taxKind; if (!kind) return;
+  const field = TAX_FIELD[kind];
+  const input = prompt(`Rename "${oldVal}" to:`, oldVal);
+  if (!input) return;
+  const clean = input.trim();
+  if (!clean || clean === oldVal) return;
+  const items = getItems().filter(i => i[field] === oldVal);
+  items.forEach(i => {
+    i[field] = clean;
+    fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(i.name)}?groupId=${encodeURIComponent(gid()||'')}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: clean, groupId: gid(), updated_by: S.user?.name || S.user?.email || '' })
+    }).catch(() => {});
+  });
+  const g = S.groups.find(g => g.id === gid());
+  const key = TAX_CUSTOM_KEY[kind];
+  if (g) {
+    if (!g[key]) g[key] = [];
+    g[key] = g[key].filter(v => v !== oldVal);
+    if (!items.length) g[key].push(clean); // reserved-only tag, not attached to any item
+  }
+  logAct(`Renamed ${kind}: ${oldVal} → ${clean} (${items.length} item${items.length!==1?'s':''})`);
+  save(); renderTaxonomyManage(); refreshTaxonomyDatalists(); renderInv();
+  toast(`Renamed to "${clean}" — ${items.length} item(s) updated`, 'ok');
+}
+
+function deleteTaxonomyValue(val) {
+  const kind = _taxKind; if (!kind) return;
+  const field = TAX_FIELD[kind];
+  const count = getItems().filter(i => i[field] === val).length;
+  if (count > 0) { toast(`Still used by ${count} item(s) — rename or reassign them first`, 'err'); return; }
+  const g = S.groups.find(g => g.id === gid());
+  const key = TAX_CUSTOM_KEY[kind];
+  if (g && g[key]) g[key] = g[key].filter(v => v !== val);
+  save(); renderTaxonomyManage(); refreshTaxonomyDatalists();
+  toast(`"${val}" removed`, 'wrn');
+}
 
 function saveItem() {
   const name = document.getElementById('iName').value.trim();
