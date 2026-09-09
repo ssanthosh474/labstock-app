@@ -1430,18 +1430,13 @@ select.form-input { cursor: pointer; }
       <div class="form-group">
         <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;text-transform:none;letter-spacing:0">
           <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Category *</span>
-          <button type="button" onclick="openTaxonomyManage('category')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">⚙ Manage</button>
+          <button type="button" onclick="openTaxonomyManage('category')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">✏️ Edit list</button>
         </label>
-        <input class="form-input" id="iCat" placeholder="e.g. Chemicals" list="catDL">
-        <datalist id="catDL"></datalist>
+        <select class="form-input" id="iCat" onchange="onTaxSelectChange('category', this)"></select>
       </div>
       <div class="form-group">
-        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;text-transform:none;letter-spacing:0">
-          <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Location</span>
-          <button type="button" onclick="openTaxonomyManage('location')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">⚙ Manage</button>
-        </label>
-        <input class="form-input" id="iLoc" placeholder="e.g. Shelf A3, Cabinet 2, Fridge" list="locDL">
-        <datalist id="locDL"></datalist>
+        <label class="form-label">Location</label>
+        <input class="form-input" id="iLoc" placeholder="e.g. Shelf A3, Cabinet 2, Fridge">
       </div>
       <div class="form-group">
         <label class="form-label">Current Stock</label>
@@ -1450,10 +1445,9 @@ select.form-input { cursor: pointer; }
       <div class="form-group">
         <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;text-transform:none;letter-spacing:0">
           <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Unit *</span>
-          <button type="button" onclick="openTaxonomyManage('unit')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">⚙ Manage</button>
+          <button type="button" onclick="openTaxonomyManage('unit')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">✏️ Edit list</button>
         </label>
-        <input class="form-input" id="iUnit" placeholder="e.g. mL, pcs, kg, box" list="unitDL">
-        <datalist id="unitDL"></datalist>
+        <select class="form-input" id="iUnit" onchange="onTaxSelectChange('unit', this)"></select>
       </div>
       <div class="form-group">
         <label class="form-label">Min Stock (Alert Level)</label>
@@ -2473,7 +2467,7 @@ function openSheet(id) {
       document.getElementById('iStock').value = 0;
       document.getElementById('iMin').value = S.settings.threshold;
     }
-    refreshTaxonomyDatalists();
+    populateTaxSelects();
     if (existingEditId) setTimeout(() => document.getElementById('editId').value = existingEditId, 0);
   }
   if (id === 'taxManageSheet') renderTaxonomyManage();
@@ -3081,14 +3075,15 @@ function promptInvite() { switchMemTab('add'); }
 function gid() { return S.activeGroupId; }
 function getItems() { return S.inventory.filter(i => i.groupId === gid()); }
 
-// ── TAXONOMY (Category / Location / Unit) ──────────────────────
+// ── TAXONOMY (Category / Unit) ──────────────────────
 // Lists are derived from values already on items, plus a per-group
 // "reserved" list for names added before any item uses them.
 // NOTE: the reserved list is local-only (localStorage) — there is no
 // server endpoint for it yet, so it does not sync across devices.
-const TAX_FIELD      = { category: 'category', location: 'location', unit: 'unit' };
-const TAX_CUSTOM_KEY = { category: 'customCategories', location: 'customLocations', unit: 'customUnits' };
-const TAX_LABEL      = { category: 'Categories', location: 'Locations', unit: 'Units' };
+// Location is intentionally NOT part of this system — plain text field.
+const TAX_FIELD      = { category: 'category', unit: 'unit' };
+const TAX_CUSTOM_KEY = { category: 'customCategories', unit: 'customUnits' };
+const TAX_LABEL      = { category: 'Categories', unit: 'Units' };
 let _taxKind = null;
 
 function getTaxonomyValues(kind) {
@@ -3099,13 +3094,45 @@ function getTaxonomyValues(kind) {
   return [...new Set([...used, ...custom])].sort((a,b) => a.localeCompare(b));
 }
 
-function refreshTaxonomyDatalists() {
-  const catDL  = document.getElementById('catDL');
-  const locDL  = document.getElementById('locDL');
-  const unitDL = document.getElementById('unitDL');
-  if (catDL)  catDL.innerHTML  = getTaxonomyValues('category').map(v => `<option value="${v}">`).join('');
-  if (locDL)  locDL.innerHTML  = getTaxonomyValues('location').map(v => `<option value="${v}">`).join('');
-  if (unitDL) unitDL.innerHTML = getTaxonomyValues('unit').map(v => `<option value="${v}">`).join('');
+function populateTaxSelects() {
+  const catSel  = document.getElementById('iCat');
+  const unitSel = document.getElementById('iUnit');
+  if (catSel) {
+    const cur = catSel.value;
+    catSel.innerHTML = '<option value="">Select category…</option>' +
+      getTaxonomyValues('category').map(v => `<option value="${v}">${v}</option>`).join('') +
+      '<option value="__new__">+ Add new category…</option>';
+    if (cur && cur !== '__new__') catSel.value = cur;
+  }
+  if (unitSel) {
+    const cur = unitSel.value;
+    unitSel.innerHTML = '<option value="">Select unit…</option>' +
+      getTaxonomyValues('unit').map(v => `<option value="${v}">${v}</option>`).join('') +
+      '<option value="__new__">+ Add new unit…</option>';
+    if (cur && cur !== '__new__') unitSel.value = cur;
+  }
+}
+
+// Handles the "+ Add new..." option inside the Category/Unit dropdowns.
+// If the user cancels the prompt, the select resets to blank rather than
+// staying stuck on "__new__".
+function onTaxSelectChange(kind, sel) {
+  if (sel.value !== '__new__') return;
+  const val = prompt(`New ${kind} name:`);
+  if (!val || !val.trim()) { sel.value = ''; return; }
+  const clean = val.trim();
+  const existing = getTaxonomyValues(kind);
+  if (!existing.some(v => v.toLowerCase() === clean.toLowerCase())) {
+    const g = S.groups.find(g => g.id === gid());
+    if (g) {
+      const key = TAX_CUSTOM_KEY[kind];
+      if (!g[key]) g[key] = [];
+      g[key].push(clean);
+      save();
+    }
+  }
+  populateTaxSelects();
+  sel.value = clean;
 }
 
 function openTaxonomyManage(kind) {
@@ -3156,7 +3183,7 @@ function addTaxonomyValue() {
   save();
   input.value = '';
   renderTaxonomyManage();
-  refreshTaxonomyDatalists();
+  populateTaxSelects();
   toast(`"${val}" added`, 'ok');
 }
 
@@ -3183,7 +3210,7 @@ function renameTaxonomyValue(oldVal) {
     if (!items.length) g[key].push(clean); // reserved-only tag, not attached to any item
   }
   logAct(`Renamed ${kind}: ${oldVal} → ${clean} (${items.length} item${items.length!==1?'s':''})`);
-  save(); renderTaxonomyManage(); refreshTaxonomyDatalists(); renderInv();
+  save(); renderTaxonomyManage(); populateTaxSelects(); renderInv();
   toast(`Renamed to "${clean}" — ${items.length} item(s) updated`, 'ok');
 }
 
@@ -3195,7 +3222,7 @@ function deleteTaxonomyValue(val) {
   const g = S.groups.find(g => g.id === gid());
   const key = TAX_CUSTOM_KEY[kind];
   if (g && g[key]) g[key] = g[key].filter(v => v !== val);
-  save(); renderTaxonomyManage(); refreshTaxonomyDatalists();
+  save(); renderTaxonomyManage(); populateTaxSelects();
   toast(`"${val}" removed`, 'wrn');
 }
 
@@ -3303,6 +3330,7 @@ function editItem(id) {
   document.getElementById('itemSheetTitle').textContent = 'Edit Item';
   document.getElementById('iName').value = item.name;
   document.getElementById('iCode').value = item.code||'';
+  populateTaxSelects(); // must run before setting select values below
   document.getElementById('iCat').value = item.category;
   document.getElementById('iLoc').value = item.location||'';
   document.getElementById('iStock').value = item.stock;
@@ -4590,6 +4618,7 @@ function editItemFromProduct() {
   document.getElementById('itemSheetTitle').textContent = 'Edit Item';
   document.getElementById('iName').value = item.name;
   document.getElementById('iCode').value = item.code || '';
+  populateTaxSelects(); // must run before setting select values below
   document.getElementById('iCat').value = item.category;
   document.getElementById('iLoc').value = item.location || '';
   document.getElementById('iStock').value = item.stock;
