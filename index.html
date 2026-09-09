@@ -356,6 +356,7 @@ body {
 .page-scroll {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
 }
 
@@ -511,6 +512,7 @@ body {
   width: 100%;
   max-height: 92vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-bottom: calc(20px + var(--safe-bottom));
   animation: sheetUp .25s cubic-bezier(.34,1.56,.64,1);
 }
@@ -3061,6 +3063,10 @@ function saveItem() {
   const expiry = document.getElementById('iExpiry')?.value || '';
   if (!name||!cat||!unit) { toast('Fill required fields', 'err'); return; }
   const eid = document.getElementById('editId').value;
+  if (!eid) {
+    const summary = `Add new item?\n\n${name}\nCategory: ${cat}\nStock: ${stock} ${unit}${loc ? '\nLocation: ' + loc : ''}`;
+    if (!confirm(summary)) return;
+  }
   const _editItem = eid ? S.inventory.find(i => i.id === eid) : null;   // ADD
   const _prevStockBeforeEdit = _editItem ? _editItem.stock : 0;  
   if (eid) {
@@ -4390,6 +4396,11 @@ function closeProductPage() {
     const t = e.touches[0];
     startX = t.clientX; startY = t.clientY;
     tx = 0; ty = 0;
+    swipeTarget = null;
+    // Only arm the dismiss-swipe when it starts near the left edge.
+    // Prevents scrolling inside a long form (e.g. Add Item) from being
+    // misread as a swipe-to-close gesture.
+    if (startX > 40) return;
     // Detect which swipeable area was touched
     const productPage = document.getElementById('productPage');
     if (productPage && productPage.classList.contains('open')) {
