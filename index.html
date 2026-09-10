@@ -1383,7 +1383,11 @@ select.form-input { cursor: pointer; }
       </div>
       <div class="form-group">
         <label class="form-label">Item *</label>
-        <select class="form-input" id="txItem"></select>
+        <input class="form-input" id="txItemSearch" placeholder="Search items or type a new name…" autocomplete="off"
+          oninput="renderTxItemResults()" onfocus="renderTxItemResults()"
+          onblur="setTimeout(()=>{ var p=document.getElementById('txItemResults'); if(p) p.style.display='none'; }, 150)">
+        <div id="txItemResults" style="display:none;max-height:200px;overflow-y:auto;border:1.5px solid var(--border);border-radius:var(--r-sm);margin-top:6px;background:var(--surface)"></div>
+        <select id="txItem" style="display:none"></select>
       </div>
       <div class="form-group">
         <label class="form-label">Quantity *</label>
@@ -1415,7 +1419,7 @@ select.form-input { cursor: pointer; }
     <div class="sheet-handle"></div>
     <div class="sheet-hd">
       <div class="sheet-title" id="itemSheetTitle">Add Item</div>
-      <button class="sheet-close" onclick="closeSheet('addItemSheet')">✕</button>
+      <button class="sheet-close" onclick="closeSheet('addItemSheet');cancelTxResume()">✕</button>
     </div>
     <div class="sheet-body">
       <input type="hidden" id="editId">
@@ -1460,7 +1464,7 @@ select.form-input { cursor: pointer; }
     </div>
     <div class="sheet-footer">
       <button class="btn btn-primary btn-full" onclick="saveItem()">Save Item</button>
-      <button class="btn btn-ghost btn-full" onclick="document.getElementById('editId').value='';closeSheet('addItemSheet')">Cancel</button>
+      <button class="btn btn-ghost btn-full" onclick="document.getElementById('editId').value='';closeSheet('addItemSheet');cancelTxResume()">Cancel</button>
     </div>
   </div>
 </div>
@@ -2457,6 +2461,9 @@ function openSheet(id) {
     sel.innerHTML = '<option value="">Select item…</option>' + getItems().map(i => `<option value="${i.id}">${i.name} (${i.stock} ${i.unit})</option>`).join('');
     document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
     document.getElementById('txPerson').value = S.user?.name || '';
+    document.getElementById('txItemSearch').value = '';
+    document.getElementById('txItemResults').style.display = 'none';
+    document.getElementById('txItemResults').innerHTML = '';
     setTxType('IN');
   }
   if (id === 'addItemSheet') {
@@ -2491,7 +2498,7 @@ function closeSheet(id) {
     history.back();
   }
 }
-function sheetBgClose(e, id) { if (e.target === e.currentTarget) closeSheet(id); }
+function sheetBgClose(e, id) { if (e.target === e.currentTarget) { closeSheet(id); if (id === 'addItemSheet') cancelTxResume(); } }
 
 // Handle Android/browser back button — close topmost open sheet
 window.addEventListener('popstate', function(e) {
@@ -3239,7 +3246,7 @@ function saveItem() {
   const eid = document.getElementById('editId').value;
   if (!eid) {
     const summary = `Add new item?\n\n${name}\nCategory: ${cat}\nStock: ${stock} ${unit}${loc ? '\nLocation: ' + loc : ''}`;
-    if (!confirm(summary)) return;
+    if (!confirm(summary)) { cancelTxResume(); return; }
   }
   const _editItem = eid ? S.inventory.find(i => i.id === eid) : null;   // ADD
   const _prevStockBeforeEdit = _editItem ? _editItem.stock : 0;  
@@ -3320,6 +3327,27 @@ if (eid) {
         notes: 'Initial stock via Add Item', unit, category: cat
       })
     }).catch(() => {});
+  }
+
+  // If this item was created via "+ Add as new item" from Log Transaction,
+  // reopen that sheet with the new item pre-selected and the fields the
+  // user had already typed restored.
+  if (!eid && _txResumeState) {
+    const resume = _txResumeState; _txResumeState = null;
+    const createdItem = S.inventory.find(i => i.groupId === gid() && i.name.toLowerCase() === name.toLowerCase());
+    if (createdItem) {
+      setTimeout(() => {
+        openSheet('txSheet');
+        setTimeout(() => {
+          selectTxItem(createdItem.id);
+          setTxType(resume.type || 'IN');
+          document.getElementById('txQty').value = resume.qty || '';
+          document.getElementById('txPerson').value = resume.person || (S.user?.name || '');
+          document.getElementById('txDate').value = resume.date || new Date().toISOString().split('T')[0];
+          document.getElementById('txNotes').value = resume.notes || '';
+        }, 60);
+      }, 260); // wait for the addItemSheet close animation before reopening txSheet
+    }
   }
 }
 
@@ -3457,13 +3485,111 @@ function renderInv() {
   }).join('');
 }
 
-function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ document.getElementById('txItem').value=id; setTxType(type); },80); }
+function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
 let txTypeState = 'IN';
 function setTxType(t) {
   txTypeState = t;
   document.getElementById('txIn').className = 'type-btn' + (t==='IN'?' in-on':'');
   document.getElementById('txOut').className = 'type-btn' + (t==='OUT'?' out-on':'');
   document.getElementById('txByLabel').textContent = t==='IN'?'Given By *':'Taken By *';
+}
+
+// ── LOG TRANSACTION: searchable item picker ─────────────────────
+// The visible #txItemSearch input + #txItemResults list are the UI;
+// the hidden #txItem <select> remains the actual source of truth so
+// submitTx() and every other existing call site keeps working unchanged.
+let _txResumeState = null; // holds in-progress tx field values while the user creates a new item mid-transaction
+
+function renderTxItemResults() {
+  const raw = document.getElementById('txItemSearch').value;
+  const q = raw.trim().toLowerCase();
+  const panel = document.getElementById('txItemResults');
+  const items = getItems().filter(i => !q || i.name.toLowerCase().includes(q) || (i.code||'').toLowerCase().includes(q));
+
+  let html = items.slice(0, 30).map(i => {
+    const low = i.stock <= i.minStock;
+    return `<div class="list-row" style="padding:10px 12px;cursor:pointer" onmousedown="selectTxItem('${i.id}')">
+      <div class="row-body">
+        <div class="row-title" style="font-size:13px">${i.name}</div>
+        <div class="row-sub">${i.stock} ${i.unit}${low?' ⚠️':''} • ${i.category}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  if (q) {
+    const exact = items.some(i => i.name.toLowerCase() === q);
+    if (!exact) {
+      const safe = raw.trim().replace(/'/g, "\\'");
+      html += `<div class="list-row" style="padding:10px 12px;cursor:pointer;color:var(--accent);font-weight:700" onmousedown="addNewItemFromTx('${safe}')">
+        + Add "${raw.trim()}" as new item
+      </div>`;
+    }
+  }
+
+  if (!html) html = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">No items yet — type a name to add one</div>';
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+function selectTxItem(id) {
+  const item = S.inventory.find(i => i.id === id);
+  if (!item) return;
+  const sel = document.getElementById('txItem');
+  if (!sel.querySelector(`option[value="${id}"]`)) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = `${item.name} (${item.stock} ${item.unit})`;
+    sel.appendChild(opt);
+  }
+  sel.value = id;
+  document.getElementById('txItemSearch').value = `${item.name} (${item.stock} ${item.unit})`;
+  document.getElementById('txItemResults').style.display = 'none';
+}
+
+// User typed a name with no match and chose "+ Add as new item".
+// Hands off to the existing Add Item sheet (same validation, confirm
+// dialog, and category/unit dropdowns as any other new item) and
+// resumes the transaction afterward with the new item pre-selected.
+function addNewItemFromTx(query) {
+  _txResumeState = {
+    type: txTypeState,
+    qty: document.getElementById('txQty').value,
+    person: document.getElementById('txPerson').value,
+    date: document.getElementById('txDate').value,
+    notes: document.getElementById('txNotes').value
+  };
+  closeSheet('txSheet');
+  setTimeout(() => {
+    document.getElementById('editId').value = '';
+    document.getElementById('itemSheetTitle').textContent = 'Add Item';
+    ['iCode','iLoc'].forEach(x => document.getElementById(x).value = '');
+    document.getElementById('iStock').value = 0;
+    document.getElementById('iMin').value = S.settings.threshold;
+    populateTaxSelects();
+    document.getElementById('iCat').value = '';
+    document.getElementById('iUnit').value = '';
+    document.getElementById('iName').value = query;
+    openSheet('addItemSheet');
+    setTimeout(() => document.getElementById('iCat').focus(), 320);
+  }, 260); // wait for the sheet-close animation before opening the next one
+}
+
+// User backed out of creating the new item (cancelled the confirm dialog,
+// or closed the sheet via X / Cancel / backdrop) instead of completing it.
+// Safe to call unconditionally — no-op if there's no pending resume state.
+function cancelTxResume() {
+  if (!_txResumeState) return;
+  const resume = _txResumeState; _txResumeState = null;
+  setTimeout(() => {
+    openSheet('txSheet');
+    setTimeout(() => {
+      setTxType(resume.type || 'IN');
+      document.getElementById('txQty').value = resume.qty || '';
+      document.getElementById('txPerson').value = resume.person || (S.user?.name || '');
+      document.getElementById('txDate').value = resume.date || new Date().toISOString().split('T')[0];
+      document.getElementById('txNotes').value = resume.notes || '';
+    }, 60);
+  }, 260);
 }
 
 function generateItemCode(category) {
@@ -4642,18 +4768,7 @@ function productTx(type) {
   document.getElementById('txQty').value = '';
   setTxType(type);
 
-  // Must set value AFTER options are in DOM
-  sel.value = _currentProductId;
-
-  // If value didn't stick (item not in list), add it manually
-  if (!sel.value) {
-    const opt = document.createElement('option');
-    opt.value = item.id;
-    opt.textContent = `${item.name} (${item.stock} ${item.unit})`;
-    sel.appendChild(opt);
-    sel.value = item.id;
-  }
-
+  selectTxItem(item.id); // sets txItem.value, the visible search text, and hides the results panel
   document.getElementById('txSheet').classList.add('open');
 }
 async function handlePhotoUpload(event) {
