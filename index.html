@@ -356,7 +356,6 @@ body {
 .page-scroll {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
   padding-bottom: calc(var(--bottom-nav-h) + var(--safe-bottom) + 16px);
 }
 
@@ -512,7 +511,6 @@ body {
   width: 100%;
   max-height: 92vh;
   overflow-y: auto;
-  overscroll-behavior: contain;
   padding-bottom: calc(20px + var(--safe-bottom));
   animation: sheetUp .25s cubic-bezier(.34,1.56,.64,1);
 }
@@ -978,12 +976,21 @@ select.form-input { cursor: pointer; }
 
     <!-- ══ INVENTORY ══ -->
     <div class="page" id="pg-inv">
-      <div class="search-wrap">
+      <!-- Items / Locations mode pill -->
+      <div class="type-toggle" style="margin:12px 16px 0" id="stockModeToggle">
+        <button class="type-btn in-on" id="modeItems" onclick="setStockMode('items')" style="padding:9px">📦 Items</button>
+        <button class="type-btn" id="modeLocations" onclick="setStockMode('locations')" style="padding:9px">📍 Locations</button>
+      </div>
+      <div class="search-wrap" id="itemSearchWrap">
         <span>🔍</span>
         <input id="invSearch" placeholder="Search items..." oninput="renderInv()">
       </div>
-      <!-- Filter/Sort bar -->
-      <div style="padding:8px 16px 0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
+      <div class="search-wrap" id="locSearchWrap" style="display:none">
+        <span>🔍</span>
+        <input id="locSearch" placeholder="Search locations..." oninput="renderLocationList()">
+      </div>
+      <!-- Filter/Sort bar (Items mode only) -->
+      <div id="invFilterRow" style="padding:8px 16px 0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
         <select id="invSort" onchange="renderInv()" style="font-size:12px;padding:5px 8px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">
           <option value="name">🔤 A–Z</option>
           <option value="name_desc">🔤 Z–A</option>
@@ -1002,7 +1009,7 @@ select.form-input { cursor: pointer; }
       <div class="page-pad" style="padding-top:12px">
         <div class="section-hd">
           <div class="section-title" id="invCountTitle">All Items</div>
-          <button class="btn btn-ghost btn-sm" onclick="openSheet('bulkSheet')">📥 Bulk</button>
+          <button class="btn btn-ghost btn-sm" onclick="openSheet('bulkSheet')" id="btnBulk">📥 Bulk</button>
           <button class="btn btn-primary btn-sm" onclick="openSheet('addItemSheet')" id="btnAddItem">+ Add</button>
         </div>
         <div class="card" id="invList"></div>
@@ -1383,11 +1390,7 @@ select.form-input { cursor: pointer; }
       </div>
       <div class="form-group">
         <label class="form-label">Item *</label>
-        <input class="form-input" id="txItemSearch" placeholder="Search items or type a new name…" autocomplete="off"
-          oninput="renderTxItemResults()" onfocus="renderTxItemResults()"
-          onblur="setTimeout(()=>{ var p=document.getElementById('txItemResults'); if(p) p.style.display='none'; }, 150)">
-        <div id="txItemResults" style="display:none;max-height:200px;overflow-y:auto;border:1.5px solid var(--border);border-radius:var(--r-sm);margin-top:6px;background:var(--surface)"></div>
-        <select id="txItem" style="display:none"></select>
+        <select class="form-input" id="txItem"></select>
       </div>
       <div class="form-group">
         <label class="form-label">Quantity *</label>
@@ -1419,7 +1422,7 @@ select.form-input { cursor: pointer; }
     <div class="sheet-handle"></div>
     <div class="sheet-hd">
       <div class="sheet-title" id="itemSheetTitle">Add Item</div>
-      <button class="sheet-close" onclick="closeSheet('addItemSheet');cancelTxResume()">✕</button>
+      <button class="sheet-close" onclick="closeSheet('addItemSheet')">✕</button>
     </div>
     <div class="sheet-body">
       <input type="hidden" id="editId">
@@ -1432,11 +1435,9 @@ select.form-input { cursor: pointer; }
         <input class="form-input" id="iCode" placeholder="e.g. CHM-001, SKU123">
       </div>
       <div class="form-group">
-        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;text-transform:none;letter-spacing:0">
-          <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Category *</span>
-          <button type="button" onclick="openTaxonomyManage('category')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">✏️ Edit list</button>
-        </label>
-        <select class="form-input" id="iCat" onchange="onTaxSelectChange('category', this)"></select>
+        <label class="form-label">Category *</label>
+        <input class="form-input" id="iCat" placeholder="e.g. Chemicals" list="catDL">
+        <datalist id="catDL"></datalist>
       </div>
       <div class="form-group">
         <label class="form-label">Location</label>
@@ -1447,11 +1448,8 @@ select.form-input { cursor: pointer; }
         <input class="form-input" type="number" id="iStock" placeholder="0" min="0" inputmode="numeric">
       </div>
       <div class="form-group">
-        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;text-transform:none;letter-spacing:0">
-          <span style="font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Unit *</span>
-          <button type="button" onclick="openTaxonomyManage('unit')" style="background:none;border:none;color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;padding:0">✏️ Edit list</button>
-        </label>
-        <select class="form-input" id="iUnit" onchange="onTaxSelectChange('unit', this)"></select>
+        <label class="form-label">Unit *</label>
+        <input class="form-input" id="iUnit" placeholder="e.g. mL, pcs, kg, box">
       </div>
       <div class="form-group">
         <label class="form-label">Min Stock (Alert Level)</label>
@@ -1464,25 +1462,7 @@ select.form-input { cursor: pointer; }
     </div>
     <div class="sheet-footer">
       <button class="btn btn-primary btn-full" onclick="saveItem()">Save Item</button>
-      <button class="btn btn-ghost btn-full" onclick="document.getElementById('editId').value='';closeSheet('addItemSheet');cancelTxResume()">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- Taxonomy Manage Sheet (Category / Location / Unit) -->
-<div class="sheet-overlay" id="taxManageSheet" onclick="sheetBgClose(event,'taxManageSheet')">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-hd">
-      <div class="sheet-title" id="taxManageTitle">Manage</div>
-      <button class="sheet-close" onclick="closeSheet('taxManageSheet')">✕</button>
-    </div>
-    <div style="padding:16px">
-      <div style="display:flex;gap:8px;margin-bottom:14px">
-        <input class="form-input" id="taxNewValue" placeholder="Add new...">
-        <button class="btn btn-primary btn-sm" onclick="addTaxonomyValue()" style="flex-shrink:0">+ Add</button>
-      </div>
-      <div id="taxManageList" style="display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow-y:auto"></div>
+      <button class="btn btn-ghost btn-full" onclick="document.getElementById('editId').value='';closeSheet('addItemSheet')">Cancel</button>
     </div>
   </div>
 </div>
@@ -2452,8 +2432,20 @@ function switchTab(tab) {
   const fab = document.getElementById('fab');
   fab.style.display = ['home','inv','log'].includes(tab) ? '' : 'none';
   if (tab === 'home') renderHome();
-  if (tab === 'inv') renderInv();
+  if (tab === 'inv') renderStockView();
   if (tab === 'log') { _selectedTx.clear(); renderLog(); }
+}
+
+// Dispatches Stock-tab rendering to whichever sub-view is active
+// (Items list / Locations list / a specific location's item list) so
+// switching tabs away and back never silently resets the mode.
+function renderStockView() {
+  if (stockMode === 'locations') {
+    if (_locationView) openLocationView(_locationView);
+    else renderLocationList();
+  } else {
+    renderInv();
+  }
 }
 function openSheet(id) {
   if (id === 'txSheet') {
@@ -2461,9 +2453,6 @@ function openSheet(id) {
     sel.innerHTML = '<option value="">Select item…</option>' + getItems().map(i => `<option value="${i.id}">${i.name} (${i.stock} ${i.unit})</option>`).join('');
     document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
     document.getElementById('txPerson').value = S.user?.name || '';
-    document.getElementById('txItemSearch').value = '';
-    document.getElementById('txItemResults').style.display = 'none';
-    document.getElementById('txItemResults').innerHTML = '';
     setTxType('IN');
   }
   if (id === 'addItemSheet') {
@@ -2474,10 +2463,10 @@ function openSheet(id) {
       document.getElementById('iStock').value = 0;
       document.getElementById('iMin').value = S.settings.threshold;
     }
-    populateTaxSelects();
+    const cats = [...new Set(getItems().map(i => i.category))];
+    document.getElementById('catDL').innerHTML = cats.map(c => `<option value="${c}">`).join('');
     if (existingEditId) setTimeout(() => document.getElementById('editId').value = existingEditId, 0);
   }
-  if (id === 'taxManageSheet') renderTaxonomyManage();
   if (id === 'groupSheet') renderGroupSheet();
   if (id === 'membersSheet') { switchMemTab('list'); renderMembersSheet(); }
   if (id === 'activitySheet') { if(typeof _selectedLogs!=='undefined') _selectedLogs.clear(); renderActivity(); }
@@ -2498,7 +2487,7 @@ function closeSheet(id) {
     history.back();
   }
 }
-function sheetBgClose(e, id) { if (e.target === e.currentTarget) { closeSheet(id); if (id === 'addItemSheet') cancelTxResume(); } }
+function sheetBgClose(e, id) { if (e.target === e.currentTarget) closeSheet(id); }
 
 // Handle Android/browser back button — close topmost open sheet
 window.addEventListener('popstate', function(e) {
@@ -3082,157 +3071,6 @@ function promptInvite() { switchMemTab('add'); }
 function gid() { return S.activeGroupId; }
 function getItems() { return S.inventory.filter(i => i.groupId === gid()); }
 
-// ── TAXONOMY (Category / Unit) ──────────────────────
-// Lists are derived from values already on items, plus a per-group
-// "reserved" list for names added before any item uses them.
-// NOTE: the reserved list is local-only (localStorage) — there is no
-// server endpoint for it yet, so it does not sync across devices.
-// Location is intentionally NOT part of this system — plain text field.
-const TAX_FIELD      = { category: 'category', unit: 'unit' };
-const TAX_CUSTOM_KEY = { category: 'customCategories', unit: 'customUnits' };
-const TAX_LABEL      = { category: 'Categories', unit: 'Units' };
-let _taxKind = null;
-
-function getTaxonomyValues(kind) {
-  const field = TAX_FIELD[kind];
-  const used = getItems().map(i => i[field]).filter(Boolean);
-  const g = S.groups.find(g => g.id === gid());
-  const custom = (g && g[TAX_CUSTOM_KEY[kind]]) || [];
-  return [...new Set([...used, ...custom])].sort((a,b) => a.localeCompare(b));
-}
-
-function populateTaxSelects() {
-  const catSel  = document.getElementById('iCat');
-  const unitSel = document.getElementById('iUnit');
-  if (catSel) {
-    const cur = catSel.value;
-    catSel.innerHTML = '<option value="">Select category…</option>' +
-      getTaxonomyValues('category').map(v => `<option value="${v}">${v}</option>`).join('') +
-      '<option value="__new__">+ Add new category…</option>';
-    if (cur && cur !== '__new__') catSel.value = cur;
-  }
-  if (unitSel) {
-    const cur = unitSel.value;
-    unitSel.innerHTML = '<option value="">Select unit…</option>' +
-      getTaxonomyValues('unit').map(v => `<option value="${v}">${v}</option>`).join('') +
-      '<option value="__new__">+ Add new unit…</option>';
-    if (cur && cur !== '__new__') unitSel.value = cur;
-  }
-}
-
-// Handles the "+ Add new..." option inside the Category/Unit dropdowns.
-// If the user cancels the prompt, the select resets to blank rather than
-// staying stuck on "__new__".
-function onTaxSelectChange(kind, sel) {
-  if (sel.value !== '__new__') return;
-  const val = prompt(`New ${kind} name:`);
-  if (!val || !val.trim()) { sel.value = ''; return; }
-  const clean = val.trim();
-  const existing = getTaxonomyValues(kind);
-  if (!existing.some(v => v.toLowerCase() === clean.toLowerCase())) {
-    const g = S.groups.find(g => g.id === gid());
-    if (g) {
-      const key = TAX_CUSTOM_KEY[kind];
-      if (!g[key]) g[key] = [];
-      g[key].push(clean);
-      save();
-    }
-  }
-  populateTaxSelects();
-  sel.value = clean;
-}
-
-function openTaxonomyManage(kind) {
-  _taxKind = kind;
-  document.getElementById('taxManageTitle').textContent = 'Manage ' + TAX_LABEL[kind];
-  const input = document.getElementById('taxNewValue');
-  input.value = '';
-  input.placeholder = 'Add new ' + kind + '...';
-  renderTaxonomyManage();
-  openSheet('taxManageSheet');
-  setTimeout(() => input.focus(), 300);
-}
-
-function renderTaxonomyManage() {
-  const kind = _taxKind; if (!kind) return;
-  const field = TAX_FIELD[kind];
-  const values = getTaxonomyValues(kind);
-  const el = document.getElementById('taxManageList');
-  if (!values.length) {
-    el.innerHTML = `<p style="text-align:center;color:var(--muted);font-size:13px;padding:20px">No ${kind}s yet. Add one above.</p>`;
-    return;
-  }
-  el.innerHTML = values.map(v => {
-    const count = getItems().filter(i => i[field] === v).length;
-    const safe = v.replace(/'/g, "\\'");
-    return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v}</div>
-        <div style="font-size:11px;color:var(--muted)">${count} item${count!==1?'s':''}</div>
-      </div>
-      <button onclick="renameTaxonomyValue('${safe}')" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;flex-shrink:0">✏️</button>
-      <button onclick="deleteTaxonomyValue('${safe}')" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:12px;cursor:pointer;flex-shrink:0">🗑</button>
-    </div>`;
-  }).join('');
-}
-
-function addTaxonomyValue() {
-  const kind = _taxKind; if (!kind) return;
-  const input = document.getElementById('taxNewValue');
-  const val = input.value.trim();
-  if (!val) { toast('Enter a value first', 'err'); return; }
-  const existing = getTaxonomyValues(kind);
-  if (existing.some(v => v.toLowerCase() === val.toLowerCase())) { toast('Already exists', 'wrn'); return; }
-  const g = S.groups.find(g => g.id === gid()); if (!g) return;
-  const key = TAX_CUSTOM_KEY[kind];
-  if (!g[key]) g[key] = [];
-  g[key].push(val);
-  save();
-  input.value = '';
-  renderTaxonomyManage();
-  populateTaxSelects();
-  toast(`"${val}" added`, 'ok');
-}
-
-function renameTaxonomyValue(oldVal) {
-  const kind = _taxKind; if (!kind) return;
-  const field = TAX_FIELD[kind];
-  const input = prompt(`Rename "${oldVal}" to:`, oldVal);
-  if (!input) return;
-  const clean = input.trim();
-  if (!clean || clean === oldVal) return;
-  const items = getItems().filter(i => i[field] === oldVal);
-  items.forEach(i => {
-    i[field] = clean;
-    fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(i.name)}?groupId=${encodeURIComponent(gid()||'')}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [field]: clean, groupId: gid(), updated_by: S.user?.name || S.user?.email || '' })
-    }).catch(() => {});
-  });
-  const g = S.groups.find(g => g.id === gid());
-  const key = TAX_CUSTOM_KEY[kind];
-  if (g) {
-    if (!g[key]) g[key] = [];
-    g[key] = g[key].filter(v => v !== oldVal);
-    if (!items.length) g[key].push(clean); // reserved-only tag, not attached to any item
-  }
-  logAct(`Renamed ${kind}: ${oldVal} → ${clean} (${items.length} item${items.length!==1?'s':''})`);
-  save(); renderTaxonomyManage(); populateTaxSelects(); renderInv();
-  toast(`Renamed to "${clean}" — ${items.length} item(s) updated`, 'ok');
-}
-
-function deleteTaxonomyValue(val) {
-  const kind = _taxKind; if (!kind) return;
-  const field = TAX_FIELD[kind];
-  const count = getItems().filter(i => i[field] === val).length;
-  if (count > 0) { toast(`Still used by ${count} item(s) — rename or reassign them first`, 'err'); return; }
-  const g = S.groups.find(g => g.id === gid());
-  const key = TAX_CUSTOM_KEY[kind];
-  if (g && g[key]) g[key] = g[key].filter(v => v !== val);
-  save(); renderTaxonomyManage(); populateTaxSelects();
-  toast(`"${val}" removed`, 'wrn');
-}
-
 function saveItem() {
   const name = document.getElementById('iName').value.trim();
   let code = document.getElementById('iCode').value.trim();
@@ -3244,10 +3082,6 @@ function saveItem() {
   const expiry = document.getElementById('iExpiry')?.value || '';
   if (!name||!cat||!unit) { toast('Fill required fields', 'err'); return; }
   const eid = document.getElementById('editId').value;
-  if (!eid) {
-    const summary = `Add new item?\n\n${name}\nCategory: ${cat}\nStock: ${stock} ${unit}${loc ? '\nLocation: ' + loc : ''}`;
-    if (!confirm(summary)) { cancelTxResume(); return; }
-  }
   const _editItem = eid ? S.inventory.find(i => i.id === eid) : null;   // ADD
   const _prevStockBeforeEdit = _editItem ? _editItem.stock : 0;  
   if (eid) {
@@ -3328,27 +3162,6 @@ if (eid) {
       })
     }).catch(() => {});
   }
-
-  // If this item was created via "+ Add as new item" from Log Transaction,
-  // reopen that sheet with the new item pre-selected and the fields the
-  // user had already typed restored.
-  if (!eid && _txResumeState) {
-    const resume = _txResumeState; _txResumeState = null;
-    const createdItem = S.inventory.find(i => i.groupId === gid() && i.name.toLowerCase() === name.toLowerCase());
-    if (createdItem) {
-      setTimeout(() => {
-        openSheet('txSheet');
-        setTimeout(() => {
-          selectTxItem(createdItem.id);
-          setTxType(resume.type || 'IN');
-          document.getElementById('txQty').value = resume.qty || '';
-          document.getElementById('txPerson').value = resume.person || (S.user?.name || '');
-          document.getElementById('txDate').value = resume.date || new Date().toISOString().split('T')[0];
-          document.getElementById('txNotes').value = resume.notes || '';
-        }, 60);
-      }, 260); // wait for the addItemSheet close animation before reopening txSheet
-    }
-  }
 }
 
 function editItem(id) {
@@ -3358,7 +3171,6 @@ function editItem(id) {
   document.getElementById('itemSheetTitle').textContent = 'Edit Item';
   document.getElementById('iName').value = item.name;
   document.getElementById('iCode').value = item.code||'';
-  populateTaxSelects(); // must run before setting select values below
   document.getElementById('iCat').value = item.category;
   document.getElementById('iLoc').value = item.location||'';
   document.getElementById('iStock').value = item.stock;
@@ -3455,22 +3267,25 @@ function renderInv() {
   const title = document.getElementById('invCountTitle');
   if (title) title.textContent = `${items.length} Item${items.length!==1?'s':''}`;
   if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items found.</p></div>'; return; }
-  const adminBtns = isAdmin();
-  el.innerHTML = items.map(item => {
-    const pct = Math.min(100,(item.stock/Math.max(item.minStock*3,1))*100);
-    const low = item.stock <= item.minStock;
-    const watch = item.stock <= item.minStock*1.5;
-    const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
-    const badge = low ? '<span class="badge bg-red">LOW</span>' : watch ? '<span class="badge bg-warn">WATCH</span>' : '';
-    // Expiry badge
-    let expiryBadge = '';
-    if (item.expiry) {
-      const today2 = new Date(); today2.setHours(0,0,0,0);
-      const dLeft = Math.ceil((new Date(item.expiry) - today2) / 86400000);
-      if (dLeft < 0) expiryBadge = '<span class="badge bg-red" style="font-size:9px">⛔ EXPIRED</span>';
-      else if (dLeft <= 30) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
-    }
-    return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
+  el.innerHTML = items.map(itemRowHTML).join('');
+}
+
+// Shared row template — used by both the regular Items list and the
+// Locations-mode filtered item list, so the two views never drift apart.
+function itemRowHTML(item) {
+  const pct = Math.min(100,(item.stock/Math.max(item.minStock*3,1))*100);
+  const low = item.stock <= item.minStock;
+  const watch = item.stock <= item.minStock*1.5;
+  const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
+  const badge = low ? '<span class="badge bg-red">LOW</span>' : watch ? '<span class="badge bg-warn">WATCH</span>' : '';
+  let expiryBadge = '';
+  if (item.expiry) {
+    const today2 = new Date(); today2.setHours(0,0,0,0);
+    const dLeft = Math.ceil((new Date(item.expiry) - today2) / 86400000);
+    if (dLeft < 0) expiryBadge = '<span class="badge bg-red" style="font-size:9px">⛔ EXPIRED</span>';
+    else if (dLeft <= 30) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
+  }
+  return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
       <div class="row-icon ${low?'warn':'in'}">${low?'⚠️':'📦'}</div>
       <div class="row-body">
         <div class="row-title">${item.name} ${badge} ${expiryBadge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
@@ -3482,114 +3297,112 @@ function renderInv() {
       </div>
       <span style="color:var(--muted);font-size:20px">›</span>
     </div>`;
-  }).join('');
 }
 
-function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
+// ── STOCK PAGE: ITEMS / LOCATIONS MODE ────────────────────────
+let stockMode = 'items';
+let _locationView = null; // normalized location key currently being viewed, or null = location list
+
+function setStockMode(mode) {
+  stockMode = mode;
+  _locationView = null;
+  const bi = document.getElementById('modeItems'), bl = document.getElementById('modeLocations');
+  if (bi) bi.className = 'type-btn' + (mode==='items' ? ' in-on' : '');
+  if (bl) bl.className = 'type-btn' + (mode==='locations' ? ' in-on' : '');
+  const itemWrap = document.getElementById('itemSearchWrap');
+  const locWrap  = document.getElementById('locSearchWrap');
+  const filterRow = document.getElementById('invFilterRow');
+  const addBtn = document.getElementById('btnAddItem');
+  const bulkBtn = document.getElementById('btnBulk');
+  if (itemWrap)  itemWrap.style.display  = mode==='items' ? 'flex' : 'none';
+  if (locWrap)   locWrap.style.display   = mode==='locations' ? 'flex' : 'none';
+  if (filterRow) filterRow.style.display = mode==='items' ? 'flex' : 'none';
+  if (addBtn)  addBtn.style.display  = mode==='items' ? '' : 'none';
+  if (bulkBtn) bulkBtn.style.display = mode==='items' ? '' : 'none';
+  if (mode==='items') renderInv(); else renderLocationList();
+}
+
+// Groups items by trimmed+lowercased location. Display label = most
+// frequently used casing for that location (recomputed each render, not
+// first-seen-wins, so the label doesn't flip unpredictably over time).
+function getNormalizedLocations() {
+  const groups = {};
+  getItems().forEach(i => {
+    const raw = (i.location||'').trim();
+    if (!raw) return;
+    const key = raw.toLowerCase();
+    if (!groups[key]) groups[key] = { key, items: [], caseCounts: {} };
+    groups[key].items.push(i);
+    groups[key].caseCounts[raw] = (groups[key].caseCounts[raw]||0) + 1;
+  });
+  return Object.values(groups).map(g => {
+    const label = Object.entries(g.caseCounts).sort((a,b)=>b[1]-a[1])[0][0];
+    return { key: g.key, label, count: g.items.length };
+  }).sort((a,b) => a.label.localeCompare(b.label));
+}
+
+function renderLocationList() {
+  const q = document.getElementById('locSearch')?.value?.toLowerCase()||'';
+  const locs = getNormalizedLocations().filter(l => !q || l.label.toLowerCase().includes(q));
+  const el = document.getElementById('invList');
+  const title = document.getElementById('invCountTitle');
+  if (title) title.textContent = `${locs.length} Location${locs.length!==1?'s':''}`;
+  if (!locs.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📍</div><p>No locations found.</p></div>'; return; }
+  el.innerHTML = locs.map(l => `<div class="list-row" style="cursor:pointer" onclick="openLocationView('${l.key.replace(/'/g,"\\'")}')">
+      <div class="row-icon info">📍</div>
+      <div class="row-body">
+        <div class="row-title">${l.label}</div>
+        <div class="row-sub">${l.count} item${l.count!==1?'s':''}</div>
+      </div>
+      <span style="color:var(--muted);font-size:20px">›</span>
+    </div>`).join('');
+}
+
+// Shared destination for QR scan AND Stock-page Locations mode.
+function openLocationView(key) {
+  if (curTab !== 'inv') switchTab('inv');
+  if (stockMode !== 'locations') { stockMode = 'locations'; setStockModeUIOnly(); }
+  _locationView = key;
+  const loc = getNormalizedLocations().find(l => l.key === key);
+  const label = loc ? loc.label : key;
+  const items = getItems().filter(i => (i.location||'').trim().toLowerCase() === key);
+  const el = document.getElementById('invList');
+  const title = document.getElementById('invCountTitle');
+  if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; 📍 ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">⬛ QR</button>`;
+  if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items at this location.</p></div>'; return; }
+  el.innerHTML = items.map(itemRowHTML).join('');
+}
+
+function backToLocationList() {
+  _locationView = null;
+  renderLocationList();
+}
+
+// Sets pill/row visibility without re-triggering a render (used when
+// openLocationView switches modes on our behalf, e.g. from a QR scan).
+function setStockModeUIOnly() {
+  const bi = document.getElementById('modeItems'), bl = document.getElementById('modeLocations');
+  if (bi) bi.className = 'type-btn' + (stockMode==='items' ? ' in-on' : '');
+  if (bl) bl.className = 'type-btn' + (stockMode==='locations' ? ' in-on' : '');
+  const itemWrap = document.getElementById('itemSearchWrap');
+  const locWrap  = document.getElementById('locSearchWrap');
+  const filterRow = document.getElementById('invFilterRow');
+  const addBtn = document.getElementById('btnAddItem');
+  const bulkBtn = document.getElementById('btnBulk');
+  if (itemWrap)  itemWrap.style.display  = stockMode==='items' ? 'flex' : 'none';
+  if (locWrap)   locWrap.style.display   = stockMode==='locations' ? 'flex' : 'none';
+  if (filterRow) filterRow.style.display = stockMode==='items' ? 'flex' : 'none';
+  if (addBtn)  addBtn.style.display  = stockMode==='items' ? '' : 'none';
+  if (bulkBtn) bulkBtn.style.display = stockMode==='items' ? '' : 'none';
+}
+
+function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ document.getElementById('txItem').value=id; setTxType(type); },80); }
 let txTypeState = 'IN';
 function setTxType(t) {
   txTypeState = t;
   document.getElementById('txIn').className = 'type-btn' + (t==='IN'?' in-on':'');
   document.getElementById('txOut').className = 'type-btn' + (t==='OUT'?' out-on':'');
   document.getElementById('txByLabel').textContent = t==='IN'?'Given By *':'Taken By *';
-}
-
-// ── LOG TRANSACTION: searchable item picker ─────────────────────
-// The visible #txItemSearch input + #txItemResults list are the UI;
-// the hidden #txItem <select> remains the actual source of truth so
-// submitTx() and every other existing call site keeps working unchanged.
-let _txResumeState = null; // holds in-progress tx field values while the user creates a new item mid-transaction
-
-function renderTxItemResults() {
-  const raw = document.getElementById('txItemSearch').value;
-  const q = raw.trim().toLowerCase();
-  const panel = document.getElementById('txItemResults');
-  const items = getItems().filter(i => !q || i.name.toLowerCase().includes(q) || (i.code||'').toLowerCase().includes(q));
-
-  let html = items.slice(0, 30).map(i => {
-    const low = i.stock <= i.minStock;
-    return `<div class="list-row" style="padding:10px 12px;cursor:pointer" onmousedown="selectTxItem('${i.id}')">
-      <div class="row-body">
-        <div class="row-title" style="font-size:13px">${i.name}</div>
-        <div class="row-sub">${i.stock} ${i.unit}${low?' ⚠️':''} • ${i.category}</div>
-      </div>
-    </div>`;
-  }).join('');
-
-  if (q) {
-    const exact = items.some(i => i.name.toLowerCase() === q);
-    if (!exact) {
-      const safe = raw.trim().replace(/'/g, "\\'");
-      html += `<div class="list-row" style="padding:10px 12px;cursor:pointer;color:var(--accent);font-weight:700" onmousedown="addNewItemFromTx('${safe}')">
-        + Add "${raw.trim()}" as new item
-      </div>`;
-    }
-  }
-
-  if (!html) html = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">No items yet — type a name to add one</div>';
-  panel.innerHTML = html;
-  panel.style.display = 'block';
-}
-
-function selectTxItem(id) {
-  const item = S.inventory.find(i => i.id === id);
-  if (!item) return;
-  const sel = document.getElementById('txItem');
-  if (!sel.querySelector(`option[value="${id}"]`)) {
-    const opt = document.createElement('option');
-    opt.value = id;
-    opt.textContent = `${item.name} (${item.stock} ${item.unit})`;
-    sel.appendChild(opt);
-  }
-  sel.value = id;
-  document.getElementById('txItemSearch').value = `${item.name} (${item.stock} ${item.unit})`;
-  document.getElementById('txItemResults').style.display = 'none';
-}
-
-// User typed a name with no match and chose "+ Add as new item".
-// Hands off to the existing Add Item sheet (same validation, confirm
-// dialog, and category/unit dropdowns as any other new item) and
-// resumes the transaction afterward with the new item pre-selected.
-function addNewItemFromTx(query) {
-  _txResumeState = {
-    type: txTypeState,
-    qty: document.getElementById('txQty').value,
-    person: document.getElementById('txPerson').value,
-    date: document.getElementById('txDate').value,
-    notes: document.getElementById('txNotes').value
-  };
-  closeSheet('txSheet');
-  setTimeout(() => {
-    document.getElementById('editId').value = '';
-    document.getElementById('itemSheetTitle').textContent = 'Add Item';
-    ['iCode','iLoc'].forEach(x => document.getElementById(x).value = '');
-    document.getElementById('iStock').value = 0;
-    document.getElementById('iMin').value = S.settings.threshold;
-    populateTaxSelects();
-    document.getElementById('iCat').value = '';
-    document.getElementById('iUnit').value = '';
-    document.getElementById('iName').value = query;
-    openSheet('addItemSheet');
-    setTimeout(() => document.getElementById('iCat').focus(), 320);
-  }, 260); // wait for the sheet-close animation before opening the next one
-}
-
-// User backed out of creating the new item (cancelled the confirm dialog,
-// or closed the sheet via X / Cancel / backdrop) instead of completing it.
-// Safe to call unconditionally — no-op if there's no pending resume state.
-function cancelTxResume() {
-  if (!_txResumeState) return;
-  const resume = _txResumeState; _txResumeState = null;
-  setTimeout(() => {
-    openSheet('txSheet');
-    setTimeout(() => {
-      setTxType(resume.type || 'IN');
-      document.getElementById('txQty').value = resume.qty || '';
-      document.getElementById('txPerson').value = resume.person || (S.user?.name || '');
-      document.getElementById('txDate').value = resume.date || new Date().toISOString().split('T')[0];
-      document.getElementById('txNotes').value = resume.notes || '';
-    }, 60);
-  }, 260);
 }
 
 function generateItemCode(category) {
@@ -4501,7 +4314,7 @@ function applyInstantUpdate(data) {
 function refreshCurrentView() {
   const activePage = document.querySelector('.page.active')?.id;
   if (activePage === 'pg-home') renderHome();
-  if (activePage === 'pg-inv') renderInv();
+  if (activePage === 'pg-inv') renderStockView();
   if (activePage === 'pg-log') renderLog();
 }
 
@@ -4697,11 +4510,6 @@ function closeProductPage() {
     const t = e.touches[0];
     startX = t.clientX; startY = t.clientY;
     tx = 0; ty = 0;
-    swipeTarget = null;
-    // Only arm the dismiss-swipe when it starts near the left edge.
-    // Prevents scrolling inside a long form (e.g. Add Item) from being
-    // misread as a swipe-to-close gesture.
-    if (startX > 40) return;
     // Detect which swipeable area was touched
     const productPage = document.getElementById('productPage');
     if (productPage && productPage.classList.contains('open')) {
@@ -4744,7 +4552,6 @@ function editItemFromProduct() {
   document.getElementById('itemSheetTitle').textContent = 'Edit Item';
   document.getElementById('iName').value = item.name;
   document.getElementById('iCode').value = item.code || '';
-  populateTaxSelects(); // must run before setting select values below
   document.getElementById('iCat').value = item.category;
   document.getElementById('iLoc').value = item.location || '';
   document.getElementById('iStock').value = item.stock;
@@ -4768,7 +4575,18 @@ function productTx(type) {
   document.getElementById('txQty').value = '';
   setTxType(type);
 
-  selectTxItem(item.id); // sets txItem.value, the visible search text, and hides the results panel
+  // Must set value AFTER options are in DOM
+  sel.value = _currentProductId;
+
+  // If value didn't stick (item not in list), add it manually
+  if (!sel.value) {
+    const opt = document.createElement('option');
+    opt.value = item.id;
+    opt.textContent = `${item.name} (${item.stock} ${item.unit})`;
+    sel.appendChild(opt);
+    sel.value = item.id;
+  }
+
   document.getElementById('txSheet').classList.add('open');
 }
 async function handlePhotoUpload(event) {
@@ -4906,10 +4724,15 @@ const QRGen = (() => {
   return { render, getUrl, getDataUrl };
 })();
 
+// Shared by item QR (openQRSheet) and location QR (openLocationQR) so
+// downloadQR/printQR don't need to know which kind of QR is on screen.
+let _qrContext = null; // { title, subtitle, filenameBase }
+
 function openQRSheet() {
   const item = S.inventory.find(i => i.id === _currentProductId);
   if (!item) return;
 
+  _qrContext = { title: item.name, subtitle: (item.code||'') + (item.code&&item.category?' • ':'') + (item.category||''), filenameBase: item.name };
   document.getElementById('qrItemName').textContent = item.name;
   document.getElementById('qrItemCode').textContent = item.code || '';
 
@@ -4925,9 +4748,26 @@ function openQRSheet() {
   openSheet('qrSheet');
 }
 
+// Location QR — same sheet, same download/print, different payload
+// (?location= instead of ?item=). Public (logged-out) scans get the same
+// read-only treatment as item QR — see _showPublicLocationView.
+function openLocationQR(key, label) {
+  _qrContext = { title: label, subtitle: 'Location', filenameBase: label };
+  document.getElementById('qrItemName').textContent = label;
+  document.getElementById('qrItemCode').textContent = 'Location';
+
+  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
+  const url = appUrl + '?location=' + encodeURIComponent(key) + '&loclabel=' + encodeURIComponent(label) + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
+
+  const wrap = document.getElementById('qrCanvas');
+  wrap.innerHTML = '';
+  QRGen.render(url, wrap, 220);
+
+  openSheet('qrSheet');
+}
+
 function downloadQR() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  const name = (item?.name || 'item').replace(/[^a-z0-9]/gi,'_');
+  const name = (_qrContext?.filenameBase || 'item').replace(/[^a-z0-9]/gi,'_');
   // qrcode.js renders a <canvas> inside the container
   const canvas = document.querySelector('#qrCanvas canvas');
   if (!canvas) { toast('QR not ready — wait a moment', 'wrn'); return; }
@@ -4939,8 +4779,7 @@ function downloadQR() {
 }
 
 function printQR() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  if (!item) return;
+  if (!_qrContext) return;
   const canvas = document.querySelector('#qrCanvas canvas');
   if (!canvas) { toast('QR not ready', 'wrn'); return; }
   const dataUrl = canvas.toDataURL('image/png');
@@ -4949,7 +4788,7 @@ function printQR() {
 <!DOCTYPE html>
 <html>
 <head>
-  <title>QR - ${item.name}</title>
+  <title>QR - ${_qrContext.title}</title>
   <style>
     body {
       font-family: sans-serif;
@@ -4975,8 +4814,8 @@ function printQR() {
 </head>
 <body onload="window.print()">
   <img src="${dataUrl}">
-  <h2>${item.name}</h2>
-  <p>${item.code || ''} &bull; ${item.category || ''}</p>
+  <h2>${_qrContext.title}</h2>
+  <p>${_qrContext.subtitle || ''}</p>
   <p style="margin-top:6px;font-size:11px">
     LabStock Inventory
   </p>
@@ -5383,11 +5222,12 @@ const _origRenderInv = renderInv;
 function handleQRDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const itemParam = params.get('item');
+  const locationParam = params.get('location');
   const groupParam = params.get('group');
-  if (!itemParam) return false;
+  if (!itemParam && !locationParam) return false;
 
   if (S.user) {
-    // Logged-in: switch group if needed, then sync and open product page
+    // Logged-in: switch group if needed, then sync and open the right view
     setTimeout(async () => {
       if (groupParam && groupParam !== S.activeGroupId) {
         const g = S.groups.find(g => g.id === groupParam);
@@ -5400,6 +5240,14 @@ function handleQRDeepLink() {
       }
       // Sync first so inventory is fresh
       await syncFromServer(true);
+
+      if (locationParam) {
+        switchTab('inv');
+        openLocationView(decodeURIComponent(locationParam).toLowerCase());
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+
       const item = getItems().find(i =>
         i.code?.toLowerCase() === itemParam.toLowerCase() ||
         i.name.toLowerCase() === decodeURIComponent(itemParam).toLowerCase()
@@ -5415,9 +5263,64 @@ function handleQRDeepLink() {
     // Not logged in: show public read-only view immediately, skip login screen
     document.getElementById('loginScreen').style.display = 'none';
     hideAppSpinner();
-    _showPublicItemView(itemParam, groupParam);
+    if (locationParam) _showPublicLocationView(locationParam, groupParam);
+    else _showPublicItemView(itemParam, groupParam);
   }
   return true;
+}
+
+// Public (logged-out) read-only view for a location QR scan — same
+// treatment as the single-item public view, just listing every item at
+// that location instead of one item.
+function _showPublicLocationView(locationKey, groupId) {
+  const params = new URLSearchParams(window.location.search);
+  const locLabel = params.get('loclabel') || decodeURIComponent(locationKey);
+  const cleanUrl = window.location.href.split('?')[0];
+  const normKey = decodeURIComponent(locationKey).trim().toLowerCase();
+
+  document.body.innerHTML =
+    '<div style="min-height:100vh;background:#f5f3ee;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px">' +
+    '<div style="max-width:400px;width:100%">' +
+    '<div style="text-align:center;margin-bottom:20px">' +
+    '<div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div>' +
+    '<div style="font-size:12px;color:#888;margin-top:4px">📍 ' + locLabel + '</div></div>' +
+    '<div id="pubLocCard" style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 16px rgba(0,0,0,.08)">' +
+    '<div style="text-align:center;color:#888;padding:20px">⏳ Loading items...</div></div>' +
+    '<a href="' + cleanUrl + '" style="display:block;margin-top:16px;text-align:center;padding:14px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">🔑 Sign in for full access</a>' +
+    '<p style="text-align:center;font-size:11px;color:#aaa;margin-top:10px">Scan again after signing in to manage stock</p>' +
+    '</div></div>';
+
+  const url = RAILWAY_URL + '/api/inventory' + (groupId ? '?groupId=' + encodeURIComponent(groupId) : '');
+
+  fetch(url)
+    .then(r => r.ok ? r.json() : [])
+    .then(allItems => {
+      const c = document.getElementById('pubLocCard');
+      if (!c) return;
+      const items = allItems.filter(i => (i.location||'').trim().toLowerCase() === normKey);
+      if (!items.length) {
+        c.innerHTML =
+          '<div style="text-align:center;padding:24px">' +
+          '<div style="font-size:32px;margin-bottom:12px">❌</div>' +
+          '<div style="color:#e53935;font-weight:700;font-size:15px">No items found</div>' +
+          '<div style="color:#aaa;font-size:12px;margin-top:6px">Location: ' + locLabel + '</div>' +
+          '</div>';
+        return;
+      }
+      c.innerHTML = items.map(item => {
+        const low = item.stock <= (item.minStock || 10);
+        const color = low ? '#e53935' : '#2d6a4f';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0">' +
+          '<div><div style="font-weight:700;font-size:14px;color:#1a1a1a">' + item.name + '</div>' +
+          '<div style="font-size:11px;color:#888">' + (item.category||'') + '</div></div>' +
+          '<div style="font-weight:800;font-size:16px;color:' + color + '">' + item.stock + ' <span style="font-size:11px;font-weight:400;color:#888">' + (item.unit||'') + '</span></div>' +
+          '</div>';
+      }).join('');
+    })
+    .catch(() => {
+      const c = document.getElementById('pubLocCard');
+      if (c) c.innerHTML = '<div style="color:#e53935;text-align:center;padding:20px">❌ Could not load items.<br><span style="font-size:12px;color:#aaa">Check your connection</span></div>';
+    });
 }
 
 function _showPublicItemView(itemCode, groupId) {
