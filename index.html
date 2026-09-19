@@ -567,6 +567,15 @@ select.form-input { cursor: pointer; }
 .search-wrap input::placeholder { color: var(--muted); }
 
 .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
+
+/* ── STOCK PAGE: GRID VIEW (category tiles + item cards) ──── */
+.tile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.category-tile {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 14px; cursor: pointer;
+  transition: transform .12s; text-align: left;
+}
+.category-tile:active { transform: scale(.96); }
 .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .3; }
 .empty p { font-size: 13px; }
 
@@ -1009,10 +1018,12 @@ select.form-input { cursor: pointer; }
         <button id="invFilterLow" onclick="toggleLowFilter()" style="font-size:12px;padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">
           🔴 Low Only
         </button>
+        <button id="viewModeToggle" onclick="toggleViewMode()" style="font-size:12px;padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">⊞ Grid</button>
       </div>
       <div class="page-pad" style="padding-top:12px">
         <div class="section-hd">
           <div class="section-title" id="invCountTitle">All Items</div>
+          <button class="btn btn-ghost btn-sm" onclick="openLocationQRPrintAll()" id="btnLocPrintAll" style="display:none">🖨 Print All</button>
           <button class="btn btn-ghost btn-sm" onclick="openSheet('bulkSheet')" id="btnBulk">📥 Bulk</button>
           <button class="btn btn-primary btn-sm" onclick="openSheet('addItemSheet')" id="btnAddItem">+ Add</button>
         </div>
@@ -1170,6 +1181,11 @@ select.form-input { cursor: pointer; }
           <div class="list-row" onclick="exportCSV()">
             <div class="row-icon in">⬇️</div>
             <div class="row-body"><div class="row-title">Export CSV</div><div class="row-sub">Download transaction log</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
+          <div class="list-row" onclick="exportQRLinksCSV()">
+            <div class="row-icon in">📱</div>
+            <div class="row-body"><div class="row-title">Export QR Links</div><div class="row-sub">CSV of all item &amp; location QR URLs</div></div>
             <span style="color:var(--muted)">›</span>
           </div>
         </div>
@@ -2414,6 +2430,7 @@ function showApp() {
   document.getElementById('app').classList.add('visible');
   updateTopbar();
   loadSettings();
+  updateViewModeBtn();
   var hr = document.getElementById('homeRecent');
   if (hr) hr.innerHTML = skeletonRows(4);
   var kpis = ['kpiItems','kpiLow','kpiIn','kpiOut'];
@@ -3457,6 +3474,8 @@ function renderInv() {
     catSel.innerHTML = '<option value="">All Categories</option>' + cats.map(c => `<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
   }
 
+  if (stockViewMode === 'grid') { renderGridView(q); return; }
+
   let items = getItems().filter(i => {
     if (q && !i.name.toLowerCase().includes(q) && !i.category.toLowerCase().includes(q) && !(i.code||'').toLowerCase().includes(q)) return false;
     if (catF && i.category !== catF) return false;
@@ -3511,6 +3530,76 @@ function itemRowHTML(item) {
     </div>`;
 }
 
+// ── STOCK PAGE: LIST / GRID VIEW TOGGLE (Items mode only) ─────
+// Grid has two levels: category tiles, then item cards within a tapped
+// category. Reuses the same filtered getItems() data as the list view —
+// only the card template + an extra category-grouping step differ.
+let stockViewMode = localStorage.getItem('labstock_view_mode') || 'list';
+let _gridCategory = null; // null = showing category tiles, else = item cards for this category
+
+function toggleViewMode() {
+  stockViewMode = stockViewMode === 'grid' ? 'list' : 'grid';
+  localStorage.setItem('labstock_view_mode', stockViewMode);
+  _gridCategory = null;
+  updateViewModeBtn();
+  renderInv();
+}
+
+function updateViewModeBtn() {
+  const btn = document.getElementById('viewModeToggle');
+  if (btn) btn.textContent = stockViewMode === 'grid' ? '☰ List' : '⊞ Grid';
+  ['invSort','invFilterCat','invFilterLow'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = stockViewMode === 'grid' ? 'none' : '';
+  });
+}
+
+function renderGridView(q) {
+  const el = document.getElementById('invList');
+  const title = document.getElementById('invCountTitle');
+
+  if (_gridCategory === null) {
+    const counts = {};
+    getItems().forEach(i => {
+      if (!counts[i.category]) counts[i.category] = { total: 0, low: 0 };
+      counts[i.category].total++;
+      if (i.stock <= i.minStock) counts[i.category].low++;
+    });
+    const cats = Object.keys(counts).sort((a,b) => a.localeCompare(b));
+    if (title) title.textContent = `${cats.length} Categor${cats.length!==1?'ies':'y'}`;
+    if (!cats.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🗂</div><p>No items yet.</p></div>'; return; }
+    el.innerHTML = `<div class="tile-grid">` + cats.map(c => {
+      const d = counts[c];
+      const safe = c.replace(/'/g, "\\'");
+      return `<div class="category-tile" onclick="openGridCategory('${safe}')">
+        <div style="font-size:24px;margin-bottom:6px">🗂</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c}</div>
+        <div style="font-size:12px;color:var(--muted)">${d.total} item${d.total!==1?'s':''}${d.low?` &bull; <span style="color:var(--danger);font-weight:600">${d.low} low</span>`:''}</div>
+      </div>`;
+    }).join('') + `</div>`;
+  } else {
+    let items = getItems().filter(i => i.category === _gridCategory);
+    if (q) items = items.filter(i => i.name.toLowerCase().includes(q) || (i.code||'').toLowerCase().includes(q));
+    if (title) title.innerHTML = `<span onclick="backToGridCategories()" style="cursor:pointer;color:var(--accent)">← Categories</span> &nbsp;·&nbsp; 🗂 ${_gridCategory}`;
+    if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items in this category.</p></div>'; return; }
+    el.innerHTML = `<div class="tile-grid">` + items.map(itemGridCardHTML).join('') + `</div>`;
+  }
+}
+
+function itemGridCardHTML(item) {
+  const low = item.stock <= item.minStock;
+  const watch = item.stock <= item.minStock * 1.5;
+  const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
+  return `<div class="category-tile" onclick="openProductPage('${item.id}')">
+    <div style="font-size:20px;margin-bottom:6px">${low?'⚠️':'📦'}</div>
+    <div style="font-weight:700;font-size:13px;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name}</div>
+    <div style="font-size:12px;font-weight:700;color:${color}">${item.stock} ${item.unit}</div>
+  </div>`;
+}
+
+function openGridCategory(cat) { _gridCategory = cat; renderInv(); }
+function backToGridCategories() { _gridCategory = null; renderInv(); }
+
 // ── STOCK PAGE: ITEMS / LOCATIONS MODE ────────────────────────
 let stockMode = 'items';
 let _locationView = null; // normalized location key currently being viewed, or null = location list
@@ -3532,6 +3621,15 @@ function setStockMode(mode) {
   if (addBtn)  addBtn.style.display  = mode==='items' ? '' : 'none';
   if (bulkBtn) bulkBtn.style.display = mode==='items' ? '' : 'none';
   if (mode==='items') renderInv(); else renderLocationList();
+  updateLocPrintAllBtn();
+}
+
+// Shows the "Print All" (location QR sheet) button only when Locations
+// mode is showing the location list itself, not a single location's items.
+function updateLocPrintAllBtn() {
+  const btn = document.getElementById('btnLocPrintAll');
+  if (!btn) return;
+  btn.style.display = (stockMode==='locations' && !_locationView) ? '' : 'none';
 }
 
 // Groups items by trimmed+lowercased location. Display label = most
@@ -3559,6 +3657,7 @@ function renderLocationList() {
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
   if (title) title.textContent = `${locs.length} Location${locs.length!==1?'s':''}`;
+  updateLocPrintAllBtn();
   if (!locs.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📍</div><p>No locations found.</p></div>'; return; }
   el.innerHTML = locs.map(l => `<div class="list-row" style="cursor:pointer" onclick="openLocationView('${l.key.replace(/'/g,"\\'")}')">
       <div class="row-icon info">📍</div>
@@ -3581,6 +3680,7 @@ function openLocationView(key) {
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
   if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; 📍 ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">⬛ QR</button>`;
+  updateLocPrintAllBtn();
   if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items at this location.</p></div>'; return; }
   el.innerHTML = items.map(itemRowHTML).join('');
 }
@@ -3606,6 +3706,7 @@ function setStockModeUIOnly() {
   if (filterRow) filterRow.style.display = stockMode==='items' ? 'flex' : 'none';
   if (addBtn)  addBtn.style.display  = stockMode==='items' ? '' : 'none';
   if (bulkBtn) bulkBtn.style.display = stockMode==='items' ? '' : 'none';
+  updateLocPrintAllBtn();
 }
 
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
@@ -4277,6 +4378,29 @@ function dlFile(filename, type, content) {
   a.href = 'data:' + type + ';charset=utf-8,' + encodeURIComponent(content);
   a.download = filename; a.click();
 }
+
+// Deferred Phase 4 item — one CSV covering both Items and Locations QR
+// URLs (type column distinguishes them), reusing the same encoded URLs
+// already generated for each individual QR. No QR images — just links,
+// generated entirely client-side via the existing dlFile() pattern.
+function exportQRLinksCSV() {
+  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
+  const gidVal = S.activeGroupId || '';
+  const rows = [['Type','Name','Code / Item Count','Category','Direct QR URL']];
+  getItems().forEach(i => {
+    const url = appUrl + '?item=' + encodeURIComponent(i.code || i.name) + '&name=' + encodeURIComponent(i.name) + (gidVal ? '&group=' + encodeURIComponent(gidVal) : '');
+    rows.push(['Item', i.name, i.code || '', i.category || '', url]);
+  });
+  getNormalizedLocations().forEach(l => {
+    const url = appUrl + '?location=' + encodeURIComponent(l.key) + '&loclabel=' + encodeURIComponent(l.label) + (gidVal ? '&group=' + encodeURIComponent(gidVal) : '');
+    rows.push(['Location', l.label, String(l.count), '', url]);
+  });
+  if (rows.length === 1) { toast('Nothing to export yet', 'wrn'); return; }
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  dlFile(`labstock_qr_links_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv', csv);
+  toast(`📥 ${rows.length-1} QR links exported!`, 'ok');
+}
+
 function downloadTemplate() {
   const csv = `Item Name,Unique Code,Category,Location,Unit,Stock,Min Stock
 Ethanol 95%,CHM-001,Chemicals,Shelf A1,L,10,5
@@ -5217,6 +5341,59 @@ function openQRPrintAll() {
     '  var qDiv = document.createElement("div"); qDiv.className = "qr";' +
     '  var nm = document.createElement("div"); nm.className = "name"; nm.textContent = item.name;' +
     '  var cd = document.createElement("div"); cd.className = "code"; cd.textContent = (item.code||"—") + " · " + (item.category||"");' +
+    '  cell.appendChild(qDiv); cell.appendChild(nm); cell.appendChild(cd);' +
+    '  grid.appendChild(cell);' +
+    '  new QRCode(qDiv, { text: url, width: 120, height: 120, colorDark:"#000", colorLight:"#fff", correctLevel: QRCode.CorrectLevel.M });' +
+    '});' +
+    '<\/script><\/body><\/html>');
+  win.document.close();
+  toast('Print view opened!', 'ok');
+}
+
+// Same pattern as openQRPrintAll() above, keyed by normalized location
+// instead of item. Deferred item from Phase 4 — no new dependency, reuses
+// the same QRCode.js CDN script and print CSS.
+function openLocationQRPrintAll() {
+  const locs = getNormalizedLocations();
+  if (!locs.length) { toast('No locations to print', 'wrn'); return; }
+
+  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
+  const groupName = S.groups.find(g => g.id === S.activeGroupId)?.name || '';
+  const gidVal = S.activeGroupId || '';
+
+  const locData = JSON.stringify(locs.map(l => ({ key: l.key, label: l.label, count: l.count })));
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Allow popups for this site', 'err'); return; }
+
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Location QR Codes</title>' +
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>' +
+    '<style>' +
+    '* { box-sizing:border-box; margin:0; padding:0; }' +
+    'body { font-family:Arial,sans-serif; padding:16px; background:#fff; }' +
+    'h2 { font-size:16px; margin-bottom:12px; color:#2d6a4f; }' +
+    '.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; }' +
+    '.cell { text-align:center; padding:10px 6px; border:1px solid #eee; border-radius:8px; page-break-inside:avoid; break-inside:avoid; }' +
+    '.qr { width:120px; height:120px; margin:0 auto 6px; }' +
+    '.name { font-size:10px; font-weight:700; line-height:1.3; margin-bottom:2px; word-break:break-word; }' +
+    '.code { font-size:9px; color:#888; font-family:monospace; }' +
+    'button { background:#2d6a4f; color:white; border:none; padding:10px 24px; border-radius:6px; font-size:14px; cursor:pointer; margin-bottom:16px; display:block; }' +
+    '@media print { button{display:none} body{padding:4px} }' +
+    '<\/style><\/head><body>' +
+    '<h2>🧪 LabStock Location QR Codes — ' + groupName + '<\/h2>' +
+    '<button onclick="window.print()">🖨️ Print \/ Save as PDF<\/button>' +
+    '<div class="grid" id="qrGrid"><\/div>' +
+    '<script>' +
+    'var LOCS = ' + locData + ';' +
+    'var APP_URL = "' + appUrl + '";' +
+    'var GID = "' + gidVal + '";' +
+    'var grid = document.getElementById("qrGrid");' +
+    'LOCS.forEach(function(loc) {' +
+    '  var url = APP_URL + "?location=" + encodeURIComponent(loc.key) + "&loclabel=" + encodeURIComponent(loc.label) + (GID ? "&group=" + encodeURIComponent(GID) : "");' +
+    '  var cell = document.createElement("div"); cell.className = "cell";' +
+    '  var qDiv = document.createElement("div"); qDiv.className = "qr";' +
+    '  var nm = document.createElement("div"); nm.className = "name"; nm.textContent = "📍 " + loc.label;' +
+    '  var cd = document.createElement("div"); cd.className = "code"; cd.textContent = loc.count + " item" + (loc.count!==1?"s":"");' +
     '  cell.appendChild(qDiv); cell.appendChild(nm); cell.appendChild(cd);' +
     '  grid.appendChild(cell);' +
     '  new QRCode(qDiv, { text: url, width: 120, height: 120, colorDark:"#000", colorLight:"#fff", correctLevel: QRCode.CorrectLevel.M });' +
