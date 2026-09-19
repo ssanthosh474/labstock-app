@@ -978,12 +978,21 @@ select.form-input { cursor: pointer; }
 
     <!-- ══ INVENTORY ══ -->
     <div class="page" id="pg-inv">
-      <div class="search-wrap">
+      <!-- Items / Locations mode pill -->
+      <div class="type-toggle" style="margin:12px 16px 0" id="stockModeToggle">
+        <button class="type-btn in-on" id="modeItems" onclick="setStockMode('items')" style="padding:9px">📦 Items</button>
+        <button class="type-btn" id="modeLocations" onclick="setStockMode('locations')" style="padding:9px">📍 Locations</button>
+      </div>
+      <div class="search-wrap" id="itemSearchWrap">
         <span>🔍</span>
         <input id="invSearch" placeholder="Search items..." oninput="renderInv()">
       </div>
-      <!-- Filter/Sort bar -->
-      <div style="padding:8px 16px 0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
+      <div class="search-wrap" id="locSearchWrap" style="display:none">
+        <span>🔍</span>
+        <input id="locSearch" placeholder="Search locations..." oninput="renderLocationList()">
+      </div>
+      <!-- Filter/Sort bar (Items mode only) -->
+      <div id="invFilterRow" style="padding:8px 16px 0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
         <select id="invSort" onchange="renderInv()" style="font-size:12px;padding:5px 8px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">
           <option value="name">🔤 A–Z</option>
           <option value="name_desc">🔤 Z–A</option>
@@ -1002,7 +1011,7 @@ select.form-input { cursor: pointer; }
       <div class="page-pad" style="padding-top:12px">
         <div class="section-hd">
           <div class="section-title" id="invCountTitle">All Items</div>
-          <button class="btn btn-ghost btn-sm" onclick="openSheet('bulkSheet')">📥 Bulk</button>
+          <button class="btn btn-ghost btn-sm" onclick="openSheet('bulkSheet')" id="btnBulk">📥 Bulk</button>
           <button class="btn btn-primary btn-sm" onclick="openSheet('addItemSheet')" id="btnAddItem">+ Add</button>
         </div>
         <div class="card" id="invList"></div>
@@ -2452,8 +2461,20 @@ function switchTab(tab) {
   const fab = document.getElementById('fab');
   fab.style.display = ['home','inv','log'].includes(tab) ? '' : 'none';
   if (tab === 'home') renderHome();
-  if (tab === 'inv') renderInv();
+  if (tab === 'inv') renderStockView();
   if (tab === 'log') { _selectedTx.clear(); renderLog(); }
+}
+
+// Dispatches Stock-tab rendering to whichever sub-view is active
+// (Items list / Locations list / a specific location's item list) so
+// switching tabs away and back never silently resets the mode.
+function renderStockView() {
+  if (stockMode === 'locations') {
+    if (_locationView) openLocationView(_locationView);
+    else renderLocationList();
+  } else {
+    renderInv();
+  }
 }
 function openSheet(id) {
   if (id === 'txSheet') {
@@ -3455,22 +3476,25 @@ function renderInv() {
   const title = document.getElementById('invCountTitle');
   if (title) title.textContent = `${items.length} Item${items.length!==1?'s':''}`;
   if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items found.</p></div>'; return; }
-  const adminBtns = isAdmin();
-  el.innerHTML = items.map(item => {
-    const pct = Math.min(100,(item.stock/Math.max(item.minStock*3,1))*100);
-    const low = item.stock <= item.minStock;
-    const watch = item.stock <= item.minStock*1.5;
-    const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
-    const badge = low ? '<span class="badge bg-red">LOW</span>' : watch ? '<span class="badge bg-warn">WATCH</span>' : '';
-    // Expiry badge
-    let expiryBadge = '';
-    if (item.expiry) {
-      const today2 = new Date(); today2.setHours(0,0,0,0);
-      const dLeft = Math.ceil((new Date(item.expiry) - today2) / 86400000);
-      if (dLeft < 0) expiryBadge = '<span class="badge bg-red" style="font-size:9px">⛔ EXPIRED</span>';
-      else if (dLeft <= 30) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
-    }
-    return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
+  el.innerHTML = items.map(itemRowHTML).join('');
+}
+
+// Shared row template — used by both the regular Items list and the
+// Locations-mode filtered item list, so the two views never drift apart.
+function itemRowHTML(item) {
+  const pct = Math.min(100,(item.stock/Math.max(item.minStock*3,1))*100);
+  const low = item.stock <= item.minStock;
+  const watch = item.stock <= item.minStock*1.5;
+  const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
+  const badge = low ? '<span class="badge bg-red">LOW</span>' : watch ? '<span class="badge bg-warn">WATCH</span>' : '';
+  let expiryBadge = '';
+  if (item.expiry) {
+    const today2 = new Date(); today2.setHours(0,0,0,0);
+    const dLeft = Math.ceil((new Date(item.expiry) - today2) / 86400000);
+    if (dLeft < 0) expiryBadge = '<span class="badge bg-red" style="font-size:9px">⛔ EXPIRED</span>';
+    else if (dLeft <= 30) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
+  }
+  return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
       <div class="row-icon ${low?'warn':'in'}">${low?'⚠️':'📦'}</div>
       <div class="row-body">
         <div class="row-title">${item.name} ${badge} ${expiryBadge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
@@ -3482,7 +3506,103 @@ function renderInv() {
       </div>
       <span style="color:var(--muted);font-size:20px">›</span>
     </div>`;
-  }).join('');
+}
+
+// ── STOCK PAGE: ITEMS / LOCATIONS MODE ────────────────────────
+let stockMode = 'items';
+let _locationView = null; // normalized location key currently being viewed, or null = location list
+
+function setStockMode(mode) {
+  stockMode = mode;
+  _locationView = null;
+  const bi = document.getElementById('modeItems'), bl = document.getElementById('modeLocations');
+  if (bi) bi.className = 'type-btn' + (mode==='items' ? ' in-on' : '');
+  if (bl) bl.className = 'type-btn' + (mode==='locations' ? ' in-on' : '');
+  const itemWrap = document.getElementById('itemSearchWrap');
+  const locWrap  = document.getElementById('locSearchWrap');
+  const filterRow = document.getElementById('invFilterRow');
+  const addBtn = document.getElementById('btnAddItem');
+  const bulkBtn = document.getElementById('btnBulk');
+  if (itemWrap)  itemWrap.style.display  = mode==='items' ? 'flex' : 'none';
+  if (locWrap)   locWrap.style.display   = mode==='locations' ? 'flex' : 'none';
+  if (filterRow) filterRow.style.display = mode==='items' ? 'flex' : 'none';
+  if (addBtn)  addBtn.style.display  = mode==='items' ? '' : 'none';
+  if (bulkBtn) bulkBtn.style.display = mode==='items' ? '' : 'none';
+  if (mode==='items') renderInv(); else renderLocationList();
+}
+
+// Groups items by trimmed+lowercased location. Display label = most
+// frequently used casing for that location (recomputed each render, not
+// first-seen-wins, so the label doesn't flip unpredictably over time).
+function getNormalizedLocations() {
+  const groups = {};
+  getItems().forEach(i => {
+    const raw = (i.location||'').trim();
+    if (!raw) return;
+    const key = raw.toLowerCase();
+    if (!groups[key]) groups[key] = { key, items: [], caseCounts: {} };
+    groups[key].items.push(i);
+    groups[key].caseCounts[raw] = (groups[key].caseCounts[raw]||0) + 1;
+  });
+  return Object.values(groups).map(g => {
+    const label = Object.entries(g.caseCounts).sort((a,b)=>b[1]-a[1])[0][0];
+    return { key: g.key, label, count: g.items.length };
+  }).sort((a,b) => a.label.localeCompare(b.label));
+}
+
+function renderLocationList() {
+  const q = document.getElementById('locSearch')?.value?.toLowerCase()||'';
+  const locs = getNormalizedLocations().filter(l => !q || l.label.toLowerCase().includes(q));
+  const el = document.getElementById('invList');
+  const title = document.getElementById('invCountTitle');
+  if (title) title.textContent = `${locs.length} Location${locs.length!==1?'s':''}`;
+  if (!locs.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📍</div><p>No locations found.</p></div>'; return; }
+  el.innerHTML = locs.map(l => `<div class="list-row" style="cursor:pointer" onclick="openLocationView('${l.key.replace(/'/g,"\\'")}')">
+      <div class="row-icon info">📍</div>
+      <div class="row-body">
+        <div class="row-title">${l.label}</div>
+        <div class="row-sub">${l.count} item${l.count!==1?'s':''}</div>
+      </div>
+      <span style="color:var(--muted);font-size:20px">›</span>
+    </div>`).join('');
+}
+
+// Shared destination for QR scan AND Stock-page Locations mode.
+function openLocationView(key) {
+  if (curTab !== 'inv') switchTab('inv');
+  if (stockMode !== 'locations') { stockMode = 'locations'; setStockModeUIOnly(); }
+  _locationView = key;
+  const loc = getNormalizedLocations().find(l => l.key === key);
+  const label = loc ? loc.label : key;
+  const items = getItems().filter(i => (i.location||'').trim().toLowerCase() === key);
+  const el = document.getElementById('invList');
+  const title = document.getElementById('invCountTitle');
+  if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; 📍 ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">⬛ QR</button>`;
+  if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items at this location.</p></div>'; return; }
+  el.innerHTML = items.map(itemRowHTML).join('');
+}
+
+function backToLocationList() {
+  _locationView = null;
+  renderLocationList();
+}
+
+// Sets pill/row visibility without re-triggering a render (used when
+// openLocationView switches modes on our behalf, e.g. from a QR scan).
+function setStockModeUIOnly() {
+  const bi = document.getElementById('modeItems'), bl = document.getElementById('modeLocations');
+  if (bi) bi.className = 'type-btn' + (stockMode==='items' ? ' in-on' : '');
+  if (bl) bl.className = 'type-btn' + (stockMode==='locations' ? ' in-on' : '');
+  const itemWrap = document.getElementById('itemSearchWrap');
+  const locWrap  = document.getElementById('locSearchWrap');
+  const filterRow = document.getElementById('invFilterRow');
+  const addBtn = document.getElementById('btnAddItem');
+  const bulkBtn = document.getElementById('btnBulk');
+  if (itemWrap)  itemWrap.style.display  = stockMode==='items' ? 'flex' : 'none';
+  if (locWrap)   locWrap.style.display   = stockMode==='locations' ? 'flex' : 'none';
+  if (filterRow) filterRow.style.display = stockMode==='items' ? 'flex' : 'none';
+  if (addBtn)  addBtn.style.display  = stockMode==='items' ? '' : 'none';
+  if (bulkBtn) bulkBtn.style.display = stockMode==='items' ? '' : 'none';
 }
 
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
@@ -4501,7 +4621,7 @@ function applyInstantUpdate(data) {
 function refreshCurrentView() {
   const activePage = document.querySelector('.page.active')?.id;
   if (activePage === 'pg-home') renderHome();
-  if (activePage === 'pg-inv') renderInv();
+  if (activePage === 'pg-inv') renderStockView();
   if (activePage === 'pg-log') renderLog();
 }
 
@@ -4906,10 +5026,15 @@ const QRGen = (() => {
   return { render, getUrl, getDataUrl };
 })();
 
+// Shared by item QR (openQRSheet) and location QR (openLocationQR) so
+// downloadQR/printQR don't need to know which kind of QR is on screen.
+let _qrContext = null; // { title, subtitle, filenameBase }
+
 function openQRSheet() {
   const item = S.inventory.find(i => i.id === _currentProductId);
   if (!item) return;
 
+  _qrContext = { title: item.name, subtitle: (item.code||'') + (item.code&&item.category?' • ':'') + (item.category||''), filenameBase: item.name };
   document.getElementById('qrItemName').textContent = item.name;
   document.getElementById('qrItemCode').textContent = item.code || '';
 
@@ -4925,10 +5050,26 @@ function openQRSheet() {
   openSheet('qrSheet');
 }
 
+// Location QR — same sheet, same download/print, different payload
+// (?location= instead of ?item=). Public (logged-out) scans get the same
+// read-only treatment as item QR — see _showPublicLocationView.
+function openLocationQR(key, label) {
+  _qrContext = { title: label, subtitle: 'Location', filenameBase: label };
+  document.getElementById('qrItemName').textContent = label;
+  document.getElementById('qrItemCode').textContent = 'Location';
+
+  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
+  const url = appUrl + '?location=' + encodeURIComponent(key) + '&loclabel=' + encodeURIComponent(label) + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
+
+  const wrap = document.getElementById('qrCanvas');
+  wrap.innerHTML = '';
+  QRGen.render(url, wrap, 220);
+
+  openSheet('qrSheet');
+}
+
 function downloadQR() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  const name = (item?.name || 'item').replace(/[^a-z0-9]/gi,'_');
-  // qrcode.js renders a <canvas> inside the container
+  const name = (_qrContext?.filenameBase || 'item').replace(/[^a-z0-9]/gi,'_');
   const canvas = document.querySelector('#qrCanvas canvas');
   if (!canvas) { toast('QR not ready — wait a moment', 'wrn'); return; }
   const a = document.createElement('a');
@@ -4939,8 +5080,7 @@ function downloadQR() {
 }
 
 function printQR() {
-  const item = S.inventory.find(i => i.id === _currentProductId);
-  if (!item) return;
+  if (!_qrContext) return;
   const canvas = document.querySelector('#qrCanvas canvas');
   if (!canvas) { toast('QR not ready', 'wrn'); return; }
   const dataUrl = canvas.toDataURL('image/png');
@@ -4949,7 +5089,7 @@ function printQR() {
 <!DOCTYPE html>
 <html>
 <head>
-  <title>QR - ${item.name}</title>
+  <title>QR - ${_qrContext.title}</title>
   <style>
     body {
       font-family: sans-serif;
@@ -4975,8 +5115,8 @@ function printQR() {
 </head>
 <body onload="window.print()">
   <img src="${dataUrl}">
-  <h2>${item.name}</h2>
-  <p>${item.code || ''} &bull; ${item.category || ''}</p>
+  <h2>${_qrContext.title}</h2>
+  <p>${_qrContext.subtitle || ''}</p>
   <p style="margin-top:6px;font-size:11px">
     LabStock Inventory
   </p>
@@ -5383,11 +5523,12 @@ const _origRenderInv = renderInv;
 function handleQRDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const itemParam = params.get('item');
+  const locationParam = params.get('location');
   const groupParam = params.get('group');
-  if (!itemParam) return false;
+  if (!itemParam && !locationParam) return false;
 
   if (S.user) {
-    // Logged-in: switch group if needed, then sync and open product page
+    // Logged-in: switch group if needed, then sync and open the right view
     setTimeout(async () => {
       if (groupParam && groupParam !== S.activeGroupId) {
         const g = S.groups.find(g => g.id === groupParam);
@@ -5400,6 +5541,14 @@ function handleQRDeepLink() {
       }
       // Sync first so inventory is fresh
       await syncFromServer(true);
+
+      if (locationParam) {
+        switchTab('inv');
+        openLocationView(decodeURIComponent(locationParam).toLowerCase());
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+
       const item = getItems().find(i =>
         i.code?.toLowerCase() === itemParam.toLowerCase() ||
         i.name.toLowerCase() === decodeURIComponent(itemParam).toLowerCase()
@@ -5415,9 +5564,64 @@ function handleQRDeepLink() {
     // Not logged in: show public read-only view immediately, skip login screen
     document.getElementById('loginScreen').style.display = 'none';
     hideAppSpinner();
-    _showPublicItemView(itemParam, groupParam);
+    if (locationParam) _showPublicLocationView(locationParam, groupParam);
+    else _showPublicItemView(itemParam, groupParam);
   }
   return true;
+}
+
+// Public (logged-out) read-only view for a location QR scan — same
+// treatment as the single-item public view, just listing every item at
+// that location instead of one item.
+function _showPublicLocationView(locationKey, groupId) {
+  const params = new URLSearchParams(window.location.search);
+  const locLabel = params.get('loclabel') || decodeURIComponent(locationKey);
+  const cleanUrl = window.location.href.split('?')[0];
+  const normKey = decodeURIComponent(locationKey).trim().toLowerCase();
+
+  document.body.innerHTML =
+    '<div style="min-height:100vh;background:#f5f3ee;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px">' +
+    '<div style="max-width:400px;width:100%">' +
+    '<div style="text-align:center;margin-bottom:20px">' +
+    '<div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div>' +
+    '<div style="font-size:12px;color:#888;margin-top:4px">📍 ' + locLabel + '</div></div>' +
+    '<div id="pubLocCard" style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 16px rgba(0,0,0,.08)">' +
+    '<div style="text-align:center;color:#888;padding:20px">⏳ Loading items...</div></div>' +
+    '<a href="' + cleanUrl + '" style="display:block;margin-top:16px;text-align:center;padding:14px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">🔑 Sign in for full access</a>' +
+    '<p style="text-align:center;font-size:11px;color:#aaa;margin-top:10px">Scan again after signing in to manage stock</p>' +
+    '</div></div>';
+
+  const url = RAILWAY_URL + '/api/inventory' + (groupId ? '?groupId=' + encodeURIComponent(groupId) : '');
+
+  fetch(url)
+    .then(r => r.ok ? r.json() : [])
+    .then(allItems => {
+      const c = document.getElementById('pubLocCard');
+      if (!c) return;
+      const items = allItems.filter(i => (i.location||'').trim().toLowerCase() === normKey);
+      if (!items.length) {
+        c.innerHTML =
+          '<div style="text-align:center;padding:24px">' +
+          '<div style="font-size:32px;margin-bottom:12px">❌</div>' +
+          '<div style="color:#e53935;font-weight:700;font-size:15px">No items found</div>' +
+          '<div style="color:#aaa;font-size:12px;margin-top:6px">Location: ' + locLabel + '</div>' +
+          '</div>';
+        return;
+      }
+      c.innerHTML = items.map(item => {
+        const low = item.stock <= (item.minStock || 10);
+        const color = low ? '#e53935' : '#2d6a4f';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0">' +
+          '<div><div style="font-weight:700;font-size:14px;color:#1a1a1a">' + item.name + '</div>' +
+          '<div style="font-size:11px;color:#888">' + (item.category||'') + '</div></div>' +
+          '<div style="font-weight:800;font-size:16px;color:' + color + '">' + item.stock + ' <span style="font-size:11px;font-weight:400;color:#888">' + (item.unit||'') + '</span></div>' +
+          '</div>';
+      }).join('');
+    })
+    .catch(() => {
+      const c = document.getElementById('pubLocCard');
+      if (c) c.innerHTML = '<div style="color:#e53935;text-align:center;padding:20px">❌ Could not load items.<br><span style="font-size:12px;color:#aaa">Check your connection</span></div>';
+    });
 }
 
 function _showPublicItemView(itemCode, groupId) {
