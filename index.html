@@ -436,7 +436,9 @@ body {
 .kpi {
   background: var(--surface); border-radius: var(--r); border: 1px solid var(--border);
   padding: 16px 14px;
+  transition: transform .12s, box-shadow .12s;
 }
+.kpi:active { transform: scale(.96); box-shadow: 0 1px 6px rgba(0,0,0,.08); }
 .kpi-label { font-size: 10px; font-family: var(--mono); color: var(--muted); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
 .kpi-val { font-family: var(--display); font-size: 28px; font-weight: 800; line-height: 1; }
 .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
@@ -962,10 +964,10 @@ select.form-input { cursor: pointer; }
     <div class="page active" id="pg-home">
       <div class="page-pad">
         <div class="kpi-row">
-          <div class="kpi c-accent"><div class="kpi-label">Items</div><div class="kpi-val" id="kpiItems">—</div><div class="kpi-sub">total</div></div>
-          <div class="kpi c-danger"><div class="kpi-label">Low Stock</div><div class="kpi-val" id="kpiLow">—</div><div class="kpi-sub">reorder</div></div>
-          <div class="kpi c-accent"><div class="kpi-label">In Today</div><div class="kpi-val" id="kpiIn">—</div><div class="kpi-sub">received</div></div>
-          <div class="kpi c-warn"><div class="kpi-label">Out Today</div><div class="kpi-val" id="kpiOut">—</div><div class="kpi-sub">issued</div></div>
+          <div class="kpi c-accent" onclick="kpiOpenItems()" style="cursor:pointer"><div class="kpi-label">Items</div><div class="kpi-val" id="kpiItems">—</div><div class="kpi-sub">total</div></div>
+          <div class="kpi c-danger" onclick="kpiOpenLowStock()" style="cursor:pointer"><div class="kpi-label">Low Stock</div><div class="kpi-val" id="kpiLow">—</div><div class="kpi-sub">reorder</div></div>
+          <div class="kpi c-accent" onclick="kpiOpenLog('IN')" style="cursor:pointer"><div class="kpi-label">In Today</div><div class="kpi-val" id="kpiIn">—</div><div class="kpi-sub">received</div></div>
+          <div class="kpi c-warn" onclick="kpiOpenLog('OUT')" style="cursor:pointer"><div class="kpi-label">Out Today</div><div class="kpi-val" id="kpiOut">—</div><div class="kpi-sub">issued</div></div>
         </div>
 
         <div class="section-hd">
@@ -1038,6 +1040,7 @@ select.form-input { cursor: pointer; }
           </label>
           <button onclick="deleteSelectedTx()" style="padding:5px 12px;border-radius:6px;border:none;background:var(--danger);color:white;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete selected</button>
         </div>
+        <div id="logKpiFilterChip" style="display:none;margin-bottom:10px"></div>
         <div class="card" id="logList"></div>
       </div>
     </div>
@@ -1183,7 +1186,7 @@ select.form-input { cursor: pointer; }
     <div class="nav-tab" id="tab-inv" onclick="switchTab('inv')">
       <span class="nav-icon">📦</span><span class="nav-label">Stock</span>
     </div>
-    <div class="nav-tab" id="tab-log" onclick="switchTab('log')">
+    <div class="nav-tab" id="tab-log" onclick="clearLogKpiFilter();switchTab('log')">
       <span class="nav-icon">↕️</span><span class="nav-label">Log</span>
     </div>
     <div class="nav-tab" id="tab-more" onclick="switchTab('more')">
@@ -3777,13 +3780,57 @@ function submitTx(override=null) {
 
 let _selectedTx = new Set();
 
+let _logDateFilter = null; // 'today' or null
+let _logTypeFilter = null; // 'IN' | 'OUT' | null
+
+function kpiOpenItems() {
+  if (stockMode !== 'items') setStockMode('items');
+  switchTab('inv');
+}
+function kpiOpenLowStock() {
+  if (stockMode !== 'items') setStockMode('items');
+  if (!_showLowOnly) toggleLowFilter();
+  switchTab('inv');
+}
+function kpiOpenLog(type) {
+  _logDateFilter = 'today';
+  _logTypeFilter = type;
+  switchTab('log');
+}
+function clearLogKpiFilter() {
+  _logDateFilter = null;
+  _logTypeFilter = null;
+}
+
 function renderLog() {
   const q = document.getElementById('logSearch')?.value?.toLowerCase()||'';
-  const txs = S.transactions.filter(t=>t.groupId===gid()&&!t._act&&(!q||t.itemName?.toLowerCase().includes(q)||t.person?.toLowerCase().includes(q)));
+  const today = new Date().toISOString().split('T')[0];
+  const txs = S.transactions.filter(t=>{
+    if (t.groupId!==gid() || t._act) return false;
+    if (q && !(t.itemName?.toLowerCase().includes(q) || t.person?.toLowerCase().includes(q))) return false;
+    if (_logDateFilter==='today' && t.date!==today) return false;
+    if (_logTypeFilter && t.type!==_logTypeFilter) return false;
+    return true;
+  });
   const el = document.getElementById('logList');
   const bar = document.getElementById('logSelectBar');
   const delBtn = document.getElementById('logDeleteBtn');
   const title = document.getElementById('logTitle');
+  const chipWrap = document.getElementById('logKpiFilterChip');
+
+  // KPI filter chip
+  if (chipWrap) {
+    if (_logDateFilter || _logTypeFilter) {
+      const label = [_logDateFilter==='today'?'Today':null, _logTypeFilter].filter(Boolean).join(' · ');
+      chipWrap.style.display = 'block';
+      chipWrap.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 10px;border-radius:20px;background:var(--accent-bg);color:var(--accent);border:1.5px solid var(--accent-l)">
+        ${label} <span onclick="clearLogKpiFilter();renderLog()" style="cursor:pointer;font-weight:800">✕</span>
+      </span>`;
+    } else {
+      chipWrap.style.display = 'none';
+      chipWrap.innerHTML = '';
+    }
+  }
 
   // Update toolbar
   const hasSel = _selectedTx.size > 0;
