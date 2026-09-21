@@ -4009,9 +4009,19 @@ function logToggleAll(checked) {
 function deleteSelectedTx() {
   if(!_selectedTx.size) return;
   if(!confirm(`Delete ${_selectedTx.size} transaction(s)? Cannot be undone.`)) return;
+  const toDelete = S.transactions.filter(t => _selectedTx.has(t.id));
   S.transactions = S.transactions.filter(t => !_selectedTx.has(t.id));
   _selectedTx.clear(); save(); renderLog(); renderHome(); updateAlertBadge();
   toast('Transactions deleted', 'wrn');
+  // Block sync briefly — otherwise the next auto-sync can re-pull rows
+  // from the server before the DELETE calls below land, resurrecting them.
+  lastSyncTime = Date.now() + 6000;
+  toDelete.forEach(t => {
+    // Only rows that exist server-side have _serverId; a purely local,
+    // never-synced entry has nothing to delete remotely.
+    if (!t._serverId) return;
+    fetch(`${RAILWAY_URL}/api/transactions/${encodeURIComponent(t._serverId)}`, { method: 'DELETE' }).catch(() => {});
+  });
 }
 function renderHome() {
   const today = new Date().toISOString().split('T')[0];
