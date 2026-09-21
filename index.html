@@ -3752,15 +3752,31 @@ function renderTxItemResults() {
     const exact = items.some(i => i.name.toLowerCase() === q);
     if (!exact) {
       const safe = raw.trim().replace(/'/g, "\\'");
-      html += `<div class="list-row" style="padding:10px 12px;cursor:pointer;color:var(--accent);font-weight:700" onmousedown="addNewItemFromTx('${safe}')">
-        + Add "${raw.trim()}" as new item
-      </div>`;
+      if (txLogOnlyState) {
+        html += `<div class="list-row" style="padding:10px 12px;cursor:pointer;color:var(--text2);font-weight:700" onmousedown="selectFreeformLogItem('${safe}')">
+          📝 Log "${raw.trim()}" — not in current stock
+        </div>`;
+      } else {
+        html += `<div class="list-row" style="padding:10px 12px;cursor:pointer;color:var(--accent);font-weight:700" onmousedown="addNewItemFromTx('${safe}')">
+          + Add "${raw.trim()}" as new item
+        </div>`;
+      }
     }
   }
 
   if (!html) html = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">No items yet — type a name to add one</div>';
   panel.innerHTML = html;
   panel.style.display = 'block';
+}
+
+// Log-only mode: lets the user submit a transaction against a name that
+// has no inventory row at all, instead of forcing "+ Add as new item".
+// txItem stays empty on purpose — submitTx() reads the search box text
+// directly when logOnly is on and no real item was selected.
+function selectFreeformLogItem(name) {
+  document.getElementById('txItem').value = '';
+  document.getElementById('txItemSearch').value = name;
+  document.getElementById('txItemResults').style.display = 'none';
 }
 
 function selectTxItem(id) {
@@ -3844,8 +3860,16 @@ function submitTx(override=null) {
     labMember: S.user?.name || S.user?.email || '',
     logOnly: txLogOnlyState
   };
-  if (!d.itemId||!d.qty||!d.person||!d.date) { toast('Fill all required fields','err'); return false; }
-  const item = S.inventory.find(i=>i.id===d.itemId); if (!item) return false;
+  // Freeform: log-only + no inventory item selected + a typed name present
+  // (from selectFreeformLogItem, or the user just never picked a match).
+  const freeformName = (!override && d.logOnly && !d.itemId)
+    ? (document.getElementById('txItemSearch')?.value || '').trim() : '';
+  if (!d.qty||!d.person||!d.date) { toast('Fill all required fields','err'); return false; }
+  if (!d.itemId && !freeformName) { toast('Select or type an item','err'); return false; }
+  const item = d.itemId
+    ? S.inventory.find(i=>i.id===d.itemId)
+    : { id: null, name: freeformName, code: '', category: 'Uncategorized', unit: '', minStock: 0, stock: 0, location: '' };
+  if (!item) return false;
   if (!d.logOnly) {
     if (d.type==='OUT'&&d.qty>item.stock) { toast(`Only ${item.stock} ${item.unit} available`,'err'); return false; }
     if (d.type==='IN') item.stock+=d.qty; else item.stock-=d.qty;
