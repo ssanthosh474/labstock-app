@@ -975,8 +975,8 @@ select.form-input { cursor: pointer; }
         <div class="kpi-row">
           <div class="kpi c-accent" onclick="kpiOpenItems()" style="cursor:pointer"><div class="kpi-label">Items</div><div class="kpi-val" id="kpiItems">—</div><div class="kpi-sub">total</div></div>
           <div class="kpi c-danger" onclick="kpiOpenLowStock()" style="cursor:pointer"><div class="kpi-label">Low Stock</div><div class="kpi-val" id="kpiLow">—</div><div class="kpi-sub">reorder</div></div>
-          <div class="kpi c-accent" onclick="kpiOpenLog('IN')" style="cursor:pointer"><div class="kpi-label">In Today</div><div class="kpi-val" id="kpiIn">—</div><div class="kpi-sub">received</div></div>
-          <div class="kpi c-warn" onclick="kpiOpenLog('OUT')" style="cursor:pointer"><div class="kpi-label">Out Today</div><div class="kpi-val" id="kpiOut">—</div><div class="kpi-sub">issued</div></div>
+          <div class="kpi c-accent" onclick="kpiOpenLog('IN')" style="cursor:pointer"><div class="kpi-label">In Today</div><div class="kpi-val" id="kpiIn">—</div><div class="kpi-sub">incl. log-only</div></div>
+          <div class="kpi c-warn" onclick="kpiOpenLog('OUT')" style="cursor:pointer"><div class="kpi-label">Out Today</div><div class="kpi-val" id="kpiOut">—</div><div class="kpi-sub">incl. log-only</div></div>
         </div>
 
         <div class="section-hd">
@@ -1409,6 +1409,10 @@ select.form-input { cursor: pointer; }
         <button class="type-btn in-on" id="txIn" onclick="setTxType('IN')">▲ INWARD</button>
         <button class="type-btn" id="txOut" onclick="setTxType('OUT')">▼ OUTWARD</button>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:2px 2px 2px">
+        <input type="checkbox" id="txLogOnly" onchange="toggleLogOnly(this.checked)" style="accent-color:var(--muted);width:16px;height:16px;flex-shrink:0">
+        📝 Log only — don't affect stock
+      </label>
       <div class="form-group">
         <label class="form-label">Item *</label>
         <input class="form-input" id="txItemSearch" placeholder="Search items or type a new name…" autocomplete="off"
@@ -2505,6 +2509,8 @@ function openSheet(id) {
     document.getElementById('txItemSearch').value = '';
     document.getElementById('txItemResults').style.display = 'none';
     document.getElementById('txItemResults').innerHTML = '';
+    document.getElementById('txLogOnly').checked = false;
+    txLogOnlyState = false;
     setTxType('IN');
   }
   if (id === 'addItemSheet') {
@@ -3711,6 +3717,8 @@ function setStockModeUIOnly() {
 
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
 let txTypeState = 'IN';
+let txLogOnlyState = false;
+function toggleLogOnly(checked) { txLogOnlyState = checked; }
 function setTxType(t) {
   txTypeState = t;
   document.getElementById('txIn').className = 'type-btn' + (t==='IN'?' in-on':'');
@@ -3833,26 +3841,35 @@ function submitTx(override=null) {
     date: document.getElementById('txDate').value,
     notes: document.getElementById('txNotes').value.trim(),
     type: txTypeState, source:'APP',
-    labMember: S.user?.name || S.user?.email || ''
+    labMember: S.user?.name || S.user?.email || '',
+    logOnly: txLogOnlyState
   };
   if (!d.itemId||!d.qty||!d.person||!d.date) { toast('Fill all required fields','err'); return false; }
   const item = S.inventory.find(i=>i.id===d.itemId); if (!item) return false;
-  if (d.type==='OUT'&&d.qty>item.stock) { toast(`Only ${item.stock} ${item.unit} available`,'err'); return false; }
-  if (d.type==='IN') item.stock+=d.qty; else item.stock-=d.qty;
+  if (!d.logOnly) {
+    if (d.type==='OUT'&&d.qty>item.stock) { toast(`Only ${item.stock} ${item.unit} available`,'err'); return false; }
+    if (d.type==='IN') item.stock+=d.qty; else item.stock-=d.qty;
+  }
   const _localTxId = 'tx_'+Date.now();
   d._localId = _localTxId;
   S.transactions.unshift({
     id: _localTxId, _localId: _localTxId, groupId:gid(), ...d,
+    source: d.logOnly ? 'LOG_ONLY' : (d.source||'APP'),
     itemName:item.name, itemCode:item.code||'',
     category:item.category, unit:item.unit,
     labMember: d.labMember || S.user?.name || '',
     timestamp:new Date().toISOString()
   });
-  logAct(`${d.type}: ${d.qty} ${item.unit} of ${item.name} by ${d.person}`);
+  logAct(`${d.logOnly?'LOG':d.type}: ${d.qty} ${item.unit} of ${item.name} by ${d.person}${d.logOnly?' (no stock change)':''}`);
   save();
-  if (!override) { closeSheet('txSheet'); ['txQty','txNotes'].forEach(x=>document.getElementById(x).value=''); }
-  toast(`${d.type==='IN'?'▲ Inward':'▼ Outward'}: ${d.qty} ${item.unit} of ${item.name}`,'ok');
-  if (item.stock<=item.minStock) setTimeout(()=>toast(`⚠ Low stock: ${item.name} (${item.stock} left)`,'wrn'),2000);
+  if (!override) {
+    closeSheet('txSheet');
+    ['txQty','txNotes'].forEach(x=>document.getElementById(x).value='');
+    document.getElementById('txLogOnly').checked = false;
+    txLogOnlyState = false;
+  }
+  toast(`${d.logOnly?'📝 Logged':d.type==='IN'?'▲ Inward':'▼ Outward'}: ${d.qty} ${item.unit} of ${item.name}`,'ok');
+  if (!d.logOnly && item.stock<=item.minStock) setTimeout(()=>toast(`⚠ Low stock: ${item.name} (${item.stock} left)`,'wrn'),2000);
   renderHome(); renderInv(); updateAlertBadge();
   // Refresh product page immediately (stock number update)
   if (_currentProductId && document.getElementById('productPage')?.classList.contains('open')) {
@@ -3860,13 +3877,15 @@ function submitTx(override=null) {
   }
   // Block sync for 6s so race condition doesn't overwrite local stock with stale server value
   lastSyncTime = Date.now() + 6000;
-  // Push to server via /api/transactions so server applies delta correctly
-  fetch(`${RAILWAY_URL}/api/transactions`, {
+  // Log-only entries go to a route that never calls updateStock() server-side
+  const txEndpoint = d.logOnly ? '/api/transactions/log-only' : '/api/transactions';
+  fetch(`${RAILWAY_URL}${txEndpoint}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       groupId: gid(), itemName: item.name, qty: d.qty, type: d.type,
       person: d.person, notes: d.notes||'', unit: item.unit,
       category: item.category, location: item.location||'', code: item.code||'',
+      labMember: d.labMember || S.user?.name || d.person,
       updated_by: S.user?.name || S.user?.email || d.person
     })
   }).then(r => r.ok ? r.json() : null).then(result => {
@@ -3947,8 +3966,8 @@ function renderLog() {
       <input type="checkbox" onclick="event.stopPropagation();logToggleRow('${t.id}')" ${sel?'checked':''} style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
       <div class="row-icon ${isIn?'in':'out'}" style="flex-shrink:0">${isIn?'📦':'🔻'}</div>
       <div class="row-body">
-        <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='TELEGRAM'?'<span class="badge bg-gray">TG</span>':''}</div>
-        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'?'} • ${isIn?'+':'−'}${t.qty} ${t.unit||''}</div>
+        <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='TELEGRAM'?'<span class="badge bg-gray">TG</span>':''}${t.source==='LOG_ONLY'?'<span class="badge bg-gray">LOG</span>':''}</div>
+        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'?'} • ${t.source==='LOG_ONLY'?t.qty+' '+(t.unit||'')+' logged, no stock change':(isIn?'+':'−')+t.qty+' '+(t.unit||'')}</div>
       </div>
     </div>`;
   }).join('');
@@ -4655,8 +4674,8 @@ async function syncFromServer(force = false) {
       const sid = String(tx.id);
       const exists = S.transactions.find(t => {
         if (String(t.id) === sid || String(t._serverId) === sid) return true;
-        // Fingerprint match: same item+qty+type+person+date from APP avoids duplicating local entry
-        if (t.source === 'APP' && tx.source === 'APP' &&
+        // Fingerprint match: same item+qty+type+person+date from APP or LOG_ONLY avoids duplicating local entry
+        if (((t.source === 'APP' && tx.source === 'APP') || (t.source === 'LOG_ONLY' && tx.source === 'LOG_ONLY')) &&
             t.itemName === tx.itemName && t.qty == tx.qty &&
             t.type === tx.type && t.person === tx.person && t.date === tx.date) {
           // Tag it so future syncs match by id
@@ -4934,13 +4953,14 @@ function openProductPage(itemId) {
   } else {
     rList.innerHTML = recentTx.map(t => {
       const isIn = t.type === 'IN';
+      const isLog = t.source === 'LOG_ONLY';
       return `<div class="list-row">
-        <div class="row-icon ${isIn?'in':'out'}">${isIn?'📦':'🔻'}</div>
+        <div class="row-icon ${isIn?'in':'out'}">${isLog?'📝':(isIn?'📦':'🔻')}</div>
         <div class="row-body">
-          <div class="row-title">${isIn ? '▲ Inward' : '▼ Outward'}: ${t.qty} ${t.unit||item.unit}</div>
-          <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'Unknown'}</div>
+          <div class="row-title">${isLog?'📝 Logged':(isIn ? '▲ Inward' : '▼ Outward')}: ${t.qty} ${t.unit||item.unit}</div>
+          <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'Unknown'}${isLog?' • no stock change':''}</div>
         </div>
-        <div class="row-val ${isIn?'in':'out'}">${isIn?'+':'−'}${t.qty}</div>
+        <div class="row-val ${isIn?'in':'out'}">${isLog?'•':(isIn?'+':'−')}${t.qty}</div>
       </div>`;
     }).join('');
   }
@@ -5057,6 +5077,8 @@ function productTx(type) {
   document.getElementById('txPerson').value = S.user?.name || '';
   document.getElementById('txNotes').value = '';
   document.getElementById('txQty').value = '';
+  document.getElementById('txLogOnly').checked = false;
+  txLogOnlyState = false;
   setTxType(type);
 
   selectTxItem(item.id); // sets txItem.value, the visible search text, and hides the results panel
