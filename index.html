@@ -2475,7 +2475,13 @@ function getRole() {
 }
 function isAdmin() { return getRole() === 'admin'; }
 let curTab = 'home';
+let _homeCheckpointPushed = false;
 function switchTab(tab) {
+  if (tab !== 'home' && !_homeCheckpointPushed) {
+    history.pushState({ nav: 'checkpoint' }, '', '');
+    _homeCheckpointPushed = true;
+  }
+  if (tab === 'home') _homeCheckpointPushed = false;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('pg-' + tab)?.classList.add('active');
@@ -2549,14 +2555,23 @@ function sheetBgClose(e, id) { if (e.target === e.currentTarget) { closeSheet(id
 
 // Handle Android/browser back button — close topmost open sheet
 window.addEventListener('popstate', function(e) {
-  // Find the topmost open sheet
   const openSheets = [...document.querySelectorAll('.sheet-overlay.open')];
   if (openSheets.length > 0) {
-    const topSheet = openSheets[openSheets.length - 1];
-    topSheet.classList.remove('open');
+    openSheets[openSheets.length - 1].classList.remove('open');
+    return;
   }
+  const productPage = document.getElementById('productPage');
+  if (productPage && productPage.classList.contains('open')) {
+    productPage.classList.remove('open');
+    setTimeout(() => { productPage.style.display = 'none'; }, 300);
+    document.getElementById('pageScroll').style.overflow = '';
+    renderInv();
+    updateAlertBadge();
+    return;
+  }
+  if (curTab !== 'home') switchTab('home');
+  // else: already home, no overlay open — let the browser exit normally
 });
-
 function renderGroupSheet() {
   const el = document.getElementById('groupSheetBody');
   if (!S.groups.length) {
@@ -4029,8 +4044,8 @@ function renderHome() {
   const todayTx = S.transactions.filter(t=>t.groupId===gid()&&t.date===today&&!t._act);
   document.getElementById('kpiItems').textContent = items.length;
   document.getElementById('kpiLow').textContent = items.filter(i=>i.stock<=i.minStock).length;
-  document.getElementById('kpiIn').textContent = todayTx.filter(t=>t.type==='IN').reduce((s,t)=>s+t.qty,0);
-  document.getElementById('kpiOut').textContent = todayTx.filter(t=>t.type==='OUT').reduce((s,t)=>s+t.qty,0);
+  document.getElementById('kpiIn').textContent = new Set(todayTx.filter(t=>t.type==='IN').map(t=>t.itemName)).size;
+  document.getElementById('kpiOut').textContent = new Set(todayTx.filter(t=>t.type==='OUT').map(t=>t.itemName)).size;
   const recent = S.transactions.filter(t=>t.groupId===gid()&&!t._act).slice(0,6);
   const el = document.getElementById('homeRecent');
   if (!recent.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>No transactions yet. Tap + to log one!</p></div>'; return; }
@@ -4929,6 +4944,7 @@ let _currentProductId = null;
 function openProductPage(itemId) {
   const item = S.inventory.find(i => i.id === itemId);
   if (!item) return;
+  const _wasProductOpen = document.getElementById('productPage').classList.contains('open');
   _currentProductId = itemId;
 
   // Header
@@ -5005,11 +5021,12 @@ function openProductPage(itemId) {
   // Update IN/OUT/Request buttons based on request flow setting
   updateRequestFlowUI();
 
-  // Open with animation
+   // Open with animation
   const page = document.getElementById('productPage');
   page.style.display = 'flex';
   requestAnimationFrame(() => page.classList.add('open'));
   document.getElementById('pageScroll').style.overflow = 'hidden';
+  if (!_wasProductOpen) history.pushState({ nav: 'product' }, '', '');
 
   // Load photo async (server first, then localStorage)
   const photo = document.getElementById('productPhoto');
@@ -5033,6 +5050,7 @@ function closeProductPage() {
   document.getElementById('pageScroll').style.overflow = '';
   renderInv();
   updateAlertBadge();
+  if (history.state && history.state.nav === 'product') history.back();
 }
 (function initSwipeGestures() {
   let tx = 0, ty = 0, startX = 0, startY = 0;
