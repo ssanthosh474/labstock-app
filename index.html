@@ -732,6 +732,10 @@ select.form-input { cursor: pointer; }
   margin-bottom: 10px;
 }
 
+/* expiry quick-pick chips */
+.exp-chip { font-size:12px; padding:6px 12px; border-radius:20px; border:1.5px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; font-family:var(--body); font-weight:600; }
+.exp-chip.on { background:var(--accent-bg); color:var(--accent); border-color:var(--accent-l); }
+
 #toast {
   position: fixed; top: calc(70px + var(--safe-top)); left: 16px; right: 16px;
   background: var(--text); color: white; border-radius: var(--r);
@@ -1491,7 +1495,20 @@ select.form-input { cursor: pointer; }
       </div>
       <div class="form-group">
         <label class="form-label">Expiry Date <span style="color:var(--muted);font-size:11px">(optional — for reagents, chemicals)</span></label>
-        <input class="form-input" type="date" id="iExpiry">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="exp-chip" data-k="6" onclick="pickExpiry('6')">6 mo</button>
+          <button type="button" class="exp-chip" data-k="12" onclick="pickExpiry('12')">1 yr</button>
+          <button type="button" class="exp-chip" data-k="24" onclick="pickExpiry('24')">2 yr</button>
+          <button type="button" class="exp-chip" data-k="custom" onclick="pickExpiry('custom')">Custom</button>
+          <button type="button" class="exp-chip" data-k="none" onclick="pickExpiry('none')">No expiry</button>
+        </div>
+        <div id="expCustomRow" style="display:none;gap:8px">
+          <input class="form-input" type="number" id="expCustomN" placeholder="e.g. 18" min="1" inputmode="numeric" oninput="applyCustomExpiry()" style="flex:1">
+          <select class="form-input" id="expCustomU" onchange="applyCustomExpiry()" style="flex:1"><option value="months">months</option><option value="years">years</option></select>
+        </div>
+        <input class="form-input" type="date" id="iExpiry" oninput="onExpiryDateInput()" onchange="onExpiryDateInput()">
+        <div id="expPreview" style="font-size:12px;font-weight:600;min-height:16px"></div>
+        <div id="expHint" style="display:none;font-size:11px;color:var(--muted)">Chips count from today, not from the original date.</div>
       </div>
     </div>
     <div class="sheet-footer">
@@ -1850,6 +1867,34 @@ function hideAppSpinner() {
   el.classList.add('hide');
   setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 380);
 }
+// ── DATE HELPERS (local time, not UTC) ───────────────────────
+function localDateStr(d) {
+  d = d || new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function parseLocalDate(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || '');
+  return m ? new Date(+m[1], +m[2]-1, +m[3]) : null;
+}
+// 31 Jan + 1 month = 28 Feb (clamps to month-end)
+function addMonthsClamped(base, n) {
+  var d = new Date(base.getFullYear(), base.getMonth(), 1);
+  d.setMonth(d.getMonth() + n);
+  var last = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+  d.setDate(Math.min(base.getDate(), last));
+  return d;
+}
+// whole days from today to a YYYY-MM-DD date; negative = past; null = invalid
+function daysUntil(s) {
+  var d = parseLocalDate(s); if (!d) return null;
+  var t = new Date(); t = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  return Math.round((d - t) / 86400000);
+}
+function fmtDateShort(s) {
+  var d = parseLocalDate(s); if (!d) return s || '';
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+
 let S = {
   user: null, activeGroupId: null,
   groups: [], inventory: [], transactions: [], members: [],
@@ -2510,7 +2555,7 @@ function openSheet(id) {
   if (id === 'txSheet') {
     const sel = document.getElementById('txItem');
     sel.innerHTML = '<option value="">Select item…</option>' + getItems().map(i => `<option value="${i.id}">${i.name} (${i.stock} ${i.unit})</option>`).join('');
-    document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('txDate').value = localDateStr();
     document.getElementById('txPerson').value = S.user?.name || '';
     document.getElementById('txItemSearch').value = '';
     document.getElementById('txItemResults').style.display = 'none';
@@ -2523,11 +2568,12 @@ function openSheet(id) {
     const existingEditId = document.getElementById('editId').value;
     if (!existingEditId) {
       document.getElementById('itemSheetTitle').textContent = 'Add Item';
-      ['iName','iCat','iUnit','iCode','iLoc'].forEach(x => document.getElementById(x).value = '');
+      ['iName','iCat','iUnit','iCode','iLoc','iExpiry'].forEach(x => document.getElementById(x).value = '');
       document.getElementById('iStock').value = 0;
       document.getElementById('iMin').value = S.settings.threshold;
     }
     populateTaxSelects();
+    resetExpiryUI();
     if (existingEditId) setTimeout(() => document.getElementById('editId').value = existingEditId, 0);
   }
   if (id === 'taxManageSheet') renderTaxonomyManage();
@@ -3295,6 +3341,49 @@ function deleteTaxonomyValue(val) {
   toast(`"${val}" removed`, 'wrn');
 }
 
+// ── EXPIRY QUICK-PICK ─────────────────────────────────────────
+let _expChip = '';
+function pickExpiry(k) {
+  _expChip = k;
+  const inp = document.getElementById('iExpiry');
+  document.getElementById('expCustomRow').style.display = (k === 'custom') ? 'flex' : 'none';
+  if (k === 'none') inp.value = '';
+  else if (k === 'custom') applyCustomExpiry();
+  else inp.value = localDateStr(addMonthsClamped(new Date(), parseInt(k)));
+  updateExpiryPreview();
+}
+function applyCustomExpiry() {
+  const n = parseInt(document.getElementById('expCustomN').value);
+  if (!n || n < 1) return;
+  const months = document.getElementById('expCustomU').value === 'years' ? n * 12 : n;
+  document.getElementById('iExpiry').value = localDateStr(addMonthsClamped(new Date(), months));
+  updateExpiryPreview();
+}
+function onExpiryDateInput() {
+  _expChip = '';
+  document.getElementById('expCustomRow').style.display = 'none';
+  updateExpiryPreview();
+}
+function resetExpiryUI() {
+  _expChip = '';
+  const row = document.getElementById('expCustomRow'); if (row) row.style.display = 'none';
+  const n = document.getElementById('expCustomN'); if (n) n.value = '';
+  updateExpiryPreview();
+}
+function updateExpiryPreview() {
+  document.querySelectorAll('.exp-chip').forEach(b => b.classList.toggle('on', b.dataset.k === _expChip));
+  const v = document.getElementById('iExpiry')?.value || '';
+  const pv = document.getElementById('expPreview'); if (!pv) return;
+  const hint = document.getElementById('expHint');
+  if (hint) hint.style.display = document.getElementById('editId').value ? 'block' : 'none';
+  const d = v ? daysUntil(v) : null;
+  if (d === null) { pv.textContent = _expChip === 'none' ? 'No expiry' : ''; pv.style.color = 'var(--muted)'; return; }
+  if (d < 0)       { pv.textContent = `⛔ Expired ${fmtDateShort(v)} (${-d} d ago)`; pv.style.color = 'var(--danger)'; }
+  else if (d === 0){ pv.textContent = `⚠️ Expires today (${fmtDateShort(v)})`; pv.style.color = 'var(--warn)'; }
+  else if (d <= 30){ pv.textContent = `⚠️ Expires ${fmtDateShort(v)} (in ${d} d)`; pv.style.color = 'var(--warn)'; }
+  else             { pv.textContent = `Expires ${fmtDateShort(v)} (in ${d} d)`; pv.style.color = 'var(--accent)'; }
+}
+
 function saveItem() {
   const name = document.getElementById('iName').value.trim();
   let code = document.getElementById('iCode').value.trim();
@@ -3339,13 +3428,13 @@ function saveItem() {
     fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(name)}?groupId=${encodeURIComponent(S.activeGroupId||'')}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min, groupId: S.activeGroupId, updated_by: S.user?.name || S.user?.email || 'unknown' })
+      body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min, expiry, groupId: S.activeGroupId, updated_by: S.user?.name || S.user?.email || 'unknown' })
     }).catch(() => {});
   } else {
     fetch(`${RAILWAY_URL}/api/inventory`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min, groupId: S.activeGroupId, updated_by: S.user?.name || S.user?.email || 'unknown' })
+      body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min, expiry, groupId: S.activeGroupId, updated_by: S.user?.name || S.user?.email || 'unknown' })
     }).catch(() => {});
   }
 if (eid) {
@@ -3359,7 +3448,7 @@ if (eid) {
         qty: txQty, person: S.user?.name || S.user?.email || 'Admin',
         labMember: S.user?.name || S.user?.email || '',
         notes: 'Stock updated via Edit',
-        date: new Date().toISOString().split('T')[0],
+        date: localDateStr(),
         timestamp: new Date().toISOString()
       });
       fetch(`${RAILWAY_URL}/api/transactions`, {
@@ -3378,7 +3467,7 @@ if (eid) {
       qty: stock, person: S.user?.name || S.user?.email || 'Admin',
       labMember: S.user?.name || S.user?.email || '',
       notes: 'Initial stock via Add Item',
-      date: new Date().toISOString().split('T')[0],
+      date: localDateStr(),
       timestamp: new Date().toISOString()
     });
     fetch(`${RAILWAY_URL}/api/transactions`, {
@@ -3405,7 +3494,7 @@ if (eid) {
           setTxType(resume.type || 'IN');
           document.getElementById('txQty').value = resume.qty || '';
           document.getElementById('txPerson').value = resume.person || (S.user?.name || '');
-          document.getElementById('txDate').value = resume.date || new Date().toISOString().split('T')[0];
+          document.getElementById('txDate').value = resume.date || localDateStr();
           document.getElementById('txNotes').value = resume.notes || '';
         }, 60);
       }, 260); // wait for the addItemSheet close animation before reopening txSheet
@@ -3427,6 +3516,7 @@ function editItem(id) {
   document.getElementById('iUnit').value = item.unit;
   document.getElementById('iMin').value = item.minStock;
   if (document.getElementById('iExpiry')) document.getElementById('iExpiry').value = item.expiry || '';
+  resetExpiryUI();
   document.getElementById('addItemSheet').classList.add('open');
 }
 
@@ -3531,9 +3621,8 @@ function itemRowHTML(item) {
   const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
   const badge = low ? '<span class="badge bg-red">LOW</span>' : watch ? '<span class="badge bg-warn">WATCH</span>' : '';
   let expiryBadge = '';
-  if (item.expiry) {
-    const today2 = new Date(); today2.setHours(0,0,0,0);
-    const dLeft = Math.ceil((new Date(item.expiry) - today2) / 86400000);
+  const dLeft = item.expiry ? daysUntil(item.expiry) : null;
+  if (dLeft !== null) {
     if (dLeft < 0) expiryBadge = '<span class="badge bg-red" style="font-size:9px">⛔ EXPIRED</span>';
     else if (dLeft <= 30) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
   }
@@ -3849,7 +3938,7 @@ function cancelTxResume() {
       setTxType(resume.type || 'IN');
       document.getElementById('txQty').value = resume.qty || '';
       document.getElementById('txPerson').value = resume.person || (S.user?.name || '');
-      document.getElementById('txDate').value = resume.date || new Date().toISOString().split('T')[0];
+      document.getElementById('txDate').value = resume.date || localDateStr();
       document.getElementById('txNotes').value = resume.notes || '';
     }, 60);
   }, 260);
@@ -3963,7 +4052,7 @@ function clearLogKpiFilter() {
 
 function renderLog() {
   const q = document.getElementById('logSearch')?.value?.toLowerCase()||'';
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
   const txs = S.transactions.filter(t=>{
     if (t.groupId!==gid() || t._act) return false;
     if (q && !(t.itemName?.toLowerCase().includes(q) || t.person?.toLowerCase().includes(q))) return false;
@@ -4039,7 +4128,7 @@ function deleteSelectedTx() {
   });
 }
 function renderHome() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
   const items = getItems();
   const todayTx = S.transactions.filter(t=>t.groupId===gid()&&t.date===today&&!t._act);
   document.getElementById('kpiItems').textContent = items.length;
@@ -4091,7 +4180,7 @@ function applySlack() {
     item = {id:'i_'+Date.now(),groupId:gid(),name:p.itemName,category:p.category||'Uncategorized',stock:0,unit:'units',minStock:S.settings.threshold};
     S.inventory.push(item);
   }
-  const ok = submitTx({itemId:item.id,qty:p.qty,person:p.person,date:new Date().toISOString().split('T')[0],notes:p.notes||'Manual entry',type:p.type,source:'MANUAL'});
+  const ok = submitTx({itemId:item.id,qty:p.qty,person:p.person,date:localDateStr(),notes:p.notes||'Manual entry',type:p.type,source:'MANUAL'});
   if (ok) {
     document.getElementById('slackPaste').value='';
     document.getElementById('slackPreview').style.display='none';
@@ -4187,7 +4276,7 @@ function exportCSV() { openSheet('exportSheet'); }
 function getFilteredTx() {
   const filter = document.getElementById('exportFilter')?.value || 'ALL';
   const range = document.getElementById('exportRange')?.value || 'ALL';
-  const today = new Date().toISOString().split('T')[0];
+  const today = localDateStr();
   const weekAgo = new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0];
   const monthAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];
   return S.transactions.filter(t => {
@@ -4206,7 +4295,7 @@ function doExport(format) {
   if (!txs.length) { toast('No transactions to export','wrn'); return; }
   const g = S.groups.find(g => g.id === gid());
   const today = new Date().toLocaleDateString();
-  const fname = `labstock_${new Date().toISOString().split('T')[0]}`;
+  const fname = `labstock_${localDateStr()}`;
 
   if (format === 'csv') {
     const rows = [['Date','Type','Item','Code','Category','Location','Qty','Unit','By','Lab Member','Notes','Source']];
@@ -4326,7 +4415,7 @@ function doStockExport(format) {
   if (!items.length) { toast('No items to export', 'wrn'); return; }
   const g = S.groups.find(g => g.id === gid());
   const today = new Date().toLocaleDateString('en-IN');
-  const fname = `labstock_stock_${new Date().toISOString().split('T')[0]}`;
+  const fname = `labstock_stock_${localDateStr()}`;
 
   const p0 = items.filter(i => i.priority.level === 'P0');
   const p1 = items.filter(i => i.priority.level === 'P1');
@@ -4465,7 +4554,7 @@ function exportQRLinksCSV() {
   });
   if (rows.length === 1) { toast('Nothing to export yet', 'wrn'); return; }
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-  dlFile(`labstock_qr_links_${new Date().toISOString().split('T')[0]}.csv`, 'text/csv', csv);
+  dlFile(`labstock_qr_links_${localDateStr()}.csv`, 'text/csv', csv);
   toast(`📥 ${rows.length-1} QR links exported!`, 'ok');
 }
 
@@ -4635,7 +4724,7 @@ function seedDemo() {
     {id:'i7',groupId:id,name:'Centrifuge Tubes',category:'Consumables',stock:80,unit:'pcs',minStock:50},
     {id:'i8',groupId:id,name:'Buffer PBS',category:'Reagents',stock:12,unit:'L',minStock:5},
   ];
-  const today=new Date().toISOString().split('T')[0];
+  const today=localDateStr();
   S.transactions=[
     {id:'t1',groupId:id,type:'IN',source:'APP',itemId:'i2',itemName:'Sodium Chloride',category:'Chemicals',qty:500,unit:'g',person:'Dr. Ravi Kumar',date:today,notes:'Restock',timestamp:new Date().toISOString()},
     {id:'t2',groupId:id,type:'OUT',source:'TELEGRAM',itemId:'i6',itemName:'Agar Powder',category:'Reagents',qty:50,unit:'g',person:'Dr. Priya Sharma',date:today,notes:'Batch #7',timestamp:new Date().toISOString()},
@@ -4701,10 +4790,16 @@ async function syncFromServer(force = false) {
         if (serverItem.code) existing.code = serverItem.code;
         if (serverItem.location) existing.location = serverItem.location;
         existing.category = serverItem.category || existing.category;
+        // Expiry: before this group's one-time upload, never let an empty server value wipe a local date.
+        // After the upload, the server is the source of truth (including cleared dates).
+        const srvExp = serverItem.expiry || '';
+        const expSynced = !!localStorage.getItem('expiry_up_v1_' + S.activeGroupId);
+        if (srvExp ? existing.expiry !== srvExp : (expSynced && existing.expiry)) { existing.expiry = srvExp; changed = true; }
       } else {
         S.inventory.push({
           id: 'srv_' + Date.now() + Math.random(),
           groupId: S.activeGroupId,
+          expiry: serverItem.expiry || '',
           name: serverItem.name,
           code: serverItem.code || '',
           category: serverItem.category || 'Uncategorized',
@@ -4716,6 +4811,8 @@ async function syncFromServer(force = false) {
         changed = true;
       }
     });
+
+    await uploadLocalExpiryOnce(serverItems);
 
     // Merge server transactions — deduplicate by id, _serverId, or fingerprint (for APP transactions)
     serverTx.forEach(tx => {
@@ -4754,6 +4851,29 @@ async function syncFromServer(force = false) {
   } catch(e) {
     console.log('Sync failed:', e.message);
   }
+}
+
+// One-time per group: push expiry dates that only exist in this phone's localStorage.
+// Only fills server rows whose expiry is empty. Flag is set only if every PUT succeeded.
+async function uploadLocalExpiryOnce(serverItems) {
+  const gidv = S.activeGroupId; if (!gidv) return;
+  const flag = 'expiry_up_v1_' + gidv;
+  if (localStorage.getItem(flag)) return;
+  try {
+    const srv = new Map(serverItems.map(i => [(i.name || '').toLowerCase(), i]));
+    const todo = S.inventory.filter(i => i.groupId === gidv && i.expiry &&
+      srv.has(i.name.toLowerCase()) && !srv.get(i.name.toLowerCase()).expiry);
+    const ok = await Promise.all(todo.map(i =>
+      fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(i.name)}?groupId=${encodeURIComponent(gidv)}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expiry: i.expiry, groupId: gidv })
+      }).then(r => r.ok).catch(() => false)
+    ));
+    if (ok.every(Boolean)) {
+      localStorage.setItem(flag, '1');
+      if (todo.length) toast(`⏳ ${todo.length} expiry date${todo.length !== 1 ? 's' : ''} synced to server`, 'ok');
+    }
+  } catch (e) {}
 }
 
 // Apply a single transaction instantly from SSE — no full re-fetch needed
@@ -4960,9 +5080,7 @@ function openProductPage(itemId) {
   const expiryEl  = document.getElementById('productExpiry');
   if (expiryRow && expiryEl && item.expiry) {
     expiryRow.style.display = '';
-    const today = new Date(); today.setHours(0,0,0,0);
-    const expDate = new Date(item.expiry);
-    const daysLeft = Math.ceil((expDate - today) / 86400000);
+    const daysLeft = daysUntil(item.expiry);
     if (daysLeft < 0) {
       expiryEl.textContent = `⛔ Expired (${item.expiry})`;
       expiryEl.style.color = 'var(--danger)';
@@ -5114,6 +5232,7 @@ function editItemFromProduct() {
   document.getElementById('iUnit').value = item.unit;
   document.getElementById('iMin').value = item.minStock;
   if (document.getElementById('iExpiry')) document.getElementById('iExpiry').value = item.expiry || '';
+  resetExpiryUI();
   document.getElementById('addItemSheet').classList.add('open');
 }
 
@@ -5125,7 +5244,7 @@ function productTx(type) {
   const sel = document.getElementById('txItem');
   sel.innerHTML = '<option value="">Select item…</option>' +
     getItems().map(i => `<option value="${i.id}">${i.name} (${i.stock} ${i.unit})</option>`).join('');
-  document.getElementById('txDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('txDate').value = localDateStr();
   document.getElementById('txPerson').value = S.user?.name || '';
   document.getElementById('txNotes').value = '';
   document.getElementById('txQty').value = '';
@@ -5654,7 +5773,7 @@ function decideRequest(reqId, decision) {
         location: item.location||'', qty: req.qty, unit: item.unit,
         person: req.decidedBy, labMember: req.requestedBy,
         notes: `Approved request from ${req.requestedBy}${req.note?' — '+req.note:''}`,
-        date: new Date().toISOString().split('T')[0],
+        date: localDateStr(),
         timestamp: new Date().toISOString(), stockAfter: item.stock
       };
       S.transactions.unshift(tx);
@@ -5802,8 +5921,8 @@ function checkExpiryAlerts() {
   const items = getItems().filter(i => i.expiry);
   const expiring = [], expired = [];
   items.forEach(i => {
-    const d = new Date(i.expiry);
-    const days = Math.ceil((d - today) / 86400000);
+    const days = daysUntil(i.expiry);
+    if (days === null) return;
     if (days < 0) expired.push({ ...i, daysLeft: days });
     else if (days <= 30) expiring.push({ ...i, daysLeft: days });
   });
