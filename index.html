@@ -1049,8 +1049,11 @@ select.form-input { cursor: pointer; }
       <div class="page-pad" style="padding-top:12px">
         <div class="section-hd">
           <div class="section-title" id="logTitle">Transaction Log</div>
-          <button class="btn btn-ghost btn-sm" id="logDeleteBtn" style="display:none;color:var(--danger)" onclick="deleteSelectedTx()">🗑 Delete</button>
-          <button class="btn btn-ghost btn-sm" onclick="openSheet('exportSheet')" id="btnExport">⬇ Export</button>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-sm" id="logDeleteBtn" style="display:none;color:var(--danger)" onclick="deleteSelectedTx()">🗑 Delete</button>
+            <button class="btn btn-ghost btn-sm" id="logFilterBtn" onclick="openSheet('logFilterSheet')">🔎 Filter</button>
+            <button class="btn btn-ghost btn-sm" onclick="openSheet('exportSheet')" id="btnExport">⬇ Export</button>
+          </div>
         </div>
         <!-- Select all toolbar (shown when any selected) -->
         <div id="logSelectBar" style="display:none;padding:8px 0;display:none;align-items:center;gap:10px">
@@ -1211,7 +1214,7 @@ select.form-input { cursor: pointer; }
     <div class="nav-tab" id="tab-inv" onclick="switchTab('inv')">
       <span class="nav-icon">📦</span><span class="nav-label">Stock</span>
     </div>
-    <div class="nav-tab" id="tab-log" onclick="clearLogKpiFilter();switchTab('log')">
+    <div class="nav-tab" id="tab-log" onclick="switchTab('log')">
       <span class="nav-icon">↕️</span><span class="nav-label">Log</span>
     </div>
     <div class="nav-tab" id="tab-more" onclick="switchTab('more')">
@@ -1575,6 +1578,50 @@ select.form-input { cursor: pointer; }
   </div>
 </div>
 
+<!-- Log Filter Sheet -->
+<div class="sheet-overlay" id="logFilterSheet" onclick="sheetBgClose(event,'logFilterSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Filter Log</div>
+      <button class="sheet-close" onclick="closeSheet('logFilterSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="logRangeChips">
+          <button type="button" class="exp-chip" data-k="all" onclick="setLogRange('all')">All time</button>
+          <button type="button" class="exp-chip" data-k="today" onclick="setLogRange('today')">Today</button>
+          <button type="button" class="exp-chip" data-k="yesterday" onclick="setLogRange('yesterday')">Yesterday</button>
+          <button type="button" class="exp-chip" data-k="7d" onclick="setLogRange('7d')">7 days</button>
+          <button type="button" class="exp-chip" data-k="month" onclick="setLogRange('month')">This month</button>
+          <button type="button" class="exp-chip" data-k="custom" onclick="setLogRange('custom')">Custom</button>
+        </div>
+        <div id="logCustomRow" style="display:none;gap:8px;margin-top:8px">
+          <div style="flex:1"><div class="form-label" style="margin-bottom:4px">From</div><input class="form-input" type="date" id="logFromDate" onchange="setLogCustom()"></div>
+          <div style="flex:1"><div class="form-label" style="margin-bottom:4px">To</div><input class="form-input" type="date" id="logToDate" onchange="setLogCustom()"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-input" id="logCatSel" onchange="setLogCat(this.value)"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <div style="display:flex;gap:6px" id="logTypeChips">
+          <button type="button" class="exp-chip" data-k="" onclick="setLogType('')">All</button>
+          <button type="button" class="exp-chip" data-k="IN" onclick="setLogType('IN')">▲ Inward</button>
+          <button type="button" class="exp-chip" data-k="OUT" onclick="setLogType('OUT')">▼ Outward</button>
+        </div>
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" onclick="closeSheet('logFilterSheet')">Done</button>
+      <button class="btn btn-ghost btn-full" onclick="clearLogFilters()">Clear all filters</button>
+    </div>
+  </div>
+</div>
+
 <!-- Export Sheet -->
 <div class="sheet-overlay" id="exportSheet" onclick="sheetBgClose(event,'exportSheet')">
   <div class="sheet">
@@ -1590,23 +1637,8 @@ select.form-input { cursor: pointer; }
 
     <!-- Transaction log export -->
     <div id="epanel-tx" class="sheet-body">
-      <div class="form-group">
-        <label class="form-label">Filter by Type</label>
-        <select class="form-input" id="exportFilter">
-          <option value="ALL">Both Inward & Outward</option>
-          <option value="IN">Inward only</option>
-          <option value="OUT">Outward only</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Date Range</label>
-        <select class="form-input" id="exportRange">
-          <option value="ALL">All time</option>
-          <option value="TODAY">Today</option>
-          <option value="WEEK">This week</option>
-          <option value="MONTH">This month</option>
-        </select>
-      </div>
+      <div class="info-box" id="exportSummary" style="font-size:12px"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:-6px">Exports exactly what the Log tab shows. Change it there with 🔎 Filter.</div>
       <div class="form-group">
         <label class="form-label">Format</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
@@ -2590,6 +2622,8 @@ function openSheet(id) {
     if (existingEditId) setTimeout(() => document.getElementById('editId').value = existingEditId, 0);
   }
   if (id === 'taxManageSheet') renderTaxonomyManage();
+  if (id === 'logFilterSheet') renderLogFilterSheet();
+  if (id === 'exportSheet') updateExportSummary();
   if (id === 'groupSheet') renderGroupSheet();
   if (id === 'membersSheet') { switchMemTab('list'); renderMembersSheet(); }
   if (id === 'activitySheet') { if(typeof _selectedLogs!=='undefined') _selectedLogs.clear(); renderActivity(); }
@@ -4087,8 +4121,15 @@ function submitTx(override=null) {
 
 let _selectedTx = new Set();
 
-let _logDateFilter = null; // 'today' or null
-let _logTypeFilter = null; // 'IN' | 'OUT' | null
+// ── LOG FILTERS (4.4) ─────────────────────────────────────────
+// One filter state drives the Log list AND the export, so what you see is what you export.
+let _logRange = 'all';      // all | today | yesterday | 7d | month | custom
+let _logFrom = '', _logTo = '';
+let _logCat = '';
+let _logTypeFilter = null;  // 'IN' | 'OUT' | null
+let _srvTxFull = false;     // true when the last sync hit the 100-row cap (older rows live only on the server)
+let _srvTxOldest = '';      // local date of the oldest row in that 100-row window
+let _logFetchKey = '', _logLoading = false;
 
 function kpiOpenItems() {
   if (stockMode !== 'items') setStockMode('items');
@@ -4100,38 +4141,170 @@ function kpiOpenLowStock() {
   switchTab('inv');
 }
 function kpiOpenLog(type) {
-  _logDateFilter = 'today';
+  clearLogFilters(true);
+  _logRange = 'today';
   _logTypeFilter = type;
   switchTab('log');
 }
-function clearLogKpiFilter() {
-  _logDateFilter = null;
-  _logTypeFilter = null;
+function clearLogKpiFilter() { clearLogFilters(true); }
+
+function _esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+// Local-date bounds (YYYY-MM-DD, inclusive). '' = open-ended.
+function logRangeBounds() {
+  const today = localDateStr();
+  const d = new Date();
+  const off = n => localDateStr(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
+  switch (_logRange) {
+    case 'today':     return [today, today];
+    case 'yesterday': return [off(-1), off(-1)];
+    case '7d':        return [off(-6), today];
+    case 'month':     return [today.slice(0, 8) + '01', today];
+    case 'custom':    return [_logFrom || '', _logTo || ''];
+    default:          return ['', ''];
+  }
+}
+function logRangeActive() { return _logRange !== 'all' && !(_logRange === 'custom' && !_logFrom && !_logTo); }
+function logActiveCount() { return (logRangeActive() ? 1 : 0) + (_logCat ? 1 : 0) + (_logTypeFilter ? 1 : 0); }
+function logFilterLabel(withSearch) {
+  const parts = [];
+  if (logRangeActive()) {
+    const names = { today: 'Today', yesterday: 'Yesterday', '7d': 'Last 7 days', month: 'This month' };
+    parts.push(_logRange === 'custom' ? `${_logFrom || '…'} → ${_logTo || '…'}` : names[_logRange]);
+  }
+  if (_logCat) parts.push(_logCat);
+  if (_logTypeFilter) parts.push(_logTypeFilter === 'IN' ? 'Inward' : 'Outward');
+  if (withSearch) {
+    const q = (document.getElementById('logSearch')?.value || '').trim();
+    if (q) parts.push(`search "${q}"`);
+  }
+  return parts.length ? parts.join(' · ') : 'All transactions';
+}
+
+// Single source of truth for "what the Log shows" — used by the list, select-all and export.
+function getLogTxs() {
+  const q = document.getElementById('logSearch')?.value?.toLowerCase() || '';
+  const [from, to] = logRangeBounds();
+  return S.transactions.filter(t => {
+    if (t.groupId !== gid() || t._act) return false;
+    if (q && !(t.itemName?.toLowerCase().includes(q) || t.person?.toLowerCase().includes(q))) return false;
+    if (from || to) {
+      const d = t.date || '';
+      if (!d || (from && d < from) || (to && d > to)) return false;
+    }
+    if (_logTypeFilter && t.type !== _logTypeFilter) return false;
+    if (_logCat && (t.category || 'Uncategorized') !== _logCat) return false;
+    return true;
+  });
+}
+
+function clearLogFilters(silent) {
+  _logRange = 'all'; _logFrom = ''; _logTo = ''; _logCat = ''; _logTypeFilter = null;
+  _selectedTx.clear();
+  if (!silent) { renderLogFilterSheet(); renderLog(); }
+}
+function _logFilterChanged() {
+  _selectedTx.clear(); // never let hidden rows stay selected for delete
+  renderLogFilterSheet(); renderLog(); fetchLogRangeFromServer();
+}
+function setLogRange(k) { _logRange = k; if (k !== 'custom') { _logFrom = ''; _logTo = ''; } _logFilterChanged(); }
+function setLogCustom() {
+  let f = document.getElementById('logFromDate').value, to = document.getElementById('logToDate').value;
+  if (f && to && f > to) { const x = f; f = to; to = x; }
+  _logFrom = f; _logTo = to; _logRange = 'custom'; _logFilterChanged();
+}
+function setLogCat(v) { _logCat = v; _logFilterChanged(); }
+function setLogType(k) { _logTypeFilter = k || null; _logFilterChanged(); }
+
+function renderLogFilterSheet() {
+  document.querySelectorAll('#logRangeChips .exp-chip').forEach(b => b.classList.toggle('on', b.dataset.k === _logRange));
+  document.querySelectorAll('#logTypeChips .exp-chip').forEach(b => b.classList.toggle('on', b.dataset.k === (_logTypeFilter || '')));
+  const row = document.getElementById('logCustomRow'); if (row) row.style.display = _logRange === 'custom' ? 'flex' : 'none';
+  const f = document.getElementById('logFromDate'), to = document.getElementById('logToDate');
+  if (f) f.value = _logFrom;
+  if (to) to.value = _logTo;
+  const sel = document.getElementById('logCatSel');
+  if (sel) {
+    const cats = [...new Set([
+      ...getItems().map(i => i.category),
+      ...S.transactions.filter(x => x.groupId === gid() && !x._act).map(x => x.category),
+      _logCat
+    ].filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    sel.innerHTML = '<option value="">All categories</option>' +
+      cats.map(c => `<option value="${_esc(c)}"${c === _logCat ? ' selected' : ''}>${_esc(c)}</option>`).join('');
+  }
+}
+
+function updateExportSummary() {
+  const el = document.getElementById('exportSummary'); if (!el) return;
+  const n = getLogTxs().length;
+  el.innerHTML = `<strong>${n} transaction${n !== 1 ? 's' : ''}</strong> will be exported<br>Filters: ${_esc(logFilterLabel(true))}`;
+}
+
+// Same dedup rules as syncFromServer (id, _serverId, APP/LOG_ONLY fingerprint) — used only for
+// range fetches so the proven sync path is left untouched.
+function mergeServerTx(rows) {
+  let added = 0;
+  rows.forEach(tx => {
+    if (!tx.itemName) return;
+    const sid = String(tx.id);
+    const exists = S.transactions.find(t => {
+      if (String(t.id) === sid || String(t._serverId) === sid) return true;
+      if (((t.source === 'APP' && tx.source === 'APP') || (t.source === 'LOG_ONLY' && tx.source === 'LOG_ONLY')) &&
+          t.itemName === tx.itemName && t.qty == tx.qty && t.type === tx.type && t.person === tx.person && t.date === tx.date) {
+        t._serverId = sid; return true;
+      }
+      return false;
+    });
+    if (!exists) {
+      S.transactions.push({ ...tx, id: 'srv_' + sid, _serverId: sid, groupId: S.activeGroupId, source: tx.source || 'TELEGRAM' });
+      added++;
+    }
+  });
+  if (added) S.transactions.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+  save();
+  return added;
+}
+
+// The app only caches the newest 100 rows. If the chosen range starts before that window,
+// ask the server (from/to params) and merge, instead of silently showing a partial list.
+async function fetchLogRangeFromServer() {
+  const [from, to] = logRangeBounds();
+  if (!from || !_srvTxFull || !_srvTxOldest || from > _srvTxOldest) return;
+  const key = gid() + '|' + from + '|' + to;
+  if (key === _logFetchKey) return;
+  _logLoading = true; renderLog();
+  try {
+    const q = `groupId=${encodeURIComponent(gid())}&from=${from}` + (to ? `&to=${to}` : '') + '&limit=2000';
+    const res = await fetch(`${RAILWAY_URL}/api/transactions?${q}`);
+    if (!res.ok) throw new Error('http ' + res.status);
+    const rows = await res.json();
+    mergeServerTx(rows);
+    _logFetchKey = key;
+    if (rows.length >= 2000) toast('Showing the newest 2000 rows in this range', 'wrn');
+  } catch (e) {
+    toast('Could not load older rows — showing cached only', 'wrn');
+  }
+  _logLoading = false; renderLog();
 }
 
 function renderLog() {
-  const q = document.getElementById('logSearch')?.value?.toLowerCase()||'';
-  const today = localDateStr();
-  const txs = S.transactions.filter(t=>{
-    if (t.groupId!==gid() || t._act) return false;
-    if (q && !(t.itemName?.toLowerCase().includes(q) || t.person?.toLowerCase().includes(q))) return false;
-    if (_logDateFilter==='today' && t.date!==today) return false;
-    if (_logTypeFilter && t.type!==_logTypeFilter) return false;
-    return true;
-  });
+  const txs = getLogTxs();
   const el = document.getElementById('logList');
   const bar = document.getElementById('logSelectBar');
   const delBtn = document.getElementById('logDeleteBtn');
   const title = document.getElementById('logTitle');
   const chipWrap = document.getElementById('logKpiFilterChip');
+  const fbtn = document.getElementById('logFilterBtn');
+  const nActive = logActiveCount();
+  const q = (document.getElementById('logSearch')?.value || '').trim();
 
-  // KPI filter chip
+  if (fbtn) fbtn.textContent = '🔎 Filter' + (nActive ? ` (${nActive})` : '');
   if (chipWrap) {
-    if (_logDateFilter || _logTypeFilter) {
-      const label = [_logDateFilter==='today'?'Today':null, _logTypeFilter].filter(Boolean).join(' · ');
+    if (nActive) {
       chipWrap.style.display = 'block';
       chipWrap.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 10px;border-radius:20px;background:var(--accent-bg);color:var(--accent);border:1.5px solid var(--accent-l)">
-        ${label} <span onclick="clearLogKpiFilter();renderLog()" style="cursor:pointer;font-weight:800">✕</span>
+        ${_esc(logFilterLabel(false))} <span onclick="clearLogFilters()" style="cursor:pointer;font-weight:800">✕</span>
       </span>`;
     } else {
       chipWrap.style.display = 'none';
@@ -4139,14 +4312,17 @@ function renderLog() {
     }
   }
 
-  // Update toolbar
   const hasSel = _selectedTx.size > 0;
-  if(bar){ bar.style.display = hasSel ? 'flex' : 'none'; }
-  if(delBtn){ delBtn.style.display = hasSel ? '' : 'none'; }
-  if(title){ title.textContent = hasSel ? _selectedTx.size + ' selected' : 'Transaction Log'; }
+  if (bar) { bar.style.display = hasSel ? 'flex' : 'none'; }
+  if (delBtn) { delBtn.style.display = hasSel ? '' : 'none'; }
+  if (title) { title.textContent = hasSel ? _selectedTx.size + ' selected' : (nActive || q ? `Log · ${txs.length}` : 'Transaction Log'); }
 
-  if (!txs.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">↕️</div><p>No transactions yet.</p></div>'; return; }
-  el.innerHTML = txs.map(t => {
+  const loadingRow = _logLoading ? '<div class="sheet-loading">Loading older transactions…</div>' : '';
+  if (!txs.length) {
+    el.innerHTML = loadingRow + `<div class="empty"><div class="empty-icon">↕️</div><p>${nActive || q ? 'No transactions match these filters.' : 'No transactions yet.'}</p></div>`;
+    return;
+  }
+  el.innerHTML = loadingRow + txs.map(t => {
     const isIn = t.type==='IN';
     const sel = _selectedTx.has(t.id);
     return `<div class="list-row${sel?' selected':''}" style="${sel?'background:var(--accent-bg)':''};gap:10px" onclick="logToggleRow('${t.id}')">
@@ -4165,7 +4341,7 @@ function logToggleRow(id) {
   renderLog();
 }
 function logToggleAll(checked) {
-  const txs = S.transactions.filter(t=>t.groupId===gid()&&!t._act);
+  const txs = getLogTxs();
   if(checked) txs.forEach(t=>_selectedTx.add(t.id)); else _selectedTx.clear();
   renderLog();
 }
@@ -4332,21 +4508,7 @@ function saveSetting() {
 }
 function exportCSV() { openSheet('exportSheet'); }
 
-function getFilteredTx() {
-  const filter = document.getElementById('exportFilter')?.value || 'ALL';
-  const range = document.getElementById('exportRange')?.value || 'ALL';
-  const today = localDateStr();
-  const weekAgo = new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0];
-  const monthAgo = new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];
-  return S.transactions.filter(t => {
-    if (t.groupId !== gid() || t._act) return false;
-    if (filter !== 'ALL' && t.type !== filter) return false;
-    if (range === 'TODAY' && t.date !== today) return false;
-    if (range === 'WEEK' && t.date < weekAgo) return false;
-    if (range === 'MONTH' && t.date < monthAgo) return false;
-    return true;
-  });
-}
+function getFilteredTx() { return getLogTxs(); }
 
 function doExport(format) {
   if (!isAdmin()) { toast('Admin only','err'); return; }
@@ -4367,7 +4529,7 @@ function doExport(format) {
     toast('📊 CSV downloaded!','ok');
 
   } else if (format === 'txt') {
-    const filter = document.getElementById('exportFilter').value;
+    const filter = logFilterLabel(true);
     let txt = `LABSTOCK TRANSACTION REPORT\n`;
     txt += `Group: ${g?.name || ''}\n`;
     txt += `Filter: ${filter === 'ALL' ? 'All Transactions' : filter}\n`;
@@ -4386,7 +4548,7 @@ function doExport(format) {
     toast('📄 Text document downloaded!','ok');
 
   } else if (format === 'html') {
-    const filter = document.getElementById('exportFilter').value;
+    const filter = logFilterLabel(true);
     const rows = txs.map(t => {
       const item = S.inventory.find(i => i.id === t.itemId);
       return `<tr>
@@ -4414,7 +4576,7 @@ function doExport(format) {
     toast('🌐 Spreadsheet downloaded!','ok');
 
   } else if (format === 'print') {
-    const filter = document.getElementById('exportFilter').value;
+    const filter = logFilterLabel(true);
     const rows = txs.map(t => `<tr>
       <td>${t.date}</td>
       <td style="color:${t.type==='IN'?'green':'red'};font-weight:bold">${t.type}</td>
@@ -4815,6 +4977,9 @@ async function syncFromServer(force = false) {
     ]);
     const serverItems = await invRes.json();
     const serverTx = await txRes.json();
+    const _tsList = Array.isArray(serverTx) ? serverTx.map(x => new Date(x.timestamp || 0).getTime()).filter(n => n > 0) : [];
+    _srvTxFull = Array.isArray(serverTx) && serverTx.length >= 100 && _tsList.length > 0;
+    _srvTxOldest = _srvTxFull ? localDateStr(new Date(Math.min(..._tsList))) : '';
     if (!S.activeGroupId) return;
 
     let changed = false;
