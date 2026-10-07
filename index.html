@@ -1015,12 +1015,17 @@ select.form-input { cursor: pointer; }
           <option value="stock_high">📦 High Stock</option>
           <option value="code">🔢 Code</option>
           <option value="category">🗂 Category</option>
+          <option value="expiry_asc">⏳ Expiry ↑ soonest</option>
+          <option value="expiry_desc">⏳ Expiry ↓ latest</option>
         </select>
         <select id="invFilterCat" onchange="renderInv()" style="font-size:12px;padding:5px 8px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">
           <option value="">All Categories</option>
         </select>
         <button id="invFilterLow" onclick="toggleLowFilter()" style="font-size:12px;padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">
           🔴 Low Only
+        </button>
+        <button id="invFilterExp" onclick="toggleExpiryFilter()" style="font-size:12px;padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">
+          ⏳ Expiring
         </button>
         <button id="viewModeToggle" onclick="toggleViewMode()" style="font-size:12px;padding:5px 10px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0">⊞ Grid</button>
       </div>
@@ -1361,6 +1366,12 @@ select.form-input { cursor: pointer; }
           <div style="font-size:11px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;margin-bottom:4px">MIN LEVEL</div>
           <div style="font-weight:700;font-size:16px" id="productMinStock">—</div>
         </div>
+      </div>
+
+      <!-- Expired → dispose shortcut -->
+      <div id="productDisposeRow" style="display:none;background:var(--danger-bg);border:1px solid #ffc9cb;border-radius:var(--r);padding:12px 14px;margin-bottom:20px;align-items:center;justify-content:space-between;gap:10px">
+        <div style="font-size:13px;color:var(--danger);font-weight:600">⛔ Expired — remove from stock?</div>
+        <button class="btn btn-danger btn-sm" onclick="disposeExpired()" style="flex-shrink:0">🗑 Dispose</button>
       </div>
 
       <!-- Meta grid -->
@@ -1894,6 +1905,8 @@ function fmtDateShort(s) {
   var d = parseLocalDate(s); if (!d) return s || '';
   return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
 }
+// Single source for the "expiring soon" window (badges, filter, alerts)
+const EXPIRY_WARN_DAYS = 30;
 
 let S = {
   user: null, activeGroupId: null,
@@ -3380,7 +3393,7 @@ function updateExpiryPreview() {
   if (d === null) { pv.textContent = _expChip === 'none' ? 'No expiry' : ''; pv.style.color = 'var(--muted)'; return; }
   if (d < 0)       { pv.textContent = `⛔ Expired ${fmtDateShort(v)} (${-d} d ago)`; pv.style.color = 'var(--danger)'; }
   else if (d === 0){ pv.textContent = `⚠️ Expires today (${fmtDateShort(v)})`; pv.style.color = 'var(--warn)'; }
-  else if (d <= 30){ pv.textContent = `⚠️ Expires ${fmtDateShort(v)} (in ${d} d)`; pv.style.color = 'var(--warn)'; }
+  else if (d <= EXPIRY_WARN_DAYS){ pv.textContent = `⚠️ Expires ${fmtDateShort(v)} (in ${d} d)`; pv.style.color = 'var(--warn)'; }
   else             { pv.textContent = `Expires ${fmtDateShort(v)} (in ${d} d)`; pv.style.color = 'var(--accent)'; }
 }
 
@@ -3572,11 +3585,40 @@ function toggleLowFilter() {
   renderInv();
 }
 
+let _showExpiringOnly = false;
+let _sortBeforeExpiry = null;
+function isExpiringItem(i) {
+  const d = i.expiry ? daysUntil(i.expiry) : null;
+  return d !== null && d <= EXPIRY_WARN_DAYS;
+}
+function toggleExpiryFilter() {
+  _showExpiringOnly = !_showExpiringOnly;
+  const sortEl = document.getElementById('invSort');
+  if (_showExpiringOnly) {
+    _sortBeforeExpiry = sortEl.value;
+    sortEl.value = 'expiry_asc';
+  } else if (_sortBeforeExpiry !== null) {
+    // restore only if the user hasn't picked a different sort meanwhile
+    if (sortEl.value === 'expiry_asc') sortEl.value = _sortBeforeExpiry;
+    _sortBeforeExpiry = null;
+  }
+  renderInv();
+}
+function updateExpiryBtn() {
+  const btn = document.getElementById('invFilterExp'); if (!btn) return;
+  const n = getItems().filter(isExpiringItem).length;
+  btn.textContent = '⏳ Expiring' + (n ? ' (' + n + ')' : '');
+  btn.style.background  = _showExpiringOnly ? 'var(--warn)' : 'var(--surface2)';
+  btn.style.color       = _showExpiringOnly ? 'white' : 'var(--text)';
+  btn.style.borderColor = _showExpiringOnly ? 'var(--warn)' : 'var(--border)';
+}
+
 function renderInv() {
   const q      = document.getElementById('invSearch')?.value?.toLowerCase()||'';
   const sort   = document.getElementById('invSort')?.value || 'name';
   const catF   = document.getElementById('invFilterCat')?.value || '';
 
+  updateExpiryBtn();
   // Populate category dropdown
   const catSel = document.getElementById('invFilterCat');
   if (catSel) {
@@ -3591,6 +3633,7 @@ function renderInv() {
     if (q && !i.name.toLowerCase().includes(q) && !i.category.toLowerCase().includes(q) && !(i.code||'').toLowerCase().includes(q)) return false;
     if (catF && i.category !== catF) return false;
     if (_showLowOnly && i.stock > i.minStock) return false;
+    if (_showExpiringOnly && !isExpiringItem(i)) return false;
     return true;
   });
 
@@ -3601,6 +3644,13 @@ function renderInv() {
     if (sort==='stock_low')  return a.stock - b.stock;
     if (sort==='stock_high') return b.stock - a.stock;
     if (sort==='code')       return (a.code||'').localeCompare(b.code||'');
+    if (sort==='expiry_asc' || sort==='expiry_desc') {
+      const da = a.expiry ? daysUntil(a.expiry) : null, db = b.expiry ? daysUntil(b.expiry) : null;
+      if (da === null && db === null) return a.name.localeCompare(b.name);
+      if (da === null) return 1;   // no expiry always sinks to the bottom
+      if (db === null) return -1;
+      return sort==='expiry_asc' ? da - db : db - da;
+    }
     if (sort==='category')   return a.category.localeCompare(b.category);
     return 0;
   });
@@ -3624,13 +3674,22 @@ function itemRowHTML(item) {
   const dLeft = item.expiry ? daysUntil(item.expiry) : null;
   if (dLeft !== null) {
     if (dLeft < 0) expiryBadge = '<span class="badge bg-red" style="font-size:9px">⛔ EXPIRED</span>';
-    else if (dLeft <= 30) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
+    else if (dLeft <= EXPIRY_WARN_DAYS) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
+  }
+  const sortVal = document.getElementById('invSort')?.value || '';
+  const showExpDetail = stockMode === 'items' && (_showExpiringOnly || sortVal.startsWith('expiry'));
+  let expLine = '';
+  if (showExpDetail && item.expiry && dLeft !== null) {
+    const col = dLeft < 0 ? 'var(--danger)' : dLeft <= EXPIRY_WARN_DAYS ? 'var(--warn)' : 'var(--muted)';
+    const txt = dLeft < 0 ? `${-dLeft}d ago` : dLeft === 0 ? 'today' : `${dLeft}d`;
+    expLine = `<div class="row-sub" style="color:${col};font-weight:600">⏳ ${fmtDateShort(item.expiry)} · ${txt}</div>`;
   }
   return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
       <div class="row-icon ${low?'warn':'in'}">${low?'⚠️':'📦'}</div>
       <div class="row-body">
         <div class="row-title">${item.name} ${badge} ${expiryBadge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
         <div class="row-sub">${item.category}${item.location?' • 📍'+item.location:''}</div>
+        ${expLine}
         <div class="stock-wrap">
           <div class="stock-bar"><div class="stock-fill" style="width:${pct}%;background:${color}"></div></div>
           <span class="stock-num" style="color:${color}">${item.stock} ${item.unit}</span>
@@ -3658,7 +3717,7 @@ function toggleViewMode() {
 function updateViewModeBtn() {
   const btn = document.getElementById('viewModeToggle');
   if (btn) btn.textContent = stockViewMode === 'grid' ? '☰ List' : '⊞ Grid';
-  ['invSort','invFilterCat','invFilterLow'].forEach(id => {
+  ['invSort','invFilterCat','invFilterLow','invFilterExp'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = stockViewMode === 'grid' ? 'none' : '';
   });
@@ -5084,7 +5143,7 @@ function openProductPage(itemId) {
     if (daysLeft < 0) {
       expiryEl.textContent = `⛔ Expired (${item.expiry})`;
       expiryEl.style.color = 'var(--danger)';
-    } else if (daysLeft <= 30) {
+    } else if (daysLeft <= EXPIRY_WARN_DAYS) {
       expiryEl.textContent = `⚠️ ${item.expiry} (${daysLeft}d left)`;
       expiryEl.style.color = 'var(--warn)';
     } else {
@@ -5093,6 +5152,13 @@ function openProductPage(itemId) {
     }
   } else if (expiryRow) {
     expiryRow.style.display = 'none';
+  }
+  // Dispose shortcut: only for expired, in-stock items, and only if this user can do a direct OUT
+  const dispRow = document.getElementById('productDisposeRow');
+  if (dispRow) {
+    const canOut = isAdmin() || !S.settings.requestFlowEnabled;
+    const expD = item.expiry ? daysUntil(item.expiry) : null;
+    dispRow.style.display = (expD !== null && expD < 0 && item.stock > 0 && canOut) ? 'flex' : 'none';
   }
   document.getElementById('productStockUnit').textContent = item.unit;
   document.getElementById('productMinStock').textContent = item.minStock + ' ' + item.unit;
@@ -5254,6 +5320,15 @@ function productTx(type) {
 
   selectTxItem(item.id); // sets txItem.value, the visible search text, and hides the results panel
   document.getElementById('txSheet').classList.add('open');
+}
+// Opens the normal OUT sheet pre-filled (full stock, note) — user still taps Submit.
+// No new transaction type: reuses submitTx() so stock + server sync stay on one path.
+function disposeExpired() {
+  const item = S.inventory.find(i => i.id === _currentProductId);
+  if (!item || item.stock <= 0) return;
+  productTx('OUT');
+  document.getElementById('txQty').value = item.stock;
+  document.getElementById('txNotes').value = 'Expired – disposed';
 }
 async function handlePhotoUpload(event) {
   const file = event.target.files[0];
@@ -5924,13 +5999,13 @@ function checkExpiryAlerts() {
     const days = daysUntil(i.expiry);
     if (days === null) return;
     if (days < 0) expired.push({ ...i, daysLeft: days });
-    else if (days <= 30) expiring.push({ ...i, daysLeft: days });
+    else if (days <= EXPIRY_WARN_DAYS) expiring.push({ ...i, daysLeft: days });
   });
 
   if (expired.length) {
     toast(`⛔ ${expired.length} item(s) EXPIRED! Check inventory.`, 'err');
   } else if (expiring.length) {
-    toast(`⚠️ ${expiring.length} item(s) expiring within 30 days`, 'wrn');
+    toast(`⚠️ ${expiring.length} item(s) expiring within ${EXPIRY_WARN_DAYS} days`, 'wrn');
   }
 }
 
