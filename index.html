@@ -994,9 +994,10 @@ select.form-input { cursor: pointer; }
     <!-- ══ INVENTORY ══ -->
     <div class="page" id="pg-inv">
       <!-- Items / Locations mode pill -->
-      <div class="type-toggle" style="margin:12px 16px 0" id="stockModeToggle">
+      <div class="type-toggle" style="margin:12px 16px 0;grid-template-columns:repeat(3,1fr)" id="stockModeToggle">
         <button class="type-btn in-on" id="modeItems" onclick="setStockMode('items')" style="padding:9px">📦 Items</button>
         <button class="type-btn" id="modeLocations" onclick="setStockMode('locations')" style="padding:9px">📍 Locations</button>
+        <button class="type-btn" id="modeProducts" onclick="setStockMode('products')" style="padding:9px">🧩 Products</button>
       </div>
       <div class="search-wrap" id="itemSearchWrap">
         <span>🔍</span>
@@ -1005,6 +1006,10 @@ select.form-input { cursor: pointer; }
       <div class="search-wrap" id="locSearchWrap" style="display:none">
         <span>🔍</span>
         <input id="locSearch" placeholder="Search locations..." oninput="renderLocationList()">
+      </div>
+      <div class="search-wrap" id="prodSearchWrap" style="display:none">
+        <span>🔍</span>
+        <input id="prodSearch" placeholder="Search products..." oninput="renderProductList()">
       </div>
       <!-- Filter/Sort bar (Items mode only) -->
       <div id="invFilterRow" style="padding:8px 16px 0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none">
@@ -1033,6 +1038,7 @@ select.form-input { cursor: pointer; }
         <div class="section-hd">
           <div class="section-title" id="invCountTitle">All Items</div>
           <button class="btn btn-ghost btn-sm" onclick="openLocationQRPrintAll()" id="btnLocPrintAll" style="display:none">🖨 Print All</button>
+          <button class="btn btn-primary btn-sm" onclick="newProduct()" id="btnNewProduct" style="display:none">+ Product</button>
           <button class="btn btn-ghost btn-sm" onclick="openSheet('bulkSheet')" id="btnBulk">📥 Bulk</button>
           <button class="btn btn-primary btn-sm" onclick="openSheet('addItemSheet')" id="btnAddItem">+ Add</button>
         </div>
@@ -1882,6 +1888,36 @@ select.form-input { cursor: pointer; }
   </div>
 </div>
 
+<!-- Product Tag Sheet (add / edit an item inside a product) -->
+<div class="sheet-overlay" id="prodTagSheet" onclick="sheetBgClose(event,'prodTagSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="ptTitle">Add item to product</div>
+      <button class="sheet-close" onclick="closeSheet('prodTagSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-group">
+        <label class="form-label">Item *</label>
+        <input class="form-input" id="ptItemSearch" placeholder="Search items…" autocomplete="off" oninput="_ptItemId=null;renderPtResults()" onfocus="renderPtResults()">
+        <div id="ptResults" style="display:none;max-height:200px;overflow-y:auto;border:1.5px solid var(--border);border-radius:var(--r-sm);margin-top:6px;background:var(--surface)"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Qty needed per unit (optional)</label>
+        <input class="form-input" type="number" id="ptQty" min="1" inputmode="numeric" placeholder="e.g. 2">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <input class="form-input" id="ptNote" placeholder="Optional...">
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" onclick="saveProductTag()">Save</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('prodTagSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -2589,7 +2625,10 @@ function switchTab(tab) {
 // (Items list / Locations list / a specific location's item list) so
 // switching tabs away and back never silently resets the mode.
 function renderStockView() {
-  if (stockMode === 'locations') {
+  if (stockMode === 'products') {
+    if (_productView) openProductView(_productView, _productViewLabel);
+    else renderProductList();
+  } else if (stockMode === 'locations') {
     if (_locationView) openLocationView(_locationView);
     else renderLocationList();
   } else {
@@ -3648,6 +3687,7 @@ function updateExpiryBtn() {
 }
 
 function renderInv() {
+  if (stockMode !== 'items') { renderStockView(); return; }
   const q      = document.getElementById('invSearch')?.value?.toLowerCase()||'';
   const sort   = document.getElementById('invSort')?.value || 'name';
   const catF   = document.getElementById('invFilterCat')?.value || '';
@@ -3693,12 +3733,12 @@ function renderInv() {
   const title = document.getElementById('invCountTitle');
   if (title) title.textContent = `${items.length} Item${items.length!==1?'s':''}`;
   if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items found.</p></div>'; return; }
-  el.innerHTML = items.map(itemRowHTML).join('');
+  el.innerHTML = items.map(i => itemRowHTML(i)).join('');
 }
 
 // Shared row template — used by both the regular Items list and the
 // Locations-mode filtered item list, so the two views never drift apart.
-function itemRowHTML(item) {
+function itemRowHTML(item, extra) {
   const pct = Math.min(100,(item.stock/Math.max(item.minStock*3,1))*100);
   const low = item.stock <= item.minStock;
   const watch = item.stock <= item.minStock*1.5;
@@ -3723,7 +3763,7 @@ function itemRowHTML(item) {
       <div class="row-body">
         <div class="row-title">${item.name} ${badge} ${expiryBadge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
         <div class="row-sub">${item.category}${item.location?' • 📍'+item.location:''}</div>
-        ${expLine}
+        ${expLine}${extra || ''}
         <div class="stock-wrap">
           <div class="stock-bar"><div class="stock-fill" style="width:${pct}%;background:${color}"></div></div>
           <span class="stock-num" style="color:${color}">${item.stock} ${item.unit}</span>
@@ -3810,29 +3850,20 @@ let _locationView = null; // normalized location key currently being viewed, or 
 function setStockMode(mode) {
   stockMode = mode;
   _locationView = null;
-  const bi = document.getElementById('modeItems'), bl = document.getElementById('modeLocations');
-  if (bi) bi.className = 'type-btn' + (mode==='items' ? ' in-on' : '');
-  if (bl) bl.className = 'type-btn' + (mode==='locations' ? ' in-on' : '');
-  const itemWrap = document.getElementById('itemSearchWrap');
-  const locWrap  = document.getElementById('locSearchWrap');
-  const filterRow = document.getElementById('invFilterRow');
-  const addBtn = document.getElementById('btnAddItem');
-  const bulkBtn = document.getElementById('btnBulk');
-  if (itemWrap)  itemWrap.style.display  = mode==='items' ? 'flex' : 'none';
-  if (locWrap)   locWrap.style.display   = mode==='locations' ? 'flex' : 'none';
-  if (filterRow) filterRow.style.display = mode==='items' ? 'flex' : 'none';
-  if (addBtn)  addBtn.style.display  = mode==='items' ? '' : 'none';
-  if (bulkBtn) bulkBtn.style.display = mode==='items' ? '' : 'none';
-  if (mode==='items') renderInv(); else renderLocationList();
-  updateLocPrintAllBtn();
+  _productView = null;
+  setStockModeUIOnly();
+  if (mode === 'items') renderInv();
+  else if (mode === 'locations') renderLocationList();
+  else renderProductList();
 }
 
 // Shows the "Print All" (location QR sheet) button only when Locations
 // mode is showing the location list itself, not a single location's items.
 function updateLocPrintAllBtn() {
   const btn = document.getElementById('btnLocPrintAll');
-  if (!btn) return;
-  btn.style.display = (stockMode==='locations' && !_locationView) ? '' : 'none';
+  if (btn) btn.style.display = (stockMode === 'locations' && !_locationView) ? '' : 'none';
+  const np = document.getElementById('btnNewProduct');
+  if (np) np.style.display = (stockMode === 'products' && !_productView && isAdmin()) ? '' : 'none';
 }
 
 // Groups items by trimmed+lowercased location. Display label = most
@@ -3885,7 +3916,7 @@ function openLocationView(key) {
   if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; 📍 ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">⬛ QR</button>`;
   updateLocPrintAllBtn();
   if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items at this location.</p></div>'; return; }
-  el.innerHTML = items.map(itemRowHTML).join('');
+  el.innerHTML = items.map(i => itemRowHTML(i)).join('');
 }
 
 function backToLocationList() {
@@ -3896,20 +3927,196 @@ function backToLocationList() {
 // Sets pill/row visibility without re-triggering a render (used when
 // openLocationView switches modes on our behalf, e.g. from a QR scan).
 function setStockModeUIOnly() {
-  const bi = document.getElementById('modeItems'), bl = document.getElementById('modeLocations');
-  if (bi) bi.className = 'type-btn' + (stockMode==='items' ? ' in-on' : '');
-  if (bl) bl.className = 'type-btn' + (stockMode==='locations' ? ' in-on' : '');
-  const itemWrap = document.getElementById('itemSearchWrap');
-  const locWrap  = document.getElementById('locSearchWrap');
-  const filterRow = document.getElementById('invFilterRow');
-  const addBtn = document.getElementById('btnAddItem');
-  const bulkBtn = document.getElementById('btnBulk');
-  if (itemWrap)  itemWrap.style.display  = stockMode==='items' ? 'flex' : 'none';
-  if (locWrap)   locWrap.style.display   = stockMode==='locations' ? 'flex' : 'none';
-  if (filterRow) filterRow.style.display = stockMode==='items' ? 'flex' : 'none';
-  if (addBtn)  addBtn.style.display  = stockMode==='items' ? '' : 'none';
-  if (bulkBtn) bulkBtn.style.display = stockMode==='items' ? '' : 'none';
+  [['modeItems','items'],['modeLocations','locations'],['modeProducts','products']].forEach(([id, m]) => {
+    const b = document.getElementById(id);
+    if (b) b.className = 'type-btn' + (stockMode === m ? ' in-on' : '');
+  });
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? 'flex' : 'none'; };
+  show('itemSearchWrap', stockMode === 'items');
+  show('locSearchWrap', stockMode === 'locations');
+  show('prodSearchWrap', stockMode === 'products');
+  show('invFilterRow', stockMode === 'items');
+  ['btnAddItem','btnBulk'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = stockMode === 'items' ? '' : 'none'; });
   updateLocPrintAllBtn();
+}
+
+// ── PRODUCTS (4.5a) ───────────────────────────────────────────
+// A product is a named list of items, stored as tags on each item:
+// item.products = [{name, qty, note}] (qty/note optional). Reference only —
+// nothing here touches stock. Names match trimmed + case-insensitive.
+let _productView = null, _productViewLabel = '';
+let _ptItemId = null;
+const pKey = s => String(s || '').trim().toLowerCase();
+const pArg = s => encodeURIComponent(s).replace(/'/g, '%27');
+
+function prodTags(item) {
+  return (item.products || [])
+    .map(t => typeof t === 'string' ? { name: t, qty: null, note: '' } : { name: String(t.name || ''), qty: Number(t.qty) > 0 ? Number(t.qty) : null, note: t.note || '' })
+    .filter(t => t.name.trim());
+}
+
+// Smallest floor(stock / qty) across items that have a qty; names the limiting item.
+function buildInfo(rows) {
+  let best = null;
+  rows.forEach(({ i, t }) => {
+    if (!(t.qty > 0)) return;
+    const n = Math.floor((i.stock || 0) / t.qty);
+    if (!best || n < best.n) best = { n, item: i.name };
+  });
+  return best;
+}
+
+function getProducts() {
+  const g = {};
+  getItems().forEach(i => prodTags(i).forEach(t => {
+    const key = pKey(t.name); if (!key) return;
+    if (!g[key]) g[key] = { key, rows: [], cases: {} };
+    g[key].rows.push({ i, t });
+    const raw = t.name.trim();
+    g[key].cases[raw] = (g[key].cases[raw] || 0) + 1;
+  }));
+  return Object.values(g).map(p => ({
+    key: p.key,
+    label: Object.entries(p.cases).sort((a, b) => b[1] - a[1])[0][0],
+    count: p.rows.length,
+    build: buildInfo(p.rows)
+  })).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function renderProductList() {
+  const q = (document.getElementById('prodSearch')?.value || '').trim().toLowerCase();
+  const ps = getProducts().filter(p => !q || p.label.toLowerCase().includes(q));
+  const el = document.getElementById('invList');
+  const title = document.getElementById('invCountTitle');
+  if (title) title.textContent = `${ps.length} Product${ps.length !== 1 ? 's' : ''}`;
+  updateLocPrintAllBtn();
+  if (!ps.length) {
+    const msg = q ? 'No products match.' : 'No products yet.' + (isAdmin() ? '<br>Tap + Product to create one.' : '');
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🧩</div><p>${msg}</p></div>`;
+    return;
+  }
+  el.innerHTML = ps.map(p => {
+    const b = p.build;
+    const bTxt = b ? ` · <span style="color:${b.n === 0 ? 'var(--danger)' : 'var(--accent)'};font-weight:600">can build ${b.n}</span>` : '';
+    return `<div class="list-row" style="cursor:pointer" onclick="openProductView(decodeURIComponent('${pArg(p.key)}'))">
+      <div class="row-icon info">🧩</div>
+      <div class="row-body"><div class="row-title">${_esc(p.label)}</div><div class="row-sub">${p.count} item${p.count !== 1 ? 's' : ''}${bTxt}</div></div>
+      <span style="color:var(--muted);font-size:20px">›</span>
+    </div>`;
+  }).join('');
+}
+
+function openProductView(key, label) {
+  if (curTab !== 'inv') switchTab('inv');
+  if (stockMode !== 'products') { stockMode = 'products'; setStockModeUIOnly(); }
+  _productView = key;
+  const known = getProducts().find(p => p.key === key);
+  const lbl = known ? known.label : (label || _productViewLabel || key);
+  _productViewLabel = lbl;
+  const rows = [];
+  getItems().forEach(i => { const t = prodTags(i).find(t => pKey(t.name) === key); if (t) rows.push({ i, t }); });
+  rows.sort((a, b) => a.i.name.localeCompare(b.i.name));
+  const el = document.getElementById('invList');
+  const title = document.getElementById('invCountTitle');
+  if (title) title.innerHTML = `<span onclick="backToProductList()" style="cursor:pointer;color:var(--accent)">← Products</span> &nbsp;·&nbsp; 🧩 ${_esc(lbl)}`;
+  updateLocPrintAllBtn();
+  const adm = isAdmin();
+  const b = buildInfo(rows);
+  const head = '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px">' +
+    '<div style="font-size:13px">' + (b
+      ? `Can build <strong style="color:${b.n === 0 ? 'var(--danger)' : 'var(--accent)'}">${b.n}</strong> unit${b.n !== 1 ? 's' : ''}<div style="font-size:11px;color:var(--muted)">limited by ${_esc(b.item)}</div>`
+      : '<span style="color:var(--muted)">Add quantities to see how many you can build</span>') + '</div>' +
+    (adm ? '<button class="btn btn-primary btn-sm" onclick="openProductTagSheet()">+ Add item</button>' : '') + '</div>';
+  const body = rows.map(({ i, t }) => {
+    const short = t.qty && i.stock < t.qty;
+    const need = (t.qty ? `needs ${t.qty} ${_esc(i.unit)}` : 'in this product') + (t.note ? ' · ' + _esc(t.note) : '') + (short ? ' · short' : '');
+    const btns = adm ? `<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();openProductTagSheet('${i.id}')">✏️ Edit</button><button class="btn btn-danger btn-sm" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();removeProductTag('${i.id}')">✕ Remove</button></div>` : '';
+    return itemRowHTML(i, `<div class="row-sub" style="color:${short ? 'var(--danger)' : 'var(--accent)'};font-weight:600">🧩 ${need}</div>${btns}`);
+  }).join('');
+  el.innerHTML = head + (rows.length ? body : '<div class="empty"><div class="empty-icon">🧩</div><p>No items in this product yet.</p></div>');
+}
+
+function backToProductList() { _productView = null; renderProductList(); }
+
+// A product only exists once at least one item carries its tag.
+function newProduct() {
+  if (!isAdmin()) return;
+  const name = (prompt('New product name:') || '').trim();
+  if (!name) return;
+  const k = pKey(name);
+  const ex = getProducts().find(p => p.key === k);
+  if (ex) toast('Already exists — opened it', 'wrn');
+  openProductView(k, ex ? ex.label : name);
+}
+
+function openProductTagSheet(editId) {
+  if (!isAdmin() || !_productView) return;
+  _ptItemId = editId || null;
+  const it = editId ? S.inventory.find(i => i.id === editId) : null;
+  const t = it ? prodTags(it).find(t => pKey(t.name) === _productView) : null;
+  document.getElementById('ptTitle').textContent = (editId ? 'Edit item in ' : 'Add item to ') + _productViewLabel;
+  const inp = document.getElementById('ptItemSearch');
+  inp.value = it ? it.name : '';
+  inp.disabled = !!editId;
+  document.getElementById('ptQty').value = t && t.qty ? t.qty : '';
+  document.getElementById('ptNote').value = t ? t.note : '';
+  document.getElementById('ptResults').style.display = 'none';
+  openSheet('prodTagSheet');
+}
+
+function renderPtResults() {
+  const q = document.getElementById('ptItemSearch').value.trim().toLowerCase();
+  const panel = document.getElementById('ptResults');
+  const taken = new Set(getItems().filter(i => prodTags(i).some(t => pKey(t.name) === _productView)).map(i => i.id));
+  const items = getItems().filter(i => !taken.has(i.id) && (!q || i.name.toLowerCase().includes(q) || (i.code || '').toLowerCase().includes(q))).slice(0, 30);
+  panel.innerHTML = items.length
+    ? items.map(i => `<div class="list-row" style="padding:10px 12px;cursor:pointer" onclick="pickPtItem('${i.id}')"><div class="row-body"><div class="row-title" style="font-size:13px">${_esc(i.name)}</div><div class="row-sub">${i.stock} ${_esc(i.unit)} • ${_esc(i.category)}</div></div></div>`).join('')
+    : '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">No matching items</div>';
+  panel.style.display = 'block';
+}
+
+function pickPtItem(id) {
+  const it = S.inventory.find(i => i.id === id); if (!it) return;
+  _ptItemId = id;
+  document.getElementById('ptItemSearch').value = it.name;
+  document.getElementById('ptResults').style.display = 'none';
+}
+
+function pushProducts(item) {
+  lastSyncTime = Date.now() + 6000; // keep a stale sync from overwriting this edit
+  fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(item.name)}?groupId=${encodeURIComponent(gid() || '')}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ products: prodTags(item), groupId: gid(), updated_by: S.user?.name || S.user?.email || '' })
+  }).then(r => { if (!r.ok) toast('Saved locally — server rejected tags', 'wrn'); })
+    .catch(() => toast('Saved locally — could not reach server', 'wrn'));
+}
+
+function saveProductTag() {
+  const item = S.inventory.find(i => i.id === _ptItemId);
+  if (!item) { toast('Pick an item from the list', 'err'); return; }
+  const qraw = document.getElementById('ptQty').value;
+  const qty = qraw === '' ? null : parseFloat(qraw);
+  if (qty !== null && !(qty > 0)) { toast('Qty must be a positive number', 'err'); return; }
+  const note = document.getElementById('ptNote').value.trim();
+  const tags = prodTags(item);
+  const idx = tags.findIndex(t => pKey(t.name) === _productView);
+  const tag = { name: idx >= 0 ? tags[idx].name : _productViewLabel, qty, note };
+  if (idx >= 0) tags[idx] = tag; else tags.push(tag);
+  item.products = tags;
+  logAct(`Product: ${item.name} → ${_productViewLabel}`);
+  save(); pushProducts(item);
+  closeSheet('prodTagSheet');
+  openProductView(_productView, _productViewLabel);
+  toast(`🧩 ${item.name} added to ${_productViewLabel}`, 'ok');
+}
+
+function removeProductTag(id) {
+  const item = S.inventory.find(i => i.id === id); if (!item) return;
+  if (!confirm(`Remove "${item.name}" from ${_productViewLabel}?`)) return;
+  item.products = prodTags(item).filter(t => pKey(t.name) !== _productView);
+  logAct(`Product: removed ${item.name} from ${_productViewLabel}`);
+  save(); pushProducts(item);
+  openProductView(_productView, _productViewLabel);
 }
 
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
@@ -5014,6 +5221,9 @@ async function syncFromServer(force = false) {
         if (serverItem.code) existing.code = serverItem.code;
         if (serverItem.location) existing.location = serverItem.location;
         existing.category = serverItem.category || existing.category;
+        if (Array.isArray(serverItem.products) && JSON.stringify(existing.products || []) !== JSON.stringify(serverItem.products)) {
+          existing.products = serverItem.products; changed = true;
+        }
         // Expiry: before this group's one-time upload, never let an empty server value wipe a local date.
         // After the upload, the server is the source of truth (including cleared dates).
         const srvExp = serverItem.expiry || '';
@@ -5024,6 +5234,7 @@ async function syncFromServer(force = false) {
           id: 'srv_' + Date.now() + Math.random(),
           groupId: S.activeGroupId,
           expiry: serverItem.expiry || '',
+          products: serverItem.products || [],
           name: serverItem.name,
           code: serverItem.code || '',
           category: serverItem.category || 'Uncategorized',
@@ -6086,7 +6297,7 @@ async function _syncGroupsBackground(user) {
               method: 'POST', headers: {'Content-Type':'application/json'},
               body: JSON.stringify({ groupId: lg.id, items: localItems.map(i => ({
                 name: i.name, code: i.code||'', category: i.category,
-                location: i.location||'', stock: i.stock, unit: i.unit, minStock: i.minStock
+                location: i.location||'', stock: i.stock, unit: i.unit, minStock: i.minStock, products: i.products||[]
               }))})
             }).catch(()=>{});
           }
