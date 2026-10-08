@@ -1888,32 +1888,73 @@ select.form-input { cursor: pointer; }
   </div>
 </div>
 
-<!-- Product Tag Sheet (add / edit an item inside a product) -->
-<div class="sheet-overlay" id="prodTagSheet" onclick="sheetBgClose(event,'prodTagSheet')">
+<!-- Product item sheet (add / edit) -->
+<div class="sheet-overlay" id="piSheet" onclick="sheetBgClose(event,'piSheet')">
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-hd">
-      <div class="sheet-title" id="ptTitle">Add item to product</div>
-      <button class="sheet-close" onclick="closeSheet('prodTagSheet')">✕</button>
+      <div class="sheet-title" id="piTitle">Add item</div>
+      <button class="sheet-close" onclick="closeSheet('piSheet')">✕</button>
     </div>
     <div class="sheet-body">
       <div class="form-group">
-        <label class="form-label">Item *</label>
-        <input class="form-input" id="ptItemSearch" placeholder="Search items…" autocomplete="off" oninput="_ptItemId=null;renderPtResults()" onfocus="renderPtResults()">
-        <div id="ptResults" style="display:none;max-height:200px;overflow-y:auto;border:1.5px solid var(--border);border-radius:var(--r-sm);margin-top:6px;background:var(--surface)"></div>
+        <label class="form-label">Item Name *</label>
+        <input class="form-input" id="piName" placeholder="e.g. Solenoid valve" autocomplete="off">
       </div>
       <div class="form-group">
-        <label class="form-label">Qty needed per unit (optional)</label>
-        <input class="form-input" type="number" id="ptQty" min="1" inputmode="numeric" placeholder="e.g. 2">
+        <label class="form-label">Qty *</label>
+        <input class="form-input" type="number" id="piQty" placeholder="0" min="0" inputmode="numeric">
       </div>
       <div class="form-group">
         <label class="form-label">Note</label>
-        <input class="form-input" id="ptNote" placeholder="Optional...">
+        <input class="form-input" id="piNote" placeholder="Optional...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Image</label>
+        <div id="piPreview" style="width:120px;height:120px;border-radius:12px;background:var(--surface2);border:1.5px solid var(--border);overflow:hidden;display:flex;align-items:center;justify-content:center"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <label class="btn btn-ghost btn-sm" for="piCam">📷 Camera</label>
+          <label class="btn btn-ghost btn-sm" for="piGal">🖼 Gallery</label>
+          <button type="button" class="btn btn-ghost btn-sm" id="piRemovePhoto" onclick="piClearPhoto()" style="display:none">🗑 Remove</button>
+        </div>
+        <input type="file" id="piCam" accept="image/*" capture="environment" style="display:none" onchange="piPickPhoto(event)">
+        <input type="file" id="piGal" accept="image/*" style="display:none" onchange="piPickPhoto(event)">
       </div>
     </div>
     <div class="sheet-footer">
-      <button class="btn btn-primary btn-full" onclick="saveProductTag()">Save</button>
-      <button class="btn btn-ghost btn-full" onclick="closeSheet('prodTagSheet')">Cancel</button>
+      <button class="btn btn-primary btn-full" id="piSave" onclick="savePI()">Save</button>
+      <button class="btn btn-danger btn-full" id="piDelete" onclick="deletePI()" style="display:none">🗑 Delete item</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('piSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Product item IN / OUT sheet -->
+<div class="sheet-overlay" id="piMoveSheet" onclick="sheetBgClose(event,'piMoveSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="pmTitle">Move</div>
+      <button class="sheet-close" onclick="closeSheet('piMoveSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="info-box" id="pmInfo" style="font-size:12px"></div>
+      <div class="form-group">
+        <label class="form-label">Quantity *</label>
+        <input class="form-input" type="number" id="pmQty" placeholder="0" min="1" inputmode="numeric">
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="pmByLabel">By *</label>
+        <input class="form-input" id="pmPerson" placeholder="Person name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <input class="form-input" id="pmNote" placeholder="Optional...">
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" id="pmSubmit" onclick="submitPIMove()">Submit</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('piMoveSheet')">Cancel</button>
     </div>
   </div>
 </div>
@@ -2626,7 +2667,7 @@ function switchTab(tab) {
 // switching tabs away and back never silently resets the mode.
 function renderStockView() {
   if (stockMode === 'products') {
-    if (_productView) openProductView(_productView, _productViewLabel);
+    if (_productView) openProductView(_productView);
     else renderProductList();
   } else if (stockMode === 'locations') {
     if (_locationView) openLocationView(_locationView);
@@ -3854,7 +3895,10 @@ function setStockMode(mode) {
   setStockModeUIOnly();
   if (mode === 'items') renderInv();
   else if (mode === 'locations') renderLocationList();
-  else renderProductList();
+  else {
+    renderProductList();
+    syncProducts().then(ch => { if (ch && stockMode === 'products') renderStockView(); });
+  }
 }
 
 // Shows the "Print All" (location QR sheet) button only when Locations
@@ -3940,52 +3984,71 @@ function setStockModeUIOnly() {
   updateLocPrintAllBtn();
 }
 
-// ── PRODUCTS (4.5a) ───────────────────────────────────────────
-// A product is a named list of items, stored as tags on each item:
-// item.products = [{name, qty, note}] (qty/note optional). Reference only —
-// nothing here touches stock. Names match trimmed + case-insensitive.
-let _productView = null, _productViewLabel = '';
-let _ptItemId = null;
-const pKey = s => String(s || '').trim().toLowerCase();
-const pArg = s => encodeURIComponent(s).replace(/'/g, '%27');
+// ── PRODUCTS (4.5b) ───────────────────────────────────────────
+// Product-only items live in the server tables products / product_items and are
+// never mixed into inventory. Moves are logged as source PRODUCT in the Log.
+let _productView = null;         // open product id, or null = product list
+let _piEditId = null;
+let _piPhoto;                    // undefined = unchanged, null = remove, string = new dataURL
+let _pmId = null, _pmType = 'IN';
 
-function prodTags(item) {
-  return (item.products || [])
-    .map(t => typeof t === 'string' ? { name: t, qty: null, note: '' } : { name: String(t.name || ''), qty: Number(t.qty) > 0 ? Number(t.qty) : null, note: t.note || '' })
-    .filter(t => t.name.trim());
+function prods() { return (S.products || (S.products = [])).filter(p => p.groupId === gid()); }
+function getProd(id) { return (S.products || []).find(p => p.id === id); }
+function findPI(id) { for (const p of (S.products || [])) { const i = p.items.find(x => x.id === id); if (i) return i; } return null; }
+function upsertLocalPI(it) {
+  const p = getProd(it.productId); if (!p) return;
+  const k = p.items.findIndex(x => x.id === it.id);
+  if (k >= 0) p.items[k] = it; else p.items.push(it);
+}
+const piPhotoUrl = pi => `${RAILWAY_URL}/api/pi-photo/${encodeURIComponent(pi.id)}?v=${pi.photoV || 0}`;
+
+async function pApi(method, path, body) {
+  const r = await fetch(RAILWAY_URL + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  let j = null; try { j = await r.json(); } catch (e) {}
+  if (!r.ok) throw new Error((j && j.error) || ('server ' + r.status));
+  return j;
 }
 
-// Smallest floor(stock / qty) across items that have a qty; names the limiting item.
-function buildInfo(rows) {
-  let best = null;
-  rows.forEach(({ i, t }) => {
-    if (!(t.qty > 0)) return;
-    const n = Math.floor((i.stock || 0) / t.qty);
-    if (!best || n < best.n) best = { n, item: i.name };
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = reject;
+    fr.onload = e => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const scale = img.width > 800 ? 800 / img.width : 1;
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = e.target.result;
+    };
+    fr.readAsDataURL(file);
   });
-  return best;
 }
 
-function getProducts() {
-  const g = {};
-  getItems().forEach(i => prodTags(i).forEach(t => {
-    const key = pKey(t.name); if (!key) return;
-    if (!g[key]) g[key] = { key, rows: [], cases: {} };
-    g[key].rows.push({ i, t });
-    const raw = t.name.trim();
-    g[key].cases[raw] = (g[key].cases[raw] || 0) + 1;
-  }));
-  return Object.values(g).map(p => ({
-    key: p.key,
-    label: Object.entries(p.cases).sort((a, b) => b[1] - a[1])[0][0],
-    count: p.rows.length,
-    build: buildInfo(p.rows)
-  })).sort((a, b) => a.label.localeCompare(b.label));
+// Pulls this group's products from the server; true if anything changed locally.
+async function syncProducts() {
+  const g = S.activeGroupId; if (!g) return false;
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/products?groupId=${encodeURIComponent(g)}`);
+    if (!r.ok) return false;
+    const rows = await r.json();
+    if (S.activeGroupId !== g) return false;
+    const next = rows.map(p => ({ id: p.id, groupId: g, name: p.name, items: p.items || [] }));
+    const cur = (S.products || []).filter(p => p.groupId === g);
+    if (JSON.stringify(cur) === JSON.stringify(next)) return false;
+    S.products = (S.products || []).filter(p => p.groupId !== g).concat(next);
+    save(); return true;
+  } catch (e) { return false; }
 }
 
 function renderProductList() {
   const q = (document.getElementById('prodSearch')?.value || '').trim().toLowerCase();
-  const ps = getProducts().filter(p => !q || p.label.toLowerCase().includes(q));
+  const ps = prods().filter(p => !q || p.name.toLowerCase().includes(q) || p.items.some(i => i.name.toLowerCase().includes(q)))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
   if (title) title.textContent = `${ps.length} Product${ps.length !== 1 ? 's' : ''}`;
@@ -3995,128 +4058,193 @@ function renderProductList() {
     el.innerHTML = `<div class="empty"><div class="empty-icon">🧩</div><p>${msg}</p></div>`;
     return;
   }
-  el.innerHTML = ps.map(p => {
-    const b = p.build;
-    const bTxt = b ? ` · <span style="color:${b.n === 0 ? 'var(--danger)' : 'var(--accent)'};font-weight:600">can build ${b.n}</span>` : '';
-    return `<div class="list-row" style="cursor:pointer" onclick="openProductView(decodeURIComponent('${pArg(p.key)}'))">
+  el.innerHTML = ps.map(p => `<div class="list-row" style="cursor:pointer" onclick="openProductView('${p.id}')">
       <div class="row-icon info">🧩</div>
-      <div class="row-body"><div class="row-title">${_esc(p.label)}</div><div class="row-sub">${p.count} item${p.count !== 1 ? 's' : ''}${bTxt}</div></div>
+      <div class="row-body"><div class="row-title">${_esc(p.name)}</div><div class="row-sub">${p.items.length} item${p.items.length !== 1 ? 's' : ''}</div></div>
       <span style="color:var(--muted);font-size:20px">›</span>
-    </div>`;
-  }).join('');
+    </div>`).join('');
 }
 
-function openProductView(key, label) {
+function productItemRowHTML(pi) {
+  const adm = isAdmin();
+  const canOut = adm || !S.settings.requestFlowEnabled;
+  const thumb = pi.photoV > 0
+    ? `<img src="${piPhotoUrl(pi)}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover">`
+    : '📦';
+  return `<div class="list-row"${adm ? ` onclick="openPISheet('${pi.id}')" style="cursor:pointer"` : ''}>
+    <div class="row-icon in" style="width:52px;height:52px;overflow:hidden;font-size:22px">${thumb}</div>
+    <div class="row-body">
+      <div class="row-title">${_esc(pi.name)}</div>
+      ${pi.note ? `<div class="row-sub">${_esc(pi.note)}</div>` : ''}
+      <div class="row-val in" style="font-size:16px;margin-top:2px">${pi.qty}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+      <button class="btn btn-sm" style="background:var(--accent-bg);color:var(--accent);padding:6px 14px" onclick="event.stopPropagation();openPIMove('${pi.id}','IN')">▲ IN</button>
+      ${canOut ? `<button class="btn btn-sm" style="background:var(--danger-bg);color:var(--danger);padding:6px 14px" onclick="event.stopPropagation();openPIMove('${pi.id}','OUT')">▼ OUT</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function openProductView(id) {
+  const p = getProd(id);
+  if (!p || p.groupId !== gid()) { _productView = null; renderProductList(); return; }
   if (curTab !== 'inv') switchTab('inv');
   if (stockMode !== 'products') { stockMode = 'products'; setStockModeUIOnly(); }
-  _productView = key;
-  const known = getProducts().find(p => p.key === key);
-  const lbl = known ? known.label : (label || _productViewLabel || key);
-  _productViewLabel = lbl;
-  const rows = [];
-  getItems().forEach(i => { const t = prodTags(i).find(t => pKey(t.name) === key); if (t) rows.push({ i, t }); });
-  rows.sort((a, b) => a.i.name.localeCompare(b.i.name));
+  _productView = id;
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
-  if (title) title.innerHTML = `<span onclick="backToProductList()" style="cursor:pointer;color:var(--accent)">← Products</span> &nbsp;·&nbsp; 🧩 ${_esc(lbl)}`;
+  if (title) title.innerHTML = `<span onclick="backToProductList()" style="cursor:pointer;color:var(--accent)">← Products</span> &nbsp;·&nbsp; 🧩 ${_esc(p.name)}`;
   updateLocPrintAllBtn();
   const adm = isAdmin();
-  const b = buildInfo(rows);
-  const head = '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px">' +
-    '<div style="font-size:13px">' + (b
-      ? `Can build <strong style="color:${b.n === 0 ? 'var(--danger)' : 'var(--accent)'}">${b.n}</strong> unit${b.n !== 1 ? 's' : ''}<div style="font-size:11px;color:var(--muted)">limited by ${_esc(b.item)}</div>`
-      : '<span style="color:var(--muted)">Add quantities to see how many you can build</span>') + '</div>' +
-    (adm ? '<button class="btn btn-primary btn-sm" onclick="openProductTagSheet()">+ Add item</button>' : '') + '</div>';
-  const body = rows.map(({ i, t }) => {
-    const short = t.qty && i.stock < t.qty;
-    const need = (t.qty ? `needs ${t.qty} ${_esc(i.unit)}` : 'in this product') + (t.note ? ' · ' + _esc(t.note) : '') + (short ? ' · short' : '');
-    const btns = adm ? `<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-ghost btn-sm" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();openProductTagSheet('${i.id}')">✏️ Edit</button><button class="btn btn-danger btn-sm" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();removeProductTag('${i.id}')">✕ Remove</button></div>` : '';
-    return itemRowHTML(i, `<div class="row-sub" style="color:${short ? 'var(--danger)' : 'var(--accent)'};font-weight:600">🧩 ${need}</div>${btns}`);
-  }).join('');
-  el.innerHTML = head + (rows.length ? body : '<div class="empty"><div class="empty-icon">🧩</div><p>No items in this product yet.</p></div>');
+  const items = [...p.items].sort((a, b) => a.name.localeCompare(b.name));
+  const head = '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">' +
+    `<div style="flex:1;font-size:12px;color:var(--muted)">${items.length} item${items.length !== 1 ? 's' : ''} · product-only stock</div>` +
+    (adm ? '<button class="btn btn-primary btn-sm" onclick="openPISheet()">+ Add item</button>' +
+           '<button class="btn btn-ghost btn-sm" onclick="renameProduct()">✏️</button>' +
+           '<button class="btn btn-danger btn-sm" onclick="deleteProduct()">🗑</button>' : '') + '</div>';
+  el.innerHTML = head + (items.length ? items.map(productItemRowHTML).join('')
+    : '<div class="empty"><div class="empty-icon">🧩</div><p>No items in this product yet.</p></div>');
 }
 
 function backToProductList() { _productView = null; renderProductList(); }
 
-// A product only exists once at least one item carries its tag.
-function newProduct() {
+async function newProduct() {
   if (!isAdmin()) return;
   const name = (prompt('New product name:') || '').trim();
   if (!name) return;
-  const k = pKey(name);
-  const ex = getProducts().find(p => p.key === k);
-  if (ex) toast('Already exists — opened it', 'wrn');
-  openProductView(k, ex ? ex.label : name);
+  try {
+    const r = await pApi('POST', '/api/products', { id: 'p_' + Date.now(), groupId: gid(), name });
+    if (r.existing) { await syncProducts(); toast('Already exists — opened it', 'wrn'); }
+    else { S.products.push({ id: r.product.id, groupId: gid(), name: r.product.name, items: [] }); save(); logAct(`Product created: ${r.product.name}`); }
+    openProductView(r.product.id);
+  } catch (e) { toast('Could not create product: ' + e.message, 'err'); }
 }
 
-function openProductTagSheet(editId) {
+async function renameProduct() {
+  const p = getProd(_productView); if (!p || !isAdmin()) return;
+  const name = (prompt('Rename product:', p.name) || '').trim();
+  if (!name || name === p.name) return;
+  try {
+    await pApi('PUT', '/api/products/' + encodeURIComponent(p.id), { name });
+    logAct(`Product renamed: ${p.name} → ${name}`); p.name = name; save(); renderStockView();
+  } catch (e) { toast('Could not rename: ' + e.message, 'err'); }
+}
+
+async function deleteProduct() {
+  const p = getProd(_productView); if (!p || !isAdmin()) return;
+  if (!confirm(`Delete product "${p.name}" and its ${p.items.length} item(s)? Cannot be undone.`)) return;
+  try {
+    await pApi('DELETE', '/api/products/' + encodeURIComponent(p.id));
+    S.products = S.products.filter(x => x.id !== p.id);
+    logAct(`Product deleted: ${p.name}`); save();
+    _productView = null; renderProductList();
+    toast('Product deleted', 'wrn');
+  } catch (e) { toast('Could not delete: ' + e.message, 'err'); }
+}
+
+// ── add / edit a product item ──
+function openPISheet(id) {
   if (!isAdmin() || !_productView) return;
-  _ptItemId = editId || null;
-  const it = editId ? S.inventory.find(i => i.id === editId) : null;
-  const t = it ? prodTags(it).find(t => pKey(t.name) === _productView) : null;
-  document.getElementById('ptTitle').textContent = (editId ? 'Edit item in ' : 'Add item to ') + _productViewLabel;
-  const inp = document.getElementById('ptItemSearch');
-  inp.value = it ? it.name : '';
-  inp.disabled = !!editId;
-  document.getElementById('ptQty').value = t && t.qty ? t.qty : '';
-  document.getElementById('ptNote').value = t ? t.note : '';
-  document.getElementById('ptResults').style.display = 'none';
-  openSheet('prodTagSheet');
+  _piEditId = id || null; _piPhoto = undefined;
+  const pi = id ? findPI(id) : null;
+  document.getElementById('piTitle').textContent = pi ? 'Edit item' : 'Add item';
+  document.getElementById('piName').value = pi ? pi.name : '';
+  document.getElementById('piQty').value = pi ? pi.qty : '';
+  document.getElementById('piNote').value = pi ? pi.note : '';
+  document.getElementById('piDelete').style.display = pi ? '' : 'none';
+  updatePIPreview();
+  openSheet('piSheet');
 }
 
-function renderPtResults() {
-  const q = document.getElementById('ptItemSearch').value.trim().toLowerCase();
-  const panel = document.getElementById('ptResults');
-  const taken = new Set(getItems().filter(i => prodTags(i).some(t => pKey(t.name) === _productView)).map(i => i.id));
-  const items = getItems().filter(i => !taken.has(i.id) && (!q || i.name.toLowerCase().includes(q) || (i.code || '').toLowerCase().includes(q))).slice(0, 30);
-  panel.innerHTML = items.length
-    ? items.map(i => `<div class="list-row" style="padding:10px 12px;cursor:pointer" onclick="pickPtItem('${i.id}')"><div class="row-body"><div class="row-title" style="font-size:13px">${_esc(i.name)}</div><div class="row-sub">${i.stock} ${_esc(i.unit)} • ${_esc(i.category)}</div></div></div>`).join('')
-    : '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">No matching items</div>';
-  panel.style.display = 'block';
+function updatePIPreview() {
+  const pi = _piEditId ? findPI(_piEditId) : null;
+  let src = null;
+  if (typeof _piPhoto === 'string') src = _piPhoto;
+  else if (_piPhoto === undefined && pi && pi.photoV > 0) src = piPhotoUrl(pi);
+  document.getElementById('piPreview').innerHTML = src
+    ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">`
+    : '<span style="font-size:36px;opacity:.3">📷</span>';
+  document.getElementById('piRemovePhoto').style.display = src ? '' : 'none';
 }
 
-function pickPtItem(id) {
-  const it = S.inventory.find(i => i.id === id); if (!it) return;
-  _ptItemId = id;
-  document.getElementById('ptItemSearch').value = it.name;
-  document.getElementById('ptResults').style.display = 'none';
+async function piPickPhoto(ev) {
+  const f = ev.target.files[0]; ev.target.value = '';
+  if (!f) return;
+  try { _piPhoto = await compressImage(f); updatePIPreview(); }
+  catch (e) { toast('Could not read that image', 'err'); }
+}
+function piClearPhoto() { _piPhoto = null; updatePIPreview(); }
+
+async function savePI() {
+  const name = document.getElementById('piName').value.trim();
+  const qraw = document.getElementById('piQty').value;
+  const qty = parseFloat(qraw);
+  const note = document.getElementById('piNote').value.trim();
+  if (!name) { toast('Enter an item name', 'err'); return; }
+  if (qraw === '' || !(qty >= 0)) { toast('Enter a quantity (0 or more)', 'err'); return; }
+  const who = S.user?.name || S.user?.email || '';
+  const btn = document.getElementById('piSave');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    let r;
+    if (!_piEditId) {
+      r = await pApi('POST', '/api/product-items', { id: 'pi_' + Date.now(), productId: _productView, groupId: gid(), name, qty, note, photo: typeof _piPhoto === 'string' ? _piPhoto : undefined, updated_by: who });
+    } else {
+      const body = { name, qty, note, updated_by: who };
+      if (typeof _piPhoto === 'string') body.photo = _piPhoto; else if (_piPhoto === null) body.removePhoto = true;
+      r = await pApi('PUT', '/api/product-items/' + encodeURIComponent(_piEditId), body);
+    }
+    upsertLocalPI(r.item); save();
+    closeSheet('piSheet');
+    renderStockView();
+    toast(r.photoFailed ? 'Saved, but the image upload failed — edit the item to retry' : '🧩 Saved', r.photoFailed ? 'wrn' : 'ok');
+    setTimeout(() => syncFromServer(true), 300); // pulls the Log entry the server wrote
+  } catch (e) { toast('Could not save: ' + e.message, 'err'); }
+  btn.disabled = false; btn.textContent = 'Save';
 }
 
-function pushProducts(item) {
-  lastSyncTime = Date.now() + 6000; // keep a stale sync from overwriting this edit
-  fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(item.name)}?groupId=${encodeURIComponent(gid() || '')}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ products: prodTags(item), groupId: gid(), updated_by: S.user?.name || S.user?.email || '' })
-  }).then(r => { if (!r.ok) toast('Saved locally — server rejected tags', 'wrn'); })
-    .catch(() => toast('Saved locally — could not reach server', 'wrn'));
+async function deletePI() {
+  const pi = _piEditId ? findPI(_piEditId) : null; if (!pi) return;
+  if (!confirm(`Delete "${pi.name}" from this product?`)) return;
+  try {
+    await pApi('DELETE', '/api/product-items/' + encodeURIComponent(pi.id));
+    const p = getProd(pi.productId); if (p) p.items = p.items.filter(x => x.id !== pi.id);
+    save(); closeSheet('piSheet'); renderStockView(); toast('Item deleted', 'wrn');
+  } catch (e) { toast('Could not delete: ' + e.message, 'err'); }
 }
 
-function saveProductTag() {
-  const item = S.inventory.find(i => i.id === _ptItemId);
-  if (!item) { toast('Pick an item from the list', 'err'); return; }
-  const qraw = document.getElementById('ptQty').value;
-  const qty = qraw === '' ? null : parseFloat(qraw);
-  if (qty !== null && !(qty > 0)) { toast('Qty must be a positive number', 'err'); return; }
-  const note = document.getElementById('ptNote').value.trim();
-  const tags = prodTags(item);
-  const idx = tags.findIndex(t => pKey(t.name) === _productView);
-  const tag = { name: idx >= 0 ? tags[idx].name : _productViewLabel, qty, note };
-  if (idx >= 0) tags[idx] = tag; else tags.push(tag);
-  item.products = tags;
-  logAct(`Product: ${item.name} → ${_productViewLabel}`);
-  save(); pushProducts(item);
-  closeSheet('prodTagSheet');
-  openProductView(_productView, _productViewLabel);
-  toast(`🧩 ${item.name} added to ${_productViewLabel}`, 'ok');
+// ── IN / OUT ──
+function openPIMove(id, type) {
+  const pi = findPI(id); if (!pi) return;
+  const p = getProd(pi.productId);
+  _pmId = id; _pmType = type;
+  document.getElementById('pmTitle').textContent = (type === 'IN' ? '▲ IN' : '▼ OUT') + ' · ' + pi.name;
+  document.getElementById('pmInfo').textContent = `Product: ${p ? p.name : ''} · Current qty: ${pi.qty}`;
+  document.getElementById('pmByLabel').textContent = type === 'IN' ? 'Given By *' : 'Taken By *';
+  document.getElementById('pmQty').value = '';
+  document.getElementById('pmNote').value = '';
+  document.getElementById('pmPerson').value = S.user?.name || '';
+  openSheet('piMoveSheet');
 }
 
-function removeProductTag(id) {
-  const item = S.inventory.find(i => i.id === id); if (!item) return;
-  if (!confirm(`Remove "${item.name}" from ${_productViewLabel}?`)) return;
-  item.products = prodTags(item).filter(t => pKey(t.name) !== _productView);
-  logAct(`Product: removed ${item.name} from ${_productViewLabel}`);
-  save(); pushProducts(item);
-  openProductView(_productView, _productViewLabel);
+async function submitPIMove() {
+  const pi = findPI(_pmId); if (!pi) return;
+  const qty = parseFloat(document.getElementById('pmQty').value);
+  const person = document.getElementById('pmPerson').value.trim();
+  const notes = document.getElementById('pmNote').value.trim();
+  if (!(qty > 0) || !person) { toast('Fill quantity and name', 'err'); return; }
+  if (_pmType === 'OUT' && qty > pi.qty) { toast(`Only ${pi.qty} in this product`, 'err'); return; }
+  const btn = document.getElementById('pmSubmit');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const r = await pApi('POST', `/api/product-items/${encodeURIComponent(pi.id)}/move`, { type: _pmType, qty, person, notes });
+    upsertLocalPI(r.item);
+    S.transactions.unshift({ ...r.tx, id: 'srv_' + r.tx.id, _serverId: String(r.tx.id), groupId: gid(), source: 'PRODUCT' });
+    save(); closeSheet('piMoveSheet'); renderStockView();
+    const p = getProd(pi.productId);
+    toast(`${_pmType === 'IN' ? '▲' : '▼'} ${qty} · ${pi.name} → ${r.item.qty} left (${p ? p.name : 'product'})`, 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+  btn.disabled = false; btn.textContent = 'Submit';
 }
 
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
@@ -4536,8 +4664,8 @@ function renderLog() {
       <input type="checkbox" onclick="event.stopPropagation();logToggleRow('${t.id}')" ${sel?'checked':''} style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
       <div class="row-icon ${isIn?'in':'out'}" style="flex-shrink:0">${isIn?'📦':'🔻'}</div>
       <div class="row-body">
-        <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='TELEGRAM'?'<span class="badge bg-gray">TG</span>':''}${t.source==='LOG_ONLY'?'<span class="badge bg-gray">LOG</span>':''}</div>
-        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'?'} • ${t.source==='LOG_ONLY'?t.qty+' '+(t.unit||'')+' logged, no stock change':(isIn?'+':'−')+t.qty+' '+(t.unit||'')}</div>
+        <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='TELEGRAM'?'<span class="badge bg-gray">TG</span>':''}${t.source==='LOG_ONLY'?'<span class="badge bg-gray">LOG</span>':''}${t.source==='PRODUCT'?'<span class="badge bg-gray">PRODUCT</span>':''}</div>
+        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'?'}${t.source==='PRODUCT'&&t.notes?' • '+_esc(t.notes):''} • ${t.source==='LOG_ONLY'?t.qty+' '+(t.unit||'')+' logged, no stock change':(isIn?'+':'−')+t.qty+' '+(t.unit||'')}</div>
       </div>
     </div>`;
   }).join('');
@@ -4572,7 +4700,7 @@ function deleteSelectedTx() {
 function renderHome() {
   const today = localDateStr();
   const items = getItems();
-  const todayTx = S.transactions.filter(t=>t.groupId===gid()&&t.date===today&&!t._act);
+  const todayTx = S.transactions.filter(t=>t.groupId===gid()&&t.date===today&&!t._act&&t.source!=='PRODUCT');
   document.getElementById('kpiItems').textContent = items.length;
   document.getElementById('kpiLow').textContent = items.filter(i=>i.stock<=i.minStock).length;
   document.getElementById('kpiIn').textContent = new Set(todayTx.filter(t=>t.type==='IN').map(t=>t.itemName)).size;
@@ -5221,9 +5349,6 @@ async function syncFromServer(force = false) {
         if (serverItem.code) existing.code = serverItem.code;
         if (serverItem.location) existing.location = serverItem.location;
         existing.category = serverItem.category || existing.category;
-        if (Array.isArray(serverItem.products) && JSON.stringify(existing.products || []) !== JSON.stringify(serverItem.products)) {
-          existing.products = serverItem.products; changed = true;
-        }
         // Expiry: before this group's one-time upload, never let an empty server value wipe a local date.
         // After the upload, the server is the source of truth (including cleared dates).
         const srvExp = serverItem.expiry || '';
@@ -5234,7 +5359,6 @@ async function syncFromServer(force = false) {
           id: 'srv_' + Date.now() + Math.random(),
           groupId: S.activeGroupId,
           expiry: serverItem.expiry || '',
-          products: serverItem.products || [],
           name: serverItem.name,
           code: serverItem.code || '',
           category: serverItem.category || 'Uncategorized',
@@ -5283,6 +5407,7 @@ async function syncFromServer(force = false) {
       refreshCurrentView();
       updateAlertBadge();
     }
+    if (await syncProducts() && curTab === 'inv' && stockMode === 'products') renderStockView();
   } catch(e) {
     console.log('Sync failed:', e.message);
   }
@@ -5729,12 +5854,14 @@ async function handlePhotoUpload(event) {
       try { localStorage.setItem('photo_' + _currentProductId, dataUrl); } catch(e) {}
 
       // Try to save to Railway server (so all users see it)
+      let _upOk = false;
       try {
-        await fetch(`${RAILWAY_URL}/api/photos`, {
+        const _r = await fetch(`${RAILWAY_URL}/api/photos`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ groupId: S.activeGroupId, itemName: item.name, photo: dataUrl })
         });
+        _upOk = _r.ok;
       } catch(e) {}
 
       // Show photo
@@ -5743,7 +5870,7 @@ async function handlePhotoUpload(event) {
       photoEl.style.display = 'block';
       document.getElementById('productPhotoPlaceholder').style.display = 'none';
       document.getElementById('photoDeleteBtn').style.display = 'flex';
-      toast('📷 Photo saved!', 'ok');
+      toast(_upOk ? '📷 Photo saved!' : '📷 Saved on this phone only — server upload failed', _upOk ? 'ok' : 'wrn');
     };
     img.src = e.target.result;
   };
@@ -6297,7 +6424,7 @@ async function _syncGroupsBackground(user) {
               method: 'POST', headers: {'Content-Type':'application/json'},
               body: JSON.stringify({ groupId: lg.id, items: localItems.map(i => ({
                 name: i.name, code: i.code||'', category: i.category,
-                location: i.location||'', stock: i.stock, unit: i.unit, minStock: i.minStock, products: i.products||[]
+                location: i.location||'', stock: i.stock, unit: i.unit, minStock: i.minStock
               }))})
             }).catch(()=>{});
           }
