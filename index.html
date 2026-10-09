@@ -4348,8 +4348,8 @@ function addNewItemFromTx(query) {
     populateTaxSelects();
     document.getElementById('iCat').value = '';
     document.getElementById('iUnit').value = '';
-    document.getElementById('iName').value = query;
     openSheet('addItemSheet');
+    document.getElementById('iName').value = query; // after openSheet: it clears iName on a fresh Add
     setTimeout(() => document.getElementById('iCat').focus(), 320);
   }, 260); // wait for the sheet-close animation before opening the next one
 }
@@ -5149,11 +5149,12 @@ function previewBulk(event) {
 
       const name = row['item name'] || row['name'] || row['item'];
       if (!name) { errors.push(`Row ${i+1}: Missing item name`); continue; }
-      const cat  = row['category'] || row['cat'] || 'Uncategorized';
-      const unit = row['unit'] || 'pcs';
+      const cat  = row['category'] || row['cat'] || '';
+      const unit = row['unit'] || '';
       const stockRaw = row['stock'] || row['count'] || row['qty'] || '';
       const stock = (stockRaw === '' || isNaN(parseFloat(stockRaw))) ? null : parseFloat(stockRaw);
-      const minStock = parseFloat(row['min stock'] || row['min'] || '10') || 10;
+      const minRaw = row['min stock'] || row['min'] || '';
+      const minStock = (minRaw === '' || isNaN(parseFloat(minRaw))) ? null : parseFloat(minRaw);
       _bulkData.push({
         name,
         code: row['unique code'] || row['code'] || '',
@@ -5180,7 +5181,7 @@ function previewBulk(event) {
       prev.innerHTML = `<div class="info-box" style="font-size:12px">
         ✅ <strong>${_bulkData.length} items</strong> ready to import
         ${errors.length ? `<br>⚠️ ${errors.length} rows skipped` : ''}
-        <br><br>${_bulkData.slice(0,3).map(d=>`• ${d.name} (${d.category}) — ${d.stock === null ? 'stock unchanged' : d.stock + ' ' + d.unit}`).join('<br>')}
+        <br><br>${_bulkData.slice(0,3).map(d=>`• ${d.name} (${d.category || '—'}) — ${d.stock === null ? 'stock unchanged' : d.stock + ' ' + d.unit}`).join('<br>')}
         ${_bulkData.length > 3 ? `<br>...and ${_bulkData.length-3} more` : ''}
       </div>`;
       document.getElementById('bulkImportBtn').style.display = '';
@@ -5214,18 +5215,21 @@ function importBulk() {
   if (!_bulkData.length) return;
   let added = 0, updated = 0;
   _bulkData.forEach(d => {
-    // Auto-generate code if missing
-    if (!d.code || d.code.trim() === '') {
-      d.code = generateItemCode(d.category);
-    }
-    // Ensure code is unique
-    const dup = getItems().find(i => i.code === d.code);
-    if (dup && dup.name.toLowerCase() !== d.name.toLowerCase()) {
-      d.code = d.code + '_' + Date.now().toString().slice(-3);
-    }
     const existing = getItems().find(i => i.name.toLowerCase() === d.name.toLowerCase());
+    // Blank cells never overwrite an existing item; new items get defaults
+    if (!existing) {
+      if (!d.category) d.category = 'Uncategorized';
+      if (!d.unit) d.unit = 'pcs';
+      if (d.minStock === null) d.minStock = 10;
+      if (!d.code) d.code = generateItemCode(d.category);
+    }
+    if (d.code) {
+      const dup = getItems().find(i => i.code === d.code);
+      if (dup && dup.name.toLowerCase() !== d.name.toLowerCase()) d.code = d.code + '_' + Date.now().toString().slice(-3);
+    }
     if (existing) {
-      Object.assign(existing, { code: d.code, category: d.category, location: d.location, unit: d.unit, minStock: d.minStock });
+      ['code','category','location','unit'].forEach(k => { if (d[k]) existing[k] = d[k]; });
+      if (d.minStock !== null) existing.minStock = d.minStock;
       if (d.stock !== null) existing.stock = d.stock;
       updated++;
     } else {
