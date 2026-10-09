@@ -5151,7 +5151,8 @@ function previewBulk(event) {
       if (!name) { errors.push(`Row ${i+1}: Missing item name`); continue; }
       const cat  = row['category'] || row['cat'] || 'Uncategorized';
       const unit = row['unit'] || 'pcs';
-      const stock = parseFloat(row['stock'] || row['count'] || row['qty'] || '0') || 0;
+      const stockRaw = row['stock'] || row['count'] || row['qty'] || '';
+      const stock = (stockRaw === '' || isNaN(parseFloat(stockRaw))) ? null : parseFloat(stockRaw);
       const minStock = parseFloat(row['min stock'] || row['min'] || '10') || 10;
       _bulkData.push({
         name,
@@ -5179,7 +5180,7 @@ function previewBulk(event) {
       prev.innerHTML = `<div class="info-box" style="font-size:12px">
         ✅ <strong>${_bulkData.length} items</strong> ready to import
         ${errors.length ? `<br>⚠️ ${errors.length} rows skipped` : ''}
-        <br><br>${_bulkData.slice(0,3).map(d=>`• ${d.name} (${d.category}) — ${d.stock} ${d.unit}`).join('<br>')}
+        <br><br>${_bulkData.slice(0,3).map(d=>`• ${d.name} (${d.category}) — ${d.stock === null ? 'stock unchanged' : d.stock + ' ' + d.unit}`).join('<br>')}
         ${_bulkData.length > 3 ? `<br>...and ${_bulkData.length-3} more` : ''}
       </div>`;
       document.getElementById('bulkImportBtn').style.display = '';
@@ -5225,10 +5226,10 @@ function importBulk() {
     const existing = getItems().find(i => i.name.toLowerCase() === d.name.toLowerCase());
     if (existing) {
       Object.assign(existing, { code: d.code, category: d.category, location: d.location, unit: d.unit, minStock: d.minStock });
-      if (d.stock > 0) existing.stock = d.stock;
+      if (d.stock !== null) existing.stock = d.stock;
       updated++;
     } else {
-      S.inventory.push({ id: 'i_'+Date.now()+Math.random(), groupId: gid(), ...d });
+      S.inventory.push({ id: 'i_'+Date.now()+Math.random(), groupId: gid(), ...d, stock: d.stock ?? 0 });
       added++;
     }
   });
@@ -5240,8 +5241,13 @@ function importBulk() {
     fetch(`${RAILWAY_URL}/api/inventory/bulk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupId: S.activeGroupId, items: _bulkData })
-    }).catch(() => {});
+      body: JSON.stringify({ groupId: S.activeGroupId, items: _bulkData, person: S.user?.name || S.user?.email || '' })
+    }).then(async r => {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || ('server ' + r.status));
+      if (j.logFailed) toast('Imported, but the Log entries failed to save', 'wrn');
+      setTimeout(() => syncFromServer(true), 800);
+    }).catch(e => toast('⚠️ Server import FAILED: ' + e.message + ' — not saved to server', 'err'));
   }
 
   _bulkData = [];
@@ -6422,7 +6428,7 @@ async function _syncGroupsBackground(user) {
             console.log(`[SYNC] Re-pushing ${localItems.length} items to server after crash`);
             await fetch(`${RAILWAY_URL}/api/inventory/bulk`, {
               method: 'POST', headers: {'Content-Type':'application/json'},
-              body: JSON.stringify({ groupId: lg.id, items: localItems.map(i => ({
+              body: JSON.stringify({ groupId: lg.id, noLog: true, items: localItems.map(i => ({
                 name: i.name, code: i.code||'', category: i.category,
                 location: i.location||'', stock: i.stock, unit: i.unit, minStock: i.minStock
               }))})
