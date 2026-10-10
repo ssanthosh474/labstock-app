@@ -2578,6 +2578,16 @@ function openSheet(id) {
   history.pushState({ sheet: id }, '', '');
 }
 
+// Closing something in code calls history.back() to drop its history entry. That fires 'popstate',
+// which must NOT run the "user pressed Back" logic (it would jump to Home). Each programmatic
+// back is counted so the handler skips exactly those events; the timer clears a stuck count.
+let _skipPops = 0, _skipTimer = null;
+function histBack() {
+  _skipPops++;
+  clearTimeout(_skipTimer);
+  _skipTimer = setTimeout(() => { _skipPops = 0; }, 800);
+  history.back();
+}
 function closeSheet(id) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -2586,13 +2596,14 @@ function closeSheet(id) {
   // If the sheet was open and we closed it programmatically (not via popstate),
   // go back in history to keep the stack in sync
   if (wasOpen && history.state && history.state.sheet === id) {
-    history.back();
+    histBack();
   }
 }
 function sheetBgClose(e, id) { if (e.target === e.currentTarget) { closeSheet(id); if (id === 'addItemSheet') cancelTxResume(); } }
 
 // Handle Android/browser back button — close topmost open sheet
 window.addEventListener('popstate', function(e) {
+  if (_skipPops > 0) { _skipPops--; return; }   // our own history.back(), not the user's Back
   const openSheets = [...document.querySelectorAll('.sheet-overlay.open')];
   if (openSheets.length > 0) {
     openSheets[openSheets.length - 1].classList.remove('open');
@@ -5845,7 +5856,7 @@ function closeProductPage() {
   document.getElementById('pageScroll').style.overflow = '';
   renderInv();
   updateAlertBadge();
-  if (history.state && history.state.nav === 'product') history.back();
+  if (history.state && history.state.nav === 'product') histBack();
 }
 (function initSwipeGestures() {
   let tx = 0, ty = 0, startX = 0, startY = 0;
