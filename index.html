@@ -1265,13 +1265,14 @@ select.form-input { cursor: pointer; }
     </div>
     <div class="sheet-body">
       <div class="type-toggle">
+        <button class="type-btn in-on" id="txModeNormal" onclick="setTxMode(false)">📦 Normal</button>
+        <button class="type-btn" id="txModeLog" onclick="setTxMode(true)">📝 Log only</button>
+      </div>
+      <div id="txModeHint" style="font-size:11px;color:var(--muted);margin-top:-8px;display:none">Records the entry only — stock does not change.</div>
+      <div class="type-toggle">
         <button class="type-btn in-on" id="txIn" onclick="setTxType('IN')">▲ INWARD</button>
         <button class="type-btn" id="txOut" onclick="setTxType('OUT')">▼ OUTWARD</button>
       </div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:2px 2px 2px">
-        <input type="checkbox" id="txLogOnly" onchange="toggleLogOnly(this.checked)" style="accent-color:var(--muted);width:16px;height:16px;flex-shrink:0">
-        📝 Log only — don't affect stock
-      </label>
       <div class="form-group">
         <label class="form-label">Item *</label>
         <input class="form-input" id="txItemSearch" placeholder="Search items or type a new name…" autocomplete="off"
@@ -1291,6 +1292,20 @@ select.form-input { cursor: pointer; }
       <div class="form-group">
         <label class="form-label">Date *</label>
         <input class="form-input" type="date" id="txDate">
+      </div>
+      <div class="form-group" id="txPurposeWrap" style="display:none">
+        <label class="form-label">Purpose *</label>
+        <select class="form-input" id="txPurpose" onchange="onTxPurposeChange()"></select>
+      </div>
+      <div id="txRcaWrap" style="display:none;flex-direction:column;gap:14px">
+        <div class="form-group">
+          <label class="form-label">NVM Number *</label>
+          <input class="form-input" id="txNvm" placeholder="e.g. NVM-5543" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Request ID *</label>
+          <input class="form-input" id="txReqId" placeholder="e.g. REQ-101" autocomplete="off">
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Notes</label>
@@ -2550,8 +2565,7 @@ function openSheet(id) {
     document.getElementById('txItemSearch').value = '';
     document.getElementById('txItemResults').style.display = 'none';
     document.getElementById('txItemResults').innerHTML = '';
-    document.getElementById('txLogOnly').checked = false;
-    txLogOnlyState = false;
+    setTxMode(false);
     setTxType('IN');
   }
   if (id === 'addItemSheet') {
@@ -4202,7 +4216,51 @@ async function submitPIMove() {
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
 let txTypeState = 'IN';
 let txLogOnlyState = false;
-function toggleLogOnly(checked) { txLogOnlyState = checked; }
+const DEFAULT_PURPOSES = ['NPD testing','Reliability Testing','Component testing','Field RCA','Prototype testing','Benchmarking','Others'];
+function txPurposes() {
+  const g = S.groups.find(x => x.id === gid());
+  return (g && Array.isArray(g.purposes) && g.purposes.length) ? g.purposes : DEFAULT_PURPOSES;
+}
+function fillTxPurposes() {
+  const sel = document.getElementById('txPurpose'); if (!sel) return;
+  const cur = sel.value, list = txPurposes();
+  sel.innerHTML = '<option value="">Select purpose…</option>' + list.map(p => `<option value="${_esc(p)}">${_esc(p)}</option>`).join('');
+  if (cur && list.includes(cur)) sel.value = cur;
+}
+// Group's list comes from the server and is cached on the group; defaults are used until it arrives.
+async function loadPurposes() {
+  const g = S.groups.find(x => x.id === gid()); if (!g) return;
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/groups/${encodeURIComponent(g.id)}/purposes`);
+    if (!r.ok) return;
+    const j = await r.json();
+    if (Array.isArray(j.purposes) && JSON.stringify(j.purposes) !== JSON.stringify(g.purposes || null)) {
+      g.purposes = j.purposes; save();
+      if (txLogOnlyState) fillTxPurposes();
+    }
+  } catch (e) {}
+}
+function isRcaPurpose(p) { return String(p || '').trim().toLowerCase() === 'field rca'; }
+function onTxPurposeChange() {
+  document.getElementById('txRcaWrap').style.display = isRcaPurpose(document.getElementById('txPurpose').value) ? 'flex' : 'none';
+}
+function setTxMode(logOnly) {
+  txLogOnlyState = !!logOnly;
+  document.getElementById('txModeNormal').className = 'type-btn' + (logOnly ? '' : ' in-on');
+  document.getElementById('txModeLog').className = 'type-btn' + (logOnly ? ' in-on' : '');
+  document.getElementById('txModeHint').style.display = logOnly ? 'block' : 'none';
+  document.getElementById('txPurposeWrap').style.display = logOnly ? '' : 'none';
+  const dEl = document.getElementById('txDate'); if (dEl) dEl.max = localDateStr();   // no future dates
+  if (logOnly) { fillTxPurposes(); loadPurposes(); }
+  else {
+    ['txPurpose','txNvm','txReqId'].forEach(id => { document.getElementById(id).value = ''; });
+    // a typed not-in-stock name only makes sense in Log only mode
+    if (!document.getElementById('txItem').value) document.getElementById('txItemSearch').value = '';
+  }
+  onTxPurposeChange();
+  const p = document.getElementById('txItemResults');
+  if (p && p.style.display === 'block') renderTxItemResults();
+}
 function setTxType(t) {
   txTypeState = t;
   document.getElementById('txIn').className = 'type-btn' + (t==='IN'?' in-on':'');
@@ -4350,6 +4408,17 @@ function submitTx(override=null) {
     ? (document.getElementById('txItemSearch')?.value || '').trim() : '';
   if (!d.qty||!d.person||!d.date) { toast('Fill all required fields','err'); return false; }
   if (!d.itemId && !freeformName) { toast('Select or type an item','err'); return false; }
+  if (d.date > localDateStr()) { toast('Date cannot be in the future','err'); return false; }
+  let details = null;   // Purpose / RCA values, log-only entries only
+  if (!override && d.logOnly) {
+    const purpose = document.getElementById('txPurpose').value.trim();
+    const nvm = document.getElementById('txNvm').value.trim();
+    const requestId = document.getElementById('txReqId').value.trim();
+    if (!purpose) { toast('Select a purpose','err'); return false; }
+    if (isRcaPurpose(purpose) && (!nvm || !requestId)) { toast('Field RCA needs NVM number and Request ID','err'); return false; }
+    details = { purpose };
+    if (isRcaPurpose(purpose)) { details.nvm = nvm; details.requestId = requestId; }
+  }
   const item = d.itemId
     ? S.inventory.find(i=>i.id===d.itemId)
     : { id: null, name: freeformName, code: '', category: 'Uncategorized', unit: '', minStock: 0, stock: 0, location: '' };
@@ -4366,15 +4435,15 @@ function submitTx(override=null) {
     itemName:item.name, itemCode:item.code||'',
     category:item.category, unit:item.unit,
     labMember: d.labMember || S.user?.name || '',
-    timestamp:new Date().toISOString()
+    timestamp:new Date().toISOString(),
+    ...(details ? { details } : {})
   });
   logAct(`${d.logOnly?'LOG':d.type}: ${d.qty} ${item.unit} of ${item.name} by ${d.person}${d.logOnly?' (no stock change)':''}`);
   save();
   if (!override) {
     closeSheet('txSheet');
     ['txQty','txNotes'].forEach(x=>document.getElementById(x).value='');
-    document.getElementById('txLogOnly').checked = false;
-    txLogOnlyState = false;
+    setTxMode(false);
   }
   toast(`${d.logOnly?'📝 Logged':d.type==='IN'?'▲ Inward':'▼ Outward'}: ${d.qty} ${item.unit} of ${item.name}`,'ok');
   if (!d.logOnly && item.stock<=item.minStock) setTimeout(()=>toast(`⚠ Low stock: ${item.name} (${item.stock} left)`,'wrn'),2000);
@@ -4394,9 +4463,17 @@ function submitTx(override=null) {
       person: d.person, notes: d.notes||'', unit: item.unit,
       category: item.category, location: item.location||'', code: item.code||'',
       labMember: d.labMember || S.user?.name || d.person,
+      date: d.date,
+      ...(details ? { purpose: details.purpose, nvm: details.nvm, requestId: details.requestId } : {}),
       updated_by: S.user?.name || S.user?.email || d.person
     })
-  }).then(r => r.ok ? r.json() : null).then(result => {
+  }).then(async r => {
+    if (r.ok) return r.json();
+    let msg = 'server ' + r.status;
+    try { msg = (await r.json()).error || msg; } catch (e) {}
+    toast('⚠️ Not saved to server: ' + msg, 'err');   // was silent before
+    return null;
+  }).then(result => {
     // After server confirms, store server's transaction id for dedup
     if (result?.tx?.id) {
       const local = S.transactions.find(t => t.id === d._localId);
@@ -4623,8 +4700,8 @@ function renderLog() {
       <input type="checkbox" onclick="event.stopPropagation();logToggleRow('${t.id}')" ${sel?'checked':''} style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
       <div class="row-icon ${isIn?'in':'out'}" style="flex-shrink:0">${isIn?'📦':'🔻'}</div>
       <div class="row-body">
-        <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='TELEGRAM'?'<span class="badge bg-gray">TG</span>':''}${t.source==='LOG_ONLY'?'<span class="badge bg-gray">LOG</span>':''}${t.source==='PRODUCT'?'<span class="badge bg-gray">PRODUCT</span>':''}</div>
-        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'?'}${t.source==='PRODUCT'&&t.notes?' • '+_esc(t.notes):''} • ${t.source==='LOG_ONLY'?t.qty+' '+(t.unit||'')+' logged, no stock change':(isIn?'+':'−')+t.qty+' '+(t.unit||'')}</div>
+        <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='TELEGRAM'?'<span class="badge bg-gray">TG</span>':''}${t.source==='LOG_ONLY'?'<span class="badge bg-gray">LOG</span>':''}${t.source==='PRODUCT'?'<span class="badge bg-gray">PRODUCT</span>':''}${t.details?.purpose?`<span class="badge bg-green" style="margin-left:4px">${_esc(t.details.purpose)}</span>`:''}</div>
+        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'?'}${t.source==='PRODUCT'&&t.notes?' • '+_esc(t.notes):''}${t.details?.requestId?' • Req '+_esc(t.details.requestId)+' • NVM '+_esc(t.details.nvm||''):''} • ${t.source==='LOG_ONLY'?t.qty+' '+(t.unit||'')+' logged, no stock change':(isIn?'+':'−')+t.qty+' '+(t.unit||'')}</div>
       </div>
     </div>`;
   }).join('');
@@ -4813,10 +4890,10 @@ function doExport(format) {
   const fname = `labstock_${localDateStr()}`;
 
   if (format === 'csv') {
-    const rows = [['Date','Type','Item','Code','Category','Location','Qty','Unit','By','Lab Member','Notes','Source']];
+    const rows = [['Date','Type','Item','Code','Category','Location','Qty','Unit','By','Lab Member','Notes','Source','Purpose','Request ID','NVM Number']];
     txs.forEach(t => {
       const item = S.inventory.find(i => i.id === t.itemId || i.name === t.itemName);
-      rows.push([t.date, t.type, t.itemName||'', t.itemCode||item?.code||'', t.category||'', item?.location||t.location||'', t.qty, t.unit||'', t.person||'', t.labMember||t.person||'', t.notes||'', t.source||'APP']);
+      rows.push([t.date, t.type, t.itemName||'', t.itemCode||item?.code||'', t.category||'', item?.location||t.location||'', t.qty, t.unit||'', t.person||'', t.labMember||t.person||'', t.notes||'', t.source||'APP', t.details?.purpose||'', t.details?.requestId||'', t.details?.nvm||'']);
     });
     const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
     dlFile(`${fname}.csv`, 'text/csv', csv);
@@ -5936,8 +6013,7 @@ function productTx(type) {
   document.getElementById('txPerson').value = S.user?.name || '';
   document.getElementById('txNotes').value = '';
   document.getElementById('txQty').value = '';
-  document.getElementById('txLogOnly').checked = false;
-  txLogOnlyState = false;
+  setTxMode(false);
   setTxType(type);
 
   selectTxItem(item.id); // sets txItem.value, the visible search text, and hides the results panel
