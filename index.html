@@ -1761,6 +1761,38 @@ select.form-input { cursor: pointer; }
   </div>
 </div>
 
+<!-- Product (create / edit: name + image) -->
+<div class="sheet-overlay" id="prSheet" onclick="sheetBgClose(event,'prSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="prTitle">New product</div>
+      <button class="sheet-close" onclick="closeSheet('prSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-group">
+        <label class="form-label">Product Name *</label>
+        <input class="form-input" id="prName" placeholder="e.g. Pump Kit A" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Image</label>
+        <div id="prPreview" style="width:120px;height:120px;border-radius:12px;background:var(--surface2);border:1.5px solid var(--border);overflow:hidden;display:flex;align-items:center;justify-content:center"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <label class="btn btn-ghost btn-sm" for="prCam">📷 Camera</label>
+          <label class="btn btn-ghost btn-sm" for="prGal">🖼 Gallery</label>
+          <button type="button" class="btn btn-ghost btn-sm" id="prRemovePhoto" onclick="prClearPhoto()" style="display:none">🗑 Remove</button>
+        </div>
+        <input type="file" id="prCam" accept="image/*" capture="environment" style="display:none" onchange="prPickPhoto(event)">
+        <input type="file" id="prGal" accept="image/*" style="display:none" onchange="prPickPhoto(event)">
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" id="prSave" onclick="savePR()">Save</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('prSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Product item IN / OUT sheet -->
 <div class="sheet-overlay" id="piMoveSheet" onclick="sheetBgClose(event,'piMoveSheet')">
   <div class="sheet">
@@ -3612,6 +3644,44 @@ function renderInv() {
 
 // Shared row template — used by both the regular Items list and the
 // Locations-mode filtered item list, so the two views never drift apart.
+// ── ITEM THUMBNAILS (N5) ──────────────────────────────────────
+// S.photoIdx[group][lowercased name] = version. Filled by one /api/photo-index call per sync, so a
+// list only requests images that exist; <img loading=lazy> + a versioned URL lets the browser cache them.
+function itemPhotoUrl(item) {
+  const v = ((S.photoIdx || {})[gid()] || {})[(item.name || '').toLowerCase()];
+  return v ? `${RAILWAY_URL}/api/photo-img/${encodeURIComponent(gid())}/${encodeURIComponent(item.name)}?v=${v}` : null;
+}
+function itemIconHTML(item, low) {
+  const u = itemPhotoUrl(item);
+  return u
+    ? `<div class="row-icon ${low?'warn':'in'}" style="overflow:hidden;padding:0"><img src="${u}" loading="lazy" alt="" onerror="this.parentNode.textContent='${low?'⚠️':'📦'}'" style="width:100%;height:100%;object-fit:cover"></div>`
+    : `<div class="row-icon ${low?'warn':'in'}">${low?'⚠️':'📦'}</div>`;
+}
+function itemTileIconHTML(item, low) {
+  const u = itemPhotoUrl(item);
+  return u
+    ? `<div style="width:56px;height:56px;border-radius:12px;overflow:hidden;background:var(--surface2)"><img src="${u}" loading="lazy" alt="" onerror="this.parentNode.textContent='${low?'⚠️':'📦'}'" style="width:100%;height:100%;object-fit:cover"></div>`
+    : `<div style="font-size:20px">${low?'⚠️':'📦'}</div>`;
+}
+function setPhotoIdx(name, ver) {
+  if (!S.photoIdx) S.photoIdx = {};
+  const m = S.photoIdx[gid()] || (S.photoIdx[gid()] = {});
+  if (ver) m[name.toLowerCase()] = ver; else delete m[name.toLowerCase()];
+  save();
+}
+async function syncPhotoIndex() {
+  const g = S.activeGroupId; if (!g) return false;
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/photo-index?groupId=${encodeURIComponent(g)}`);
+    if (!r.ok) return false;
+    const idx = await r.json();
+    if (S.activeGroupId !== g) return false;
+    if (!S.photoIdx) S.photoIdx = {};
+    if (JSON.stringify(S.photoIdx[g] || {}) === JSON.stringify(idx)) return false;
+    S.photoIdx[g] = idx; save(); return true;
+  } catch (e) { return false; }
+}
+
 function itemRowHTML(item, extra) {
   const pct = Math.min(100,(item.stock/Math.max(item.minStock*3,1))*100);
   const low = item.stock <= item.minStock;
@@ -3633,7 +3703,7 @@ function itemRowHTML(item, extra) {
     expLine = `<div class="row-sub" style="color:${col};font-weight:600">⏳ ${fmtDateShort(item.expiry)} · ${txt}</div>`;
   }
   return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
-      <div class="row-icon ${low?'warn':'in'}">${low?'⚠️':'📦'}</div>
+      ${itemIconHTML(item, low)}
       <div class="row-body">
         <div class="row-title">${item.name} ${badge} ${expiryBadge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
         <div class="row-sub">${item.category}${item.location?' • 📍'+item.location:''}</div>
@@ -3708,7 +3778,7 @@ function itemGridCardHTML(item) {
   const watch = item.stock <= item.minStock * 1.5;
   const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
   return `<div class="category-tile" onclick="openProductPage('${item.id}')">
-    <div style="font-size:20px;margin-bottom:6px">${low?'⚠️':'📦'}</div>
+    <div style="margin-bottom:6px">${itemTileIconHTML(item, low)}</div>
     <div style="font-weight:700;font-size:13px;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name}</div>
     <div style="font-size:12px;font-weight:700;color:${color}">${item.stock} ${item.unit}</div>
   </div>`;
@@ -3872,7 +3942,7 @@ async function syncProducts() {
     if (!r.ok) return false;
     const rows = await r.json();
     if (S.activeGroupId !== g) return false;
-    const next = rows.map(p => ({ id: p.id, groupId: g, name: p.name, items: p.items || [] }));
+    const next = rows.map(p => ({ id: p.id, groupId: g, name: p.name, photoV: p.photoV || 0, items: p.items || [] }));
     const cur = (S.products || []).filter(p => p.groupId === g);
     if (JSON.stringify(cur) === JSON.stringify(next)) return false;
     S.products = (S.products || []).filter(p => p.groupId !== g).concat(next);
@@ -3894,7 +3964,7 @@ function renderProductList() {
     return;
   }
   el.innerHTML = ps.map(p => `<div class="list-row" style="cursor:pointer" onclick="openProductView('${p.id}')">
-      <div class="row-icon info">🧩</div>
+      <div class="row-icon info"${p.photoV > 0 ? ' style="overflow:hidden;padding:0"' : ''}>${p.photoV > 0 ? `<img src="${prPhotoUrl(p)}" loading="lazy" alt="" onerror="this.parentNode.textContent='🧩'" style="width:100%;height:100%;object-fit:cover">` : '🧩'}</div>
       <div class="row-body"><div class="row-title">${_esc(p.name)}</div><div class="row-sub">${p.items.length} item${p.items.length !== 1 ? 's' : ''}</div></div>
       <span style="color:var(--muted);font-size:20px">›</span>
     </div>`).join('');
@@ -3943,26 +4013,62 @@ function openProductView(id) {
 
 function backToProductList() { _productView = null; renderProductList(); }
 
-async function newProduct() {
+// ── product create / edit (name + image) ──
+let _prEditId = null, _prPhoto;   // _prPhoto: undefined = unchanged, null = remove, string = new dataURL
+const prPhotoUrl = p => `${RAILWAY_URL}/api/pr-photo/${encodeURIComponent(p.id)}?v=${p.photoV || 0}`;
+function newProduct() { openPRSheet(); }
+function renameProduct() { openPRSheet(_productView); }
+function openPRSheet(id) {
   if (!isAdmin()) return;
-  const name = (prompt('New product name:') || '').trim();
-  if (!name) return;
-  try {
-    const r = await pApi('POST', '/api/products', { id: 'p_' + Date.now(), groupId: gid(), name });
-    if (r.existing) { await syncProducts(); toast('Already exists — opened it', 'wrn'); }
-    else { S.products.push({ id: r.product.id, groupId: gid(), name: r.product.name, items: [] }); save(); logAct(`Product created: ${r.product.name}`); }
-    openProductView(r.product.id);
-  } catch (e) { toast('Could not create product: ' + e.message, 'err'); }
+  _prEditId = id || null; _prPhoto = undefined;
+  const p = id ? getProd(id) : null;
+  document.getElementById('prTitle').textContent = p ? 'Edit product' : 'New product';
+  document.getElementById('prName').value = p ? p.name : '';
+  updatePRPreview();
+  openSheet('prSheet');
 }
-
-async function renameProduct() {
-  const p = getProd(_productView); if (!p || !isAdmin()) return;
-  const name = (prompt('Rename product:', p.name) || '').trim();
-  if (!name || name === p.name) return;
+function updatePRPreview() {
+  const p = _prEditId ? getProd(_prEditId) : null;
+  let src = null;
+  if (typeof _prPhoto === 'string') src = _prPhoto;
+  else if (_prPhoto === undefined && p && p.photoV > 0) src = prPhotoUrl(p);
+  document.getElementById('prPreview').innerHTML = src
+    ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">`
+    : '<span style="font-size:36px;opacity:.3">🧩</span>';
+  document.getElementById('prRemovePhoto').style.display = src ? '' : 'none';
+}
+async function prPickPhoto(ev) {
+  const f = ev.target.files[0]; ev.target.value = '';
+  if (!f) return;
+  try { _prPhoto = await compressImage(f); updatePRPreview(); }
+  catch (e) { toast('Could not read that image', 'err'); }
+}
+function prClearPhoto() { _prPhoto = null; updatePRPreview(); }
+async function savePR() {
+  const name = document.getElementById('prName').value.trim();
+  if (!name) { toast('Enter a product name', 'err'); return; }
+  const btn = document.getElementById('prSave');
+  btn.disabled = true; btn.textContent = 'Saving…';
   try {
-    await pApi('PUT', '/api/products/' + encodeURIComponent(p.id), { name });
-    logAct(`Product renamed: ${p.name} → ${name}`); p.name = name; save(); renderStockView();
-  } catch (e) { toast('Could not rename: ' + e.message, 'err'); }
+    if (!_prEditId) {
+      const r = await pApi('POST', '/api/products', { id: 'p_' + Date.now(), groupId: gid(), name, photo: typeof _prPhoto === 'string' ? _prPhoto : undefined });
+      if (r.existing) { await syncProducts(); toast('Already exists — opened it', 'wrn'); }
+      else {
+        S.products.push({ id: r.product.id, groupId: gid(), name: r.product.name, photoV: r.product.photoV || 0, items: [] });
+        save(); logAct(`Product created: ${r.product.name}`);
+        if (r.photoFailed) toast('Product created, but the image upload failed — edit it to retry', 'wrn');
+      }
+      closeSheet('prSheet'); openProductView(r.product.id);
+    } else {
+      const p = getProd(_prEditId);
+      const body = { name };
+      if (typeof _prPhoto === 'string') body.photo = _prPhoto; else if (_prPhoto === null) body.removePhoto = true;
+      const r = await pApi('PUT', '/api/products/' + encodeURIComponent(_prEditId), body);
+      if (p) { if (p.name !== name) logAct(`Product renamed: ${p.name} → ${name}`); p.name = name; p.photoV = r.photoV || 0; }
+      save(); closeSheet('prSheet'); renderStockView();
+    }
+  } catch (e) { toast('Could not save: ' + e.message, 'err'); }
+  btn.disabled = false; btn.textContent = 'Save';
 }
 
 async function deleteProduct() {
@@ -5411,6 +5517,7 @@ async function syncFromServer(force = false) {
       updateAlertBadge();
     }
     if (await syncProducts() && curTab === 'inv' && stockMode === 'products') renderStockView();
+    if (await syncPhotoIndex() && curTab === 'inv') renderStockView();
   } catch(e) {
     console.log('Sync failed:', e.message);
   }
@@ -5873,6 +5980,7 @@ async function handlePhotoUpload(event) {
       photoEl.style.display = 'block';
       document.getElementById('productPhotoPlaceholder').style.display = 'none';
       document.getElementById('photoDeleteBtn').style.display = 'flex';
+      if (_upOk) setPhotoIdx(item.name, Date.now());
       toast(_upOk ? '📷 Photo saved!' : '📷 Saved on this phone only — server upload failed', _upOk ? 'ok' : 'wrn');
     };
     img.src = e.target.result;
@@ -5903,6 +6011,7 @@ function deleteProductPhoto() {
   const item = S.inventory.find(i => i.id === _currentProductId);
   if (!confirm('Remove this photo?')) return;
   localStorage.removeItem('photo_' + _currentProductId);
+  if (item) setPhotoIdx(item.name, null);
   // Delete from server too
   if (item) {
     fetch(`${RAILWAY_URL}/api/photos/${encodeURIComponent(S.activeGroupId||'default')}/${encodeURIComponent(item.name)}`, { method: 'DELETE' }).catch(() => {});
