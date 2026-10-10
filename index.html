@@ -1441,7 +1441,7 @@ select.form-input { cursor: pointer; }
       </div>
       <div class="form-group">
         <label class="form-label">Category</label>
-        <select class="form-input" id="logCatSel" onchange="setLogCat(this.value)"></select>
+        <div id="logCatChips" style="display:flex;gap:6px;flex-wrap:wrap;max-height:150px;overflow-y:auto"></div>
       </div>
       <div class="form-group">
         <label class="form-label">Type</label>
@@ -1504,13 +1504,14 @@ select.form-input { cursor: pointer; }
         🟢 <strong>P2</strong> — Balanced: Stock above 2× minimum
       </div>
       <div class="form-group">
-        <label class="form-label">Show Priorities</label>
-        <select class="form-input" id="stockPriorityFilter">
-          <option value="ALL">All — P0 + P1 + P2</option>
-          <option value="P0">P0 only — Critical</option>
-          <option value="P01">P0 + P1 — Needs attention</option>
-        </select>
+        <label class="form-label">Priorities</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="stkPriChips"></div>
       </div>
+      <div class="form-group">
+        <label class="form-label">Categories</label>
+        <div id="stkCatChips" style="display:flex;gap:6px;flex-wrap:wrap;max-height:150px;overflow-y:auto"></div>
+      </div>
+      <div class="info-box" id="stkSummary" style="font-size:12px"></div>
       <div class="form-group">
         <label class="form-label">Format</label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
@@ -2535,7 +2536,7 @@ function openSheet(id) {
   }
   if (id === 'taxManageSheet') renderTaxonomyManage();
   if (id === 'logFilterSheet') renderLogFilterSheet();
-  if (id === 'exportSheet') updateExportSummary();
+  if (id === 'exportSheet') { updateExportSummary(); renderStockFilters(); }
   if (id === 'groupSheet') renderGroupSheet();
   if (id === 'membersSheet') { switchMemTab('list'); renderMembersSheet(); }
   if (id === 'activitySheet') { if(typeof _selectedLogs!=='undefined') _selectedLogs.clear(); renderActivity(); }
@@ -4294,7 +4295,8 @@ let _selectedTx = new Set();
 // One filter state drives the Log list AND the export, so what you see is what you export.
 let _logRange = 'all';      // all | today | yesterday | 7d | month | custom
 let _logFrom = '', _logTo = '';
-let _logCat = '';
+let _logCats = [];          // selected categories; empty = all
+let _logCatList = [];
 let _logTypeFilter = null;  // 'IN' | 'OUT' | null
 let _srvTxFull = false;     // true when the last sync hit the 100-row cap (older rows live only on the server)
 let _srvTxOldest = '';      // local date of the oldest row in that 100-row window
@@ -4334,14 +4336,14 @@ function logRangeBounds() {
   }
 }
 function logRangeActive() { return _logRange !== 'all' && !(_logRange === 'custom' && !_logFrom && !_logTo); }
-function logActiveCount() { return (logRangeActive() ? 1 : 0) + (_logCat ? 1 : 0) + (_logTypeFilter ? 1 : 0); }
+function logActiveCount() { return (logRangeActive() ? 1 : 0) + (_logCats.length ? 1 : 0) + (_logTypeFilter ? 1 : 0); }
 function logFilterLabel(withSearch) {
   const parts = [];
   if (logRangeActive()) {
     const names = { today: 'Today', yesterday: 'Yesterday', '7d': 'Last 7 days', month: 'This month' };
     parts.push(_logRange === 'custom' ? `${_logFrom || '…'} → ${_logTo || '…'}` : names[_logRange]);
   }
-  if (_logCat) parts.push(_logCat);
+  if (_logCats.length) parts.push(_logCats.length <= 2 ? _logCats.join(', ') : _logCats.length + ' categories');
   if (_logTypeFilter) parts.push(_logTypeFilter === 'IN' ? 'Inward' : 'Outward');
   if (withSearch) {
     const q = (document.getElementById('logSearch')?.value || '').trim();
@@ -4362,13 +4364,13 @@ function getLogTxs() {
       if (!d || (from && d < from) || (to && d > to)) return false;
     }
     if (_logTypeFilter && t.type !== _logTypeFilter) return false;
-    if (_logCat && (t.category || 'Uncategorized') !== _logCat) return false;
+    if (_logCats.length && !_logCats.includes(t.category || 'Uncategorized')) return false;
     return true;
   });
 }
 
 function clearLogFilters(silent) {
-  _logRange = 'all'; _logFrom = ''; _logTo = ''; _logCat = ''; _logTypeFilter = null;
+  _logRange = 'all'; _logFrom = ''; _logTo = ''; _logCats = []; _logTypeFilter = null;
   _selectedTx.clear();
   if (!silent) { renderLogFilterSheet(); renderLog(); }
 }
@@ -4382,7 +4384,11 @@ function setLogCustom() {
   if (f && to && f > to) { const x = f; f = to; to = x; }
   _logFrom = f; _logTo = to; _logRange = 'custom'; _logFilterChanged();
 }
-function setLogCat(v) { _logCat = v; _logFilterChanged(); }
+function toggleLogCat(i) {
+  if (i < 0) _logCats = [];
+  else { const c = _logCatList[i]; _logCats = _logCats.includes(c) ? _logCats.filter(x => x !== c) : [..._logCats, c]; }
+  _logFilterChanged();
+}
 function setLogType(k) { _logTypeFilter = k || null; _logFilterChanged(); }
 
 function renderLogFilterSheet() {
@@ -4392,15 +4398,17 @@ function renderLogFilterSheet() {
   const f = document.getElementById('logFromDate'), to = document.getElementById('logToDate');
   if (f) f.value = _logFrom;
   if (to) to.value = _logTo;
-  const sel = document.getElementById('logCatSel');
-  if (sel) {
-    const cats = [...new Set([
+  const box = document.getElementById('logCatChips');
+  if (box) {
+    _logCatList = [...new Set([
       ...getItems().map(i => i.category),
-      ...S.transactions.filter(x => x.groupId === gid() && !x._act).map(x => x.category),
-      _logCat
+      ...S.transactions.filter(x => x.groupId === gid() && !x._act).map(x => x.category || 'Uncategorized'),
+      ..._logCats
     ].filter(Boolean))].sort((a, b) => a.localeCompare(b));
-    sel.innerHTML = '<option value="">All categories</option>' +
-      cats.map(c => `<option value="${_esc(c)}"${c === _logCat ? ' selected' : ''}>${_esc(c)}</option>`).join('');
+    const top = box.scrollTop;
+    box.innerHTML = `<button type="button" class="exp-chip${_logCats.length ? '' : ' on'}" onclick="toggleLogCat(-1)">All</button>` +
+      _logCatList.map((c, k) => `<button type="button" class="exp-chip${_logCats.includes(c) ? ' on' : ''}" onclick="toggleLogCat(${k})">${_esc(c)}</button>`).join('');
+    box.scrollTop = top;
   }
 }
 
@@ -4785,7 +4793,35 @@ function getPriority(item) {
   return { level: 'P2', label: 'BALANCED', color: '#2d6a4f', bg: '#d8f3dc', emoji: '🟢' };
 }
 
-function getStockItems(priorityFilter) {
+let _stkPri = ['P0', 'P1', 'P2'], _stkCats = [], _stkCatList = [];
+function toggleStkPri(p) { _stkPri = _stkPri.includes(p) ? _stkPri.filter(x => x !== p) : [..._stkPri, p]; renderStockFilters(); }
+function toggleStkCat(i) {
+  if (i < 0) _stkCats = [];
+  else { const c = _stkCatList[i]; _stkCats = _stkCats.includes(c) ? _stkCats.filter(x => x !== c) : [..._stkCats, c]; }
+  renderStockFilters();
+}
+function stockFilterLabel() {
+  const p = _stkPri.length === 3 ? 'All priorities' : (_stkPri.join(' + ') || 'No priority');
+  const c = !_stkCats.length ? 'All categories' : _stkCats.length <= 2 ? _stkCats.join(', ') : _stkCats.length + ' categories';
+  return p + ' · ' + c;
+}
+function renderStockFilters() {
+  _stkCatList = [...new Set(getItems().map(i => i.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  _stkCats = _stkCats.filter(c => _stkCatList.includes(c));
+  const pri = document.getElementById('stkPriChips'), cat = document.getElementById('stkCatChips');
+  if (pri) pri.innerHTML = [['P0', '🔴 P0 Critical'], ['P1', '🟡 P1 Moderate'], ['P2', '🟢 P2 Balanced']]
+    .map(([k, l]) => `<button type="button" class="exp-chip${_stkPri.includes(k) ? ' on' : ''}" onclick="toggleStkPri('${k}')">${l}</button>`).join('');
+  if (cat) {
+    const top = cat.scrollTop;
+    cat.innerHTML = `<button type="button" class="exp-chip${_stkCats.length ? '' : ' on'}" onclick="toggleStkCat(-1)">All</button>` +
+      _stkCatList.map((c, k) => `<button type="button" class="exp-chip${_stkCats.includes(c) ? ' on' : ''}" onclick="toggleStkCat(${k})">${_esc(c)}</button>`).join('');
+    cat.scrollTop = top;
+  }
+  const n = getStockItems().length, el = document.getElementById('stkSummary');
+  if (el) el.innerHTML = `<strong>${n} item${n !== 1 ? 's' : ''}</strong> will be exported<br>Filters: ${_esc(stockFilterLabel())}`;
+}
+
+function getStockItems() {
   const items = getItems().map(i => ({ ...i, priority: getPriority(i) }));
   // Sort: P0 first, then P1, then P2, then by name within each group
   items.sort((a, b) => {
@@ -4793,15 +4829,12 @@ function getStockItems(priorityFilter) {
     if (order[a.priority.level] !== order[b.priority.level]) return order[a.priority.level] - order[b.priority.level];
     return a.name.localeCompare(b.name);
   });
-  if (priorityFilter === 'P0') return items.filter(i => i.priority.level === 'P0');
-  if (priorityFilter === 'P01') return items.filter(i => i.priority.level === 'P0' || i.priority.level === 'P1');
-  return items;
+  return items.filter(i => _stkPri.includes(i.priority.level) && (!_stkCats.length || _stkCats.includes(i.category)));
 }
 
 function doStockExport(format) {
   if (!isAdmin()) { toast('Admin only', 'err'); return; }
-  const pf = document.getElementById('stockPriorityFilter')?.value || 'ALL';
-  const items = getStockItems(pf);
+  const items = getStockItems();
   if (!items.length) { toast('No items to export', 'wrn'); return; }
   const g = S.groups.find(g => g.id === gid());
   const today = new Date().toLocaleDateString('en-IN');
@@ -4869,7 +4902,7 @@ function doStockExport(format) {
         </div>`;
     };
 
-    const filterLabel = pf === 'P0' ? 'P0 Critical only' : pf === 'P01' ? 'P0 + P1' : 'All priorities';
+    const filterLabel = stockFilterLabel();
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <title>LabStock Stock Report</title>
     <style>
@@ -4905,11 +4938,11 @@ function doStockExport(format) {
       <div class="summary">
         ${p0.length ? `<div class="stat" style="background:#ffe5e7"><div class="stat-num" style="color:#c1121f">${p0.length}</div><div class="stat-lbl" style="color:#c1121f">🔴 P0 CRITICAL</div></div>` : ''}
         ${p1.length ? `<div class="stat" style="background:#fff3cd"><div class="stat-num" style="color:#e07a00">${p1.length}</div><div class="stat-lbl" style="color:#e07a00">🟡 P1 MODERATE</div></div>` : ''}
-        ${p2.length && pf === 'ALL' ? `<div class="stat" style="background:#d8f3dc"><div class="stat-num" style="color:#2d6a4f">${p2.length}</div><div class="stat-lbl" style="color:#2d6a4f">🟢 P2 BALANCED</div></div>` : ''}
+        ${p2.length ? `<div class="stat" style="background:#d8f3dc"><div class="stat-num" style="color:#2d6a4f">${p2.length}</div><div class="stat-lbl" style="color:#2d6a4f">🟢 P2 BALANCED</div></div>` : ''}
       </div>
       ${buildSection(p0, 'P0')}
       ${buildSection(p1, 'P1')}
-      ${pf === 'ALL' ? buildSection(p2, 'P2') : ''}
+      ${buildSection(p2, 'P2')}
     </body></html>`;
 
     const win = window.open('', '_blank');
