@@ -1632,6 +1632,17 @@ select.form-input { cursor: pointer; }
 
       <button class="btn btn-primary btn-full" onclick="saveGroupForm()">💾 Save Group</button>
 
+      <div id="gfFormBox" style="display:none;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--r);padding:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">📝 Google Form token</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Paste this token into this group's Form script. Anyone with it can add entries to this group's inbox. Entries stay pending until a member accepts them.</div>
+        <div id="gfFormToken" style="display:none;font-size:11px;padding:8px 10px;background:var(--bg);border-radius:8px;font-family:var(--mono);word-break:break-all;margin-bottom:8px;user-select:text;-webkit-user-select:text"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="showFormToken(false)">🔑 Show / create token</button>
+          <button class="btn btn-ghost btn-sm" id="gfFormCopy" onclick="copyFormToken()" style="display:none">📋 Copy</button>
+          <button class="btn btn-danger btn-sm" onclick="showFormToken(true)">♻ Replace</button>
+        </div>
+      </div>
+
       <button id="gfDeleteBtn" style="display:none;background:transparent;border:1.5px solid var(--danger);color:var(--danger);padding:11px;border-radius:var(--r);font-size:14px;font-weight:600;cursor:pointer;width:100%" onclick="deleteGroupFromForm()">🗑️ Delete This Group</button>
     </div>
   </div>
@@ -2703,6 +2714,10 @@ function showGroupForm(id) {
     unlinkBtn.style.display = 'none';
   }
   deleteBtn.style.display = g ? 'block' : 'none';
+  document.getElementById('gfFormBox').style.display = g ? 'block' : 'none';
+  document.getElementById('gfFormToken').style.display = 'none';
+  document.getElementById('gfFormCopy').style.display = 'none';
+  _formTok = '';
   openSheet('groupFormSheet');
   setTimeout(() => document.getElementById('gfName').focus(), 320);
 }
@@ -2808,6 +2823,24 @@ async function _unlinkTG(groupId) {
 }
 
 function deleteGroupFromForm() { deleteGroup(_gfEditId); }
+
+// ── GOOGLE FORM TOKEN (N7a) ──
+let _formTok = '';
+async function showFormToken(regen) {
+  if (!_gfEditId) return;
+  if (regen && !confirm('Replace the token?\n\nThe old one stops working. Paste the new one into the Form script.')) return;
+  try {
+    const r = await pApi('POST', `/api/groups/${encodeURIComponent(_gfEditId)}/form-token`, { adminEmail: S.user?.email, regenerate: !!regen });
+    _formTok = r.token;
+    const el = document.getElementById('gfFormToken');
+    el.textContent = r.token; el.style.display = 'block';
+    document.getElementById('gfFormCopy').style.display = '';
+    toast(regen ? 'New token created' : 'Token ready', 'ok');
+  } catch (e) { toast('Could not get token: ' + e.message, 'err'); }
+}
+function copyFormToken() {
+  navigator.clipboard.writeText(_formTok).then(() => toast('📋 Token copied', 'ok')).catch(() => prompt('Token:', _formTok));
+}
 
 function deleteGroup(id) {
   const g = S.groups.find(g => g.id === id); if (!g) return;
