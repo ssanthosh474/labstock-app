@@ -810,6 +810,11 @@ select.form-input { cursor: pointer; }
     <!-- ══ HOME ══ -->
     <div class="page active" id="pg-home">
       <div class="page-pad">
+        <div id="inboxBanner" onclick="openInbox()" style="display:none;cursor:pointer;background:var(--warn-bg);border:1.5px solid #ffe08a;border-radius:var(--r);padding:12px 14px;margin-bottom:14px;align-items:center;gap:10px">
+          <span style="font-size:20px">📥</span>
+          <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px" id="inboxBannerTitle"></div><div style="font-size:12px;color:var(--text2)" id="inboxBannerSub"></div></div>
+          <span style="color:var(--muted);font-size:20px">›</span>
+        </div>
         <div class="kpi-row">
           <div class="kpi c-accent" onclick="kpiOpenItems()" style="cursor:pointer"><div class="kpi-label">Items</div><div class="kpi-val" id="kpiItems">—</div><div class="kpi-sub">total</div></div>
           <div class="kpi c-danger" onclick="kpiOpenLowStock()" style="cursor:pointer"><div class="kpi-label">Low Stock</div><div class="kpi-val" id="kpiLow">—</div><div class="kpi-sub">reorder</div></div>
@@ -1001,6 +1006,11 @@ select.form-input { cursor: pointer; }
           <div class="list-row" onclick="openSheet('membersSheet')">
             <div class="row-icon info">🧑‍🔬</div>
             <div class="row-body"><div class="row-title">Members</div><div class="row-sub" id="membersSubText">Manage team</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
+          <div class="list-row" onclick="openInbox()">
+            <div class="row-icon info">📥</div>
+            <div class="row-body"><div class="row-title">Form Inbox</div><div class="row-sub" id="inboxRowSub">No pending entries</div></div>
             <span style="color:var(--muted)">›</span>
           </div>
           <div class="list-row" id="activityRow" onclick="openSheet('activitySheet')">
@@ -1849,6 +1859,19 @@ select.form-input { cursor: pointer; }
   </div>
 </div>
 
+<!-- Form inbox (N7b) -->
+<div class="sheet-overlay" id="inboxSheet" onclick="sheetBgClose(event,'inboxSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="inboxTitle">Form entries</div>
+      <button class="sheet-close" onclick="closeSheet('inboxSheet')">✕</button>
+    </div>
+    <div id="inboxBody" style="padding:16px;display:flex;flex-direction:column;gap:10px;max-height:62vh;overflow-y:auto"></div>
+    <div class="sheet-footer"><button class="btn btn-ghost btn-full" onclick="closeSheet('inboxSheet')">Later</button></div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -2684,6 +2707,7 @@ function renderGroupSheet() {
 
 function setGroup(id) {
   S.activeGroupId = id; save();
+  _inbox = []; _inboxPrompted = false; updateInboxBadge();
   updateTopbar(); renderHome(); updateAlertBadge();
   const g = S.groups.find(g => g.id === id);
   document.getElementById('groupSubText').textContent = g?.name || '';
@@ -2823,6 +2847,112 @@ async function _unlinkTG(groupId) {
 }
 
 function deleteGroupFromForm() { deleteGroup(_gfEditId); }
+
+// ── FORM INBOX (N7b) ──
+// Entries sent by the Google Form wait here until a member accepts (log-only purposes) or dismisses them.
+let _inbox = [], _inboxPrompted = false, _inboxBusy = false;
+const inboxMine = e => { const me = (S.user?.name || '').trim().toLowerCase(); return !!me && (e.pocName || '').trim().toLowerCase() === me; };
+
+async function syncInbox() {
+  const g = S.activeGroupId; if (!g || S.user?.isDemo) return false;
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/form-inbox?groupId=${encodeURIComponent(g)}`);
+    if (!r.ok) return false;
+    const rows = await r.json();
+    if (S.activeGroupId !== g || JSON.stringify(rows) === JSON.stringify(_inbox)) return false;
+    _inbox = rows; return true;
+  } catch (e) { return false; }
+}
+
+function updateInboxBadge() {
+  const n = _inbox.length, mine = _inbox.filter(inboxMine).length;
+  const b = document.getElementById('inboxBanner');
+  if (b) {
+    b.style.display = n ? 'flex' : 'none';
+    if (n) {
+      document.getElementById('inboxBannerTitle').textContent = `${n} form ${n === 1 ? 'entry needs' : 'entries need'} completing`;
+      document.getElementById('inboxBannerSub').textContent = mine ? `${mine} assigned to you · tap to review` : 'Tap to review';
+    }
+  }
+  const tab = document.getElementById('tab-more');
+  if (tab) {
+    const ex = tab.querySelector('.nav-badge'); if (ex) ex.remove();
+    if (n) { const s = document.createElement('span'); s.className = 'nav-badge'; s.textContent = n > 9 ? '9+' : n; tab.appendChild(s); }
+  }
+  const sub = document.getElementById('inboxRowSub'); if (sub) sub.textContent = n ? `${n} pending` : 'No pending entries';
+}
+
+// Once per session, and only when nothing else is open
+function maybePromptInbox() {
+  if (_inboxPrompted || !_inbox.length || !S.user) return;
+  if (document.querySelector('.sheet-overlay.open') || document.getElementById('productPage')?.classList.contains('open')) return;
+  _inboxPrompted = true;
+  openInbox();
+}
+
+function openInbox() { renderInbox(); openSheet('inboxSheet'); }
+
+function inboxCardHTML(e) {
+  const mine = inboxMine(e), labInv = e.purpose === 'Lab inventory';
+  const meta = [`<span class="badge bg-green">${_esc(e.purpose)}</span>`, 'Inward ' + fmtDateShort(e.inwardDate)];
+  if (e.pocName) meta.push('POC: ' + _esc(e.pocName));
+  return `<div style="background:var(--surface2);border:1.5px solid ${mine ? 'var(--accent-l)' : 'var(--border)'};border-radius:var(--r);padding:14px">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+      <div style="min-width:0">
+        <div style="font-weight:700;font-size:14px">${_esc(e.material)} <span style="font-family:var(--mono);font-size:12px;color:var(--muted)">× ${e.qty}</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">External: ${_esc(e.sender)}, unverified</div>
+      </div>
+      ${mine ? '<span class="badge bg-green" style="flex-shrink:0">Assigned to you</span>' : ''}
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.7">${meta.join(' · ')}${e.requestId ? '<br>Request ID: ' + _esc(e.requestId) : ''}${e.keepUntil ? '<br>Keep until ' + fmtDateShort(e.keepUntil) : ''}${e.remarks ? '<br>' + _esc(e.remarks) : ''}</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      ${labInv
+        ? '<div style="flex:1;font-size:11px;color:var(--muted);align-self:center">Stock entries are completed in the next update</div>'
+        : `<button class="btn btn-primary btn-sm" style="flex:1" onclick="acceptInbox('${e.id}')">✅ Accept</button>`}
+      <button class="btn btn-ghost btn-sm" onclick="dismissInbox('${e.id}')">Dismiss</button>
+    </div>
+  </div>`;
+}
+
+function renderInbox() {
+  const list = [..._inbox].sort((a, b) => (inboxMine(b) - inboxMine(a)) || String(a.submittedAt).localeCompare(String(b.submittedAt)));
+  document.getElementById('inboxTitle').textContent = list.length ? `${list.length} form ${list.length === 1 ? 'entry needs' : 'entries need'} completing` : 'Form entries';
+  document.getElementById('inboxBody').innerHTML = list.length
+    ? list.map(inboxCardHTML).join('')
+    : '<div class="empty"><div class="empty-icon">📥</div><p>No pending form entries.</p></div>';
+}
+
+async function inboxAction(id, kind) {
+  if (_inboxBusy) return null;
+  _inboxBusy = true;
+  try {
+    return await pApi('POST', `/api/form-inbox/${encodeURIComponent(id)}/${kind}`, { groupId: gid(), person: S.user?.name || S.user?.email || '' });
+  } catch (err) {
+    toast(err.message, 'err');
+    if (/already handled/i.test(err.message)) syncInbox().then(() => { updateInboxBadge(); renderInbox(); });
+    return null;
+  } finally { _inboxBusy = false; }
+}
+
+async function acceptInbox(id) {
+  const e = _inbox.find(x => x.id === id); if (!e) return;
+  const r = await inboxAction(id, 'accept'); if (!r) return;
+  _inbox = _inbox.filter(x => x.id !== id);
+  if (r.tx) S.transactions.unshift({ ...r.tx, id: 'srv_' + r.tx.id, _serverId: String(r.tx.id), groupId: gid(), source: 'LOG_ONLY' });
+  logAct(`Form entry recorded: ${e.material} × ${e.qty} from ${e.sender}`); save();
+  updateInboxBadge(); renderInbox(); renderHome();
+  toast('✅ Recorded in the Log (no stock change)', 'ok');
+}
+
+async function dismissInbox(id) {
+  const e = _inbox.find(x => x.id === id); if (!e) return;
+  if (!confirm(`Dismiss "${e.material}" × ${e.qty} from ${e.sender}?\n\nNothing is recorded in stock or the Log.`)) return;
+  const r = await inboxAction(id, 'dismiss'); if (!r) return;
+  _inbox = _inbox.filter(x => x.id !== id);
+  logAct(`Form entry dismissed: ${e.material} × ${e.qty} from ${e.sender}`); save();
+  updateInboxBadge(); renderInbox();
+  toast('Entry dismissed', 'wrn');
+}
 
 // ── GOOGLE FORM TOKEN (N7a) ──
 let _formTok = '';
@@ -5639,6 +5769,8 @@ async function syncFromServer(force = false) {
     }
     if (await syncProducts() && curTab === 'inv' && stockMode === 'products') renderStockView();
     if (await syncPhotoIndex() && curTab === 'inv') renderStockView();
+    if (await syncInbox()) { updateInboxBadge(); if (document.getElementById('inboxSheet').classList.contains('open')) renderInbox(); }
+    maybePromptInbox();
   } catch(e) {
     console.log('Sync failed:', e.message);
   }
