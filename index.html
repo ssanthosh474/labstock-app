@@ -1872,6 +1872,38 @@ select.form-input { cursor: pointer; }
   </div>
 </div>
 
+<!-- Form inbox: add a Lab inventory entry to stock (N7c-2) -->
+<div class="sheet-overlay" id="isSheet" onclick="sheetBgClose(event,'isSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Add to stock</div>
+      <button class="sheet-close" onclick="closeSheet('isSheet')">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="info-box" id="isInfo" style="font-size:12px"></div>
+      <div id="isMatches" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div id="isNewBox" style="display:none;flex-direction:column;gap:14px">
+        <div class="form-group"><label class="form-label">Item Name *</label><input class="form-input" id="isName" autocomplete="off"></div>
+        <div class="form-group"><label class="form-label">Category *</label><select class="form-input" id="isCat" onchange="isTaxChange('category', this)"></select></div>
+        <div class="form-group"><label class="form-label">Unit *</label><select class="form-input" id="isUnit" onchange="isTaxChange('unit', this)"></select></div>
+        <div class="form-group"><label class="form-label">Location</label><input class="form-input" id="isLoc" placeholder="e.g. Shelf A3, Cabinet 2, Fridge"></div>
+        <div class="form-group"><label class="form-label">Unique Code</label><input class="form-input" id="isCode" placeholder="Auto if blank"></div>
+        <div class="form-group"><label class="form-label">Min Stock (Alert Level)</label><input class="form-input" type="number" id="isMin" min="0" inputmode="numeric"></div>
+        <div class="form-group">
+          <label class="form-label">Expiry Date (optional)</label>
+          <input class="form-input" type="date" id="isExpiry">
+          <div style="font-size:11px;color:var(--muted)">Pre-filled from "Duration to keep". Clear it if the item has no expiry.</div>
+        </div>
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" id="isSaveNew" onclick="submitISNew()" style="display:none">✅ Add new item</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('isSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -2906,9 +2938,7 @@ function inboxCardHTML(e) {
     </div>
     <div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.7">${meta.join(' · ')}${e.requestId ? '<br>Request ID: ' + _esc(e.requestId) : ''}${e.keepUntil ? '<br>Keep until ' + fmtDateShort(e.keepUntil) : ''}${e.remarks ? '<br>' + _esc(e.remarks) : ''}</div>
     <div style="display:flex;gap:8px;margin-top:10px">
-      ${labInv
-        ? '<div style="flex:1;font-size:11px;color:var(--muted);align-self:center">Stock entries are completed in the next update</div>'
-        : `<button class="btn btn-primary btn-sm" style="flex:1" onclick="acceptInbox('${e.id}')">✅ Accept</button>`}
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="acceptInbox('${e.id}')">${labInv ? '📦 Add to stock' : '✅ Accept'}</button>
       <button class="btn btn-ghost btn-sm" onclick="dismissInbox('${e.id}')">Dismiss</button>
     </div>
   </div>`;
@@ -2922,11 +2952,11 @@ function renderInbox() {
     : '<div class="empty"><div class="empty-icon">📥</div><p>No pending form entries.</p></div>';
 }
 
-async function inboxAction(id, kind) {
+async function inboxAction(id, kind, extra) {
   if (_inboxBusy) return null;
   _inboxBusy = true;
   try {
-    return await pApi('POST', `/api/form-inbox/${encodeURIComponent(id)}/${kind}`, { groupId: gid(), person: S.user?.name || S.user?.email || '' });
+    return await pApi('POST', `/api/form-inbox/${encodeURIComponent(id)}/${kind}`, { groupId: gid(), person: S.user?.name || S.user?.email || '', ...(extra || {}) });
   } catch (err) {
     toast(err.message, 'err');
     if (/already handled/i.test(err.message)) syncInbox().then(() => { updateInboxBadge(); renderInbox(); });
@@ -2936,6 +2966,7 @@ async function inboxAction(id, kind) {
 
 async function acceptInbox(id) {
   const e = _inbox.find(x => x.id === id); if (!e) return;
+  if (e.purpose === 'Lab inventory') { openInboxStock(id); return; }
   const r = await inboxAction(id, 'accept'); if (!r) return;
   _inbox = _inbox.filter(x => x.id !== id);
   if (r.tx) S.transactions.unshift({ ...r.tx, id: 'srv_' + r.tx.id, _serverId: String(r.tx.id), groupId: gid(), source: 'LOG_ONLY' });
@@ -2952,6 +2983,102 @@ async function dismissInbox(id) {
   logAct(`Form entry dismissed: ${e.material} × ${e.qty} from ${e.sender}`); save();
   updateInboxBadge(); renderInbox();
   toast('Entry dismissed', 'wrn');
+}
+
+// ── FORM INBOX: Lab inventory entries add stock (N7c-2) ──
+let _isEntry = null;
+function inboxMatches(name) {
+  const q = String(name || '').trim().toLowerCase(); if (!q) return [];
+  const toks = q.split(/[^a-z0-9]+/).filter(t => t.length > 1);
+  return getItems().map(i => {
+    const n = i.name.toLowerCase(); let s = 0;
+    if (n === q) s = 100;
+    else if (n.includes(q) || q.includes(n)) s = 80;
+    else if (toks.length) { const nt = n.split(/[^a-z0-9]+/); s = Math.round(60 * toks.filter(t => nt.includes(t)).length / toks.length); }
+    return { i, s };
+  }).filter(x => x.s >= 40).sort((a, b) => b.s - a.s).slice(0, 4).map(x => x.i);
+}
+function fillIsTax() {
+  [['isCat', 'category'], ['isUnit', 'unit']].forEach(([id, kind]) => {
+    const sel = document.getElementById(id); if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">Select ${kind}…</option>` + getTaxonomyValues(kind).map(v => `<option value="${_esc(v)}">${_esc(v)}</option>`).join('') + `<option value="__new__">+ Add new ${kind}…</option>`;
+    if (cur && cur !== '__new__') sel.value = cur;
+  });
+}
+function isTaxChange(kind, sel) {
+  if (sel.value !== '__new__') return;
+  const val = prompt(`New ${kind} name:`);
+  if (!val || !val.trim()) { sel.value = ''; return; }
+  const clean = val.trim();
+  const hit = getTaxonomyValues(kind).find(v => v.toLowerCase() === clean.toLowerCase());
+  if (!hit) {
+    const g = S.groups.find(x => x.id === gid());
+    if (g) { const key = TAX_CUSTOM_KEY[kind]; (g[key] || (g[key] = [])).push(clean); save(); }
+  }
+  fillIsTax(); sel.value = hit || clean;
+}
+function openInboxStock(id) {
+  const e = _inbox.find(x => x.id === id); if (!e) return;
+  _isEntry = e;
+  document.getElementById('isInfo').innerHTML = `<strong>${_esc(e.material)}</strong> × ${e.qty}<br>From ${_esc(e.sender)} · inward ${fmtDateShort(e.inwardDate)}${e.pocName ? '<br>POC: ' + _esc(e.pocName) : ''}`;
+  const ms = inboxMatches(e.material);
+  document.getElementById('isMatches').innerHTML = ms.length
+    ? '<div class="form-label">Add to an existing item</div>' +
+      ms.map(i => `<button class="btn btn-ghost btn-full" style="justify-content:space-between;gap:10px" onclick="isPickExisting('${i.id}')"><span style="text-align:left">${_esc(i.name)}</span><span style="font-family:var(--mono);font-size:12px;color:var(--muted);flex-shrink:0">${i.stock} ${_esc(i.unit)}</span></button>`).join('') +
+      '<button class="btn btn-ghost btn-full" id="isNewBtn" onclick="isShowNew()">🆕 Create a new item instead</button>'
+    : '';
+  fillIsTax();
+  document.getElementById('isName').value = e.material;
+  ['isCat', 'isUnit'].forEach(x => { document.getElementById(x).value = ''; });
+  ['isLoc', 'isCode'].forEach(x => { document.getElementById(x).value = ''; });
+  document.getElementById('isMin').value = S.settings.threshold;
+  document.getElementById('isExpiry').value = e.keepUntil || '';
+  const showNew = !ms.length;
+  document.getElementById('isNewBox').style.display = showNew ? 'flex' : 'none';
+  document.getElementById('isSaveNew').style.display = showNew ? '' : 'none';
+  openSheet('isSheet');
+}
+function isShowNew() {
+  document.getElementById('isNewBox').style.display = 'flex';
+  document.getElementById('isSaveNew').style.display = '';
+  const b = document.getElementById('isNewBtn'); if (b) b.style.display = 'none';
+}
+async function isPickExisting(itemId) {
+  const it = S.inventory.find(i => i.id === itemId), e = _isEntry; if (!it || !e) return;
+  if (!confirm(`Add ${e.qty} ${it.unit} to "${it.name}"?\n\nStock: ${it.stock} → ${it.stock + e.qty}`)) return;
+  finishIS(await inboxAction(e.id, 'accept', { mode: 'existing', itemName: it.name }));
+}
+async function submitISNew() {
+  const e = _isEntry; if (!e) return;
+  const name = document.getElementById('isName').value.trim();
+  const cat = document.getElementById('isCat').value.trim(), unit = document.getElementById('isUnit').value.trim();
+  if (!name || !cat || !unit || cat === '__new__' || unit === '__new__') { toast('Fill name, category and unit', 'err'); return; }
+  if (getItems().some(i => i.name.toLowerCase() === name.toLowerCase())) { toast('An item with this name exists — add to it instead', 'err'); return; }
+  let code = document.getElementById('isCode').value.trim() || generateItemCode(cat);
+  if (getItems().some(i => i.code === code)) code = code + '_' + Date.now().toString().slice(-3);
+  const mn = parseFloat(document.getElementById('isMin').value);
+  const item = { name, code, category: cat, unit, location: document.getElementById('isLoc').value.trim(), minStock: mn >= 0 ? mn : S.settings.threshold, expiry: document.getElementById('isExpiry').value || '' };
+  if (!confirm(`Add new item?\n\n${name}\nCategory: ${cat}\nStock: ${e.qty} ${unit}`)) return;
+  const btn = document.getElementById('isSaveNew'); btn.disabled = true; btn.textContent = 'Saving…';
+  finishIS(await inboxAction(e.id, 'accept', { mode: 'new', item }));
+  btn.disabled = false; btn.textContent = '✅ Add new item';
+}
+function finishIS(r) {
+  const e = _isEntry; if (!r || !e) return;
+  _isEntry = null;
+  _inbox = _inbox.filter(x => x.id !== e.id);
+  const it = r.item;
+  if (it) {
+    const ex = S.inventory.find(i => i.groupId === gid() && (i.name || '').toLowerCase() === it.name.toLowerCase());
+    if (ex) ex.stock = it.stock;
+    else S.inventory.push({ id: 'srv_' + it.id, groupId: gid(), name: it.name, code: it.code || '', category: it.category || 'Uncategorized', location: it.location || '', stock: it.stock, unit: it.unit || 'units', minStock: it.minStock ?? 10, expiry: it.expiry || '' });
+  }
+  if (r.tx) S.transactions.unshift({ ...r.tx, id: 'srv_' + r.tx.id, _serverId: String(r.tx.id), groupId: gid(), source: 'APP' });
+  logAct(`Form entry added to stock: ${e.material} × ${e.qty} from ${e.sender}`); save();
+  closeSheet('isSheet');
+  updateInboxBadge(); renderInbox(); refreshCurrentView(); updateAlertBadge();
+  toast(`✅ ${e.qty} added to ${it ? it.name : e.material}${it ? ' → ' + it.stock + ' ' + (it.unit || '') : ''}`, 'ok');
 }
 
 // ── GOOGLE FORM TOKEN (N7a) ──
