@@ -2851,7 +2851,7 @@ function deleteGroupFromForm() { deleteGroup(_gfEditId); }
 // ── FORM INBOX (N7b) ──
 // Entries sent by the Google Form wait here until a member accepts (log-only purposes) or dismisses them.
 let _inbox = [], _inboxPrompted = false, _inboxBusy = false;
-const inboxMine = e => { const me = (S.user?.name || '').trim().toLowerCase(); return !!me && (e.pocName || '').trim().toLowerCase() === me; };
+const inboxMine = e => { if (e.direction === 'OUT') return false; const me = (S.user?.name || '').trim().toLowerCase(); return !!me && (e.pocName || '').trim().toLowerCase() === me; };
 
 async function syncInbox() {
   const g = S.activeGroupId; if (!g || S.user?.isDemo) return false;
@@ -2893,14 +2893,14 @@ function maybePromptInbox() {
 function openInbox() { renderInbox(); openSheet('inboxSheet'); }
 
 function inboxCardHTML(e) {
-  const mine = inboxMine(e), labInv = e.purpose === 'Lab inventory';
-  const meta = [`<span class="badge bg-green">${_esc(e.purpose)}</span>`, 'Inward ' + fmtDateShort(e.inwardDate)];
-  if (e.pocName) meta.push('POC: ' + _esc(e.pocName));
+  const mine = inboxMine(e), labInv = e.purpose === 'Lab inventory', out = e.direction === 'OUT';
+  const meta = [`<span class="badge bg-green">${_esc(e.purpose)}</span>`, (out ? 'Outward ' : 'Inward ') + fmtDateShort(e.inwardDate)];
+  if (e.pocName) meta.push((out ? 'Receiver: ' : 'POC: ') + _esc(e.pocName));
   return `<div style="background:var(--surface2);border:1.5px solid ${mine ? 'var(--accent-l)' : 'var(--border)'};border-radius:var(--r);padding:14px">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
       <div style="min-width:0">
-        <div style="font-weight:700;font-size:14px">${_esc(e.material)} <span style="font-family:var(--mono);font-size:12px;color:var(--muted)">× ${e.qty}</span></div>
-        <div style="font-size:12px;color:var(--muted);margin-top:2px">External: ${_esc(e.sender)}, unverified</div>
+        <div style="font-weight:700;font-size:14px"><span style="color:${out ? 'var(--danger)' : 'var(--accent)'}">${out ? '▼' : '▲'}</span> ${_esc(e.material)} <span style="font-family:var(--mono);font-size:12px;color:var(--muted)">× ${e.qty}</span></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${out ? 'Sent by' : 'External'}: ${_esc(e.sender)}, unverified</div>
       </div>
       ${mine ? '<span class="badge bg-green" style="flex-shrink:0">Assigned to you</span>' : ''}
     </div>
