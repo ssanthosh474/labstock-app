@@ -815,6 +815,11 @@ select.form-input { cursor: pointer; }
           <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px" id="inboxBannerTitle"></div><div style="font-size:12px;color:var(--text2)" id="inboxBannerSub"></div></div>
           <span style="color:var(--muted);font-size:20px">›</span>
         </div>
+        <div id="keepBanner" onclick="openKeep()" style="display:none;cursor:pointer;background:var(--warn-bg);border:1.5px solid #ffe08a;border-radius:var(--r);padding:12px 14px;margin-bottom:14px;align-items:center;gap:10px">
+          <span style="font-size:20px">⏳</span>
+          <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px" id="keepBannerTitle"></div><div style="font-size:12px;color:var(--text2)" id="keepBannerSub"></div></div>
+          <span style="color:var(--muted);font-size:20px">›</span>
+        </div>
         <div class="kpi-row">
           <div class="kpi c-accent" onclick="kpiOpenItems()" style="cursor:pointer"><div class="kpi-label">Items</div><div class="kpi-val" id="kpiItems">—</div><div class="kpi-sub">total</div></div>
           <div class="kpi c-danger" onclick="kpiOpenLowStock()" style="cursor:pointer"><div class="kpi-label">Low Stock</div><div class="kpi-val" id="kpiLow">—</div><div class="kpi-sub">reorder</div></div>
@@ -1011,6 +1016,11 @@ select.form-input { cursor: pointer; }
           <div class="list-row" onclick="openInbox()">
             <div class="row-icon info">📥</div>
             <div class="row-body"><div class="row-title">Form Inbox</div><div class="row-sub" id="inboxRowSub">No pending entries</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
+          <div class="list-row" onclick="openKeep()">
+            <div class="row-icon info">⏳</div>
+            <div class="row-body"><div class="row-title">Open items</div><div class="row-sub" id="keepRowSub">Nothing to return</div></div>
             <span style="color:var(--muted)">›</span>
           </div>
           <div class="list-row" id="activityRow" onclick="openSheet('activitySheet')">
@@ -1869,6 +1879,19 @@ select.form-input { cursor: pointer; }
     </div>
     <div id="inboxBody" style="padding:16px;display:flex;flex-direction:column;gap:10px;max-height:62vh;overflow-y:auto"></div>
     <div class="sheet-footer"><button class="btn btn-ghost btn-full" onclick="closeSheet('inboxSheet')">Later</button></div>
+  </div>
+</div>
+
+<!-- Open keep-until items (N7d-1) -->
+<div class="sheet-overlay" id="keepSheet" onclick="sheetBgClose(event,'keepSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="keepTitle">Open items</div>
+      <button class="sheet-close" onclick="closeSheet('keepSheet')">✕</button>
+    </div>
+    <div id="keepBody" style="padding:16px;display:flex;flex-direction:column;gap:10px;max-height:62vh;overflow-y:auto"></div>
+    <div class="sheet-footer"><button class="btn btn-ghost btn-full" onclick="closeSheet('keepSheet')">Close</button></div>
   </div>
 </div>
 
@@ -2739,7 +2762,7 @@ function renderGroupSheet() {
 
 function setGroup(id) {
   S.activeGroupId = id; save();
-  _inbox = []; _inboxPrompted = false; updateInboxBadge();
+  _inbox = []; _inboxPrompted = false; updateInboxBadge(); _keepOpen = []; updateKeepBanner();
   updateTopbar(); renderHome(); updateAlertBadge();
   const g = S.groups.find(g => g.id === id);
   document.getElementById('groupSubText').textContent = g?.name || '';
@@ -2983,6 +3006,98 @@ async function dismissInbox(id) {
   logAct(`Form entry dismissed: ${e.material} × ${e.qty} from ${e.sender}`); save();
   updateInboxBadge(); renderInbox();
   toast('Entry dismissed', 'wrn');
+}
+
+// ── OPEN KEEP-UNTIL ITEMS (N7d-1) ──
+// Form entries with a keep-until date stay open until a member marks them Returned or Disposed.
+let _keepOpen = [], _keepBusy = false;
+const KEEP_SOON_DAYS = 7;
+const keepDays = e => daysUntil(e.keepUntil);
+
+async function syncKeepOpen() {
+  const g = S.activeGroupId; if (!g || S.user?.isDemo) return false;
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/keep-open?groupId=${encodeURIComponent(g)}`);
+    if (!r.ok) return false;
+    const rows = await r.json();
+    if (S.activeGroupId !== g || JSON.stringify(rows) === JSON.stringify(_keepOpen)) return false;
+    _keepOpen = rows; return true;
+  } catch (e) { return false; }
+}
+
+function keepCounts() {
+  let over = 0, soon = 0;
+  _keepOpen.forEach(e => { const d = keepDays(e); if (d === null) return; if (d < 0) over++; else if (d <= KEEP_SOON_DAYS) soon++; });
+  return { over, soon };
+}
+
+function updateKeepBanner() {
+  const { over, soon } = keepCounts();
+  const b = document.getElementById('keepBanner');
+  if (b) {
+    b.style.display = (over || soon) ? 'flex' : 'none';
+    b.style.background = over ? 'var(--danger-bg)' : 'var(--warn-bg)';
+    b.style.borderColor = over ? '#ffc9cb' : '#ffe08a';
+    document.getElementById('keepBannerTitle').textContent = over ? `${over} item${over === 1 ? ' is' : 's are'} overdue` : `${soon} due within ${KEEP_SOON_DAYS} days`;
+    document.getElementById('keepBannerSub').textContent = over && soon ? `${soon} more due within ${KEEP_SOON_DAYS} days · tap to review` : 'Tap to review';
+  }
+  const sub = document.getElementById('keepRowSub');
+  if (sub) sub.textContent = _keepOpen.length ? `${_keepOpen.length} open${over ? ' · ' + over + ' overdue' : ''}` : 'Nothing to return';
+}
+
+function openKeep() {
+  renderKeep(); openSheet('keepSheet');
+  syncKeepOpen().then(ch => { if (ch) { updateKeepBanner(); renderKeep(); } });
+}
+
+function keepCardHTML(e) {
+  const d = keepDays(e);
+  let tag, col;
+  if (d === null) { tag = 'Keep until ' + fmtDateShort(e.keepUntil); col = 'var(--muted)'; }
+  else if (d < 0) { tag = `Overdue ${-d} d · was due ${fmtDateShort(e.keepUntil)}`; col = 'var(--danger)'; }
+  else if (d === 0) { tag = 'Due today'; col = 'var(--warn)'; }
+  else if (d <= KEEP_SOON_DAYS) { tag = `Due in ${d} d · ${fmtDateShort(e.keepUntil)}`; col = 'var(--warn)'; }
+  else { tag = `Due ${fmtDateShort(e.keepUntil)} (in ${d} d)`; col = 'var(--muted)'; }
+  const meta = [];
+  if (e.purpose) meta.push(`<span class="badge bg-green">${_esc(e.purpose)}</span>`);
+  if (e.labMember) meta.push('POC: ' + _esc(e.labMember));
+  return `<div style="background:var(--surface2);border:1.5px solid ${d !== null && d < 0 ? '#ffc9cb' : 'var(--border)'};border-radius:var(--r);padding:14px">
+    <div style="font-weight:700;font-size:14px">${_esc(e.itemName)} <span style="font-family:var(--mono);font-size:12px;color:var(--muted)">× ${e.qty}${e.unit && e.unit !== 'units' ? ' ' + _esc(e.unit) : ''}</span></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:2px">From: ${_esc(e.person)} · inward ${fmtDateShort(e.date)}</div>
+    <div style="font-size:13px;font-weight:700;color:${col};margin-top:8px">⏳ ${tag}</div>
+    <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.7">${meta.join(' · ')}${e.requestId ? '<br>Request ID: ' + _esc(e.requestId) : ''}${e.notes ? '<br>' + _esc(e.notes) : ''}</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="closeKeep('${e.id}','RETURNED')">↩ Returned</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="closeKeep('${e.id}','DISPOSED')">🗑 Disposed</button>
+    </div>
+  </div>`;
+}
+
+function renderKeep() {
+  const { over } = keepCounts();
+  document.getElementById('keepTitle').textContent = _keepOpen.length ? `${_keepOpen.length} open${over ? ' · ' + over + ' overdue' : ''}` : 'Open items';
+  document.getElementById('keepBody').innerHTML = _keepOpen.length
+    ? _keepOpen.map(keepCardHTML).join('')
+    : '<div class="empty"><div class="empty-icon">⏳</div><p>Nothing to return or dispose.</p></div>';
+}
+
+async function closeKeep(id, how) {
+  const e = _keepOpen.find(x => x.id === id); if (!e || _keepBusy) return;
+  const word = how === 'RETURNED' ? 'Returned' : 'Disposed';
+  if (!confirm(`Mark "${e.itemName}" × ${e.qty} as ${word}?\n\nIt leaves this list and cannot be reopened from the app.`)) return;
+  _keepBusy = true;
+  try {
+    const r = await pApi('POST', `/api/transactions/${encodeURIComponent(id)}/close`, { groupId: gid(), person: S.user?.name || S.user?.email || '', how });
+    _keepOpen = _keepOpen.filter(x => x.id !== id);
+    const t = S.transactions.find(x => String(x._serverId) === id);
+    if (t) t.details = { ...(t.details || {}), closed: r.closed };
+    logAct(`Marked ${word.toLowerCase()}: ${e.itemName} × ${e.qty} from ${e.person}`); save();
+    updateKeepBanner(); renderKeep();
+    toast(`✅ Marked ${word.toLowerCase()}`, 'ok');
+  } catch (err) {
+    toast(err.message, 'err');
+    if (/already closed/i.test(err.message)) syncKeepOpen().then(() => { updateKeepBanner(); renderKeep(); });
+  } finally { _keepBusy = false; }
 }
 
 // ── FORM INBOX: Lab inventory entries add stock (N7c-2) ──
@@ -5897,6 +6012,7 @@ async function syncFromServer(force = false) {
     if (await syncProducts() && curTab === 'inv' && stockMode === 'products') renderStockView();
     if (await syncPhotoIndex() && curTab === 'inv') renderStockView();
     if (await syncInbox()) { updateInboxBadge(); if (document.getElementById('inboxSheet').classList.contains('open')) renderInbox(); }
+    if (await syncKeepOpen()) { updateKeepBanner(); if (document.getElementById('keepSheet').classList.contains('open')) renderKeep(); }
     maybePromptInbox();
   } catch(e) {
     console.log('Sync failed:', e.message);
