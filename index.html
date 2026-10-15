@@ -1023,6 +1023,11 @@ select.form-input { cursor: pointer; }
             <div class="row-body"><div class="row-title">Open items</div><div class="row-sub" id="keepRowSub">Nothing to return</div></div>
             <span style="color:var(--muted)">›</span>
           </div>
+          <div class="list-row" id="purposeRow" onclick="openPurposeEditor()">
+            <div class="row-icon info">🏷️</div>
+            <div class="row-body"><div class="row-title">Purposes</div><div class="row-sub">Edit the Log and Form purpose list</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
           <div class="list-row" id="activityRow" onclick="openSheet('activitySheet')">
             <div class="row-icon info">📋</div>
             <div class="row-body"><div class="row-title">Activity Log</div><div class="row-sub">Admin only</div></div>
@@ -1887,6 +1892,25 @@ select.form-input { cursor: pointer; }
   </div>
 </div>
 
+<!-- Purpose list editor (N7d-3) -->
+<div class="sheet-overlay" id="purposeSheet" onclick="sheetBgClose(event,'purposeSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Purposes</div>
+      <button class="sheet-close" onclick="closeSheet('purposeSheet')">✕</button>
+    </div>
+    <div style="padding:16px">
+      <div class="info-box" style="font-size:12px;margin-bottom:12px">Used in Log only entries, the Log filter and the Google Form. The Form updates within an hour. Add or delete only; "Field RCA" and "Others" stay.</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <input class="form-input" id="purposeNew" placeholder="Add new purpose..." maxlength="80" autocomplete="off">
+        <button class="btn btn-primary btn-sm" onclick="addPurpose()" style="flex-shrink:0">+ Add</button>
+      </div>
+      <div id="purposeList" style="display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Open keep-until items (N7d-1) -->
 <div class="sheet-overlay" id="keepSheet" onclick="sheetBgClose(event,'keepSheet')">
   <div class="sheet">
@@ -2603,6 +2627,7 @@ function updateTopbar() {
   el.textContent = role; el.className = `badge ${role === 'admin' ? 'bg-green' : 'bg-gray'}`;
   // Hide admin-only items for members
   document.getElementById('activityRow').style.display = role === 'admin' ? '' : 'none';
+  document.getElementById('purposeRow').style.display = role === 'admin' ? '' : 'none';
   document.getElementById('btnExport').style.display = role === 'admin' ? '' : 'none';
   document.getElementById('btnLogBulk').style.display = role === 'admin' ? '' : 'none';
 }
@@ -3012,6 +3037,53 @@ async function dismissInbox(id) {
   logAct(`Form entry dismissed: ${e.material} × ${e.qty} from ${e.sender}`); save();
   updateInboxBadge(); renderInbox();
   toast('Entry dismissed', 'wrn');
+}
+
+// ── PURPOSE LIST EDITOR (N7d-3) ──
+// Add / delete only. Field RCA and Others cannot be deleted; "Lab inventory" is fixed and not in this list.
+const PURPOSE_FIXED = ['field rca', 'others'];
+let _purBusy = false;
+function openPurposeEditor() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  renderPurposeEditor(); openSheet('purposeSheet');
+  loadPurposes().then(renderPurposeEditor);
+}
+function renderPurposeEditor() {
+  const el = document.getElementById('purposeList'); if (!el) return;
+  el.innerHTML = txPurposes().map((p, i) => {
+    const fixed = PURPOSE_FIXED.includes(p.toLowerCase());
+    return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+      <div style="flex:1;min-width:0;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(p)}</div>
+      ${fixed ? '<span class="badge bg-gray">fixed</span>' : `<button onclick="deletePurpose(${i})" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:12px;cursor:pointer;flex-shrink:0">🗑</button>`}
+    </div>`;
+  }).join('') + '<div style="display:flex;align-items:center;gap:8px;border:1px dashed var(--border);border-radius:10px;padding:10px 12px;color:var(--muted);font-size:13px"><div style="flex:1">Lab inventory · changes stock, added by the Form itself</div><span class="badge bg-gray">fixed</span></div>';
+}
+async function savePurposes(next) {
+  if (_purBusy) return false;
+  _purBusy = true;
+  try {
+    const r = await pApi('PUT', `/api/groups/${encodeURIComponent(gid())}/purposes`, { adminEmail: S.user?.email, purposes: next });
+    const g = S.groups.find(x => x.id === gid());
+    if (g) { g.purposes = r.purposes; save(); }
+    renderPurposeEditor(); fillTxPurposes();
+    return true;
+  } catch (e) { toast('Could not save: ' + e.message, 'err'); return false; }
+  finally { _purBusy = false; }
+}
+async function addPurpose() {
+  const inp = document.getElementById('purposeNew');
+  const v = inp.value.trim().replace(/\s+/g, ' ');
+  if (!v) { toast('Enter a purpose', 'err'); return; }
+  if (/^lab inventory/i.test(v)) { toast('"Lab inventory" is fixed and added by the Form itself', 'err'); return; }
+  const cur = txPurposes();
+  if (cur.some(p => p.toLowerCase() === v.toLowerCase())) { toast('Already exists', 'wrn'); return; }
+  if (await savePurposes([...cur, v])) { inp.value = ''; logAct(`Purpose added: ${v}`); save(); toast(`"${v}" added`, 'ok'); }
+}
+async function deletePurpose(i) {
+  const cur = txPurposes(), p = cur[i];
+  if (!p || PURPOSE_FIXED.includes(p.toLowerCase())) return;
+  if (!confirm(`Delete "${p}"?\n\nOld Log entries keep it. The Form drops it within an hour.`)) return;
+  if (await savePurposes(cur.filter((_, k) => k !== i))) { logAct(`Purpose deleted: ${p}`); save(); toast(`"${p}" deleted`, 'wrn'); }
 }
 
 // ── OPEN KEEP-UNTIL ITEMS (N7d-1) ──
