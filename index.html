@@ -1479,6 +1479,11 @@ select.form-input { cursor: pointer; }
         <div id="logCatChips" style="display:flex;gap:6px;flex-wrap:wrap;max-height:150px;overflow-y:auto"></div>
       </div>
       <div class="form-group">
+        <label class="form-label">Purpose</label>
+        <div id="logPurposeChips" style="display:flex;gap:6px;flex-wrap:wrap;max-height:150px;overflow-y:auto"></div>
+        <div style="font-size:11px;color:var(--muted)">Entries with no purpose are hidden while a purpose is selected.</div>
+      </div>
+      <div class="form-group">
         <label class="form-label">Type</label>
         <div style="display:flex;gap:6px" id="logTypeChips">
           <button type="button" class="exp-chip" data-k="" onclick="setLogType('')">All</button>
@@ -4896,6 +4901,7 @@ let _logRange = 'all';      // all | today | yesterday | 7d | month | custom
 let _logFrom = '', _logTo = '';
 let _logCats = [];          // selected categories; empty = all
 let _logCatList = [];
+let _logPurposes = [], _logPurposeList = [];   // selected purposes; empty = all
 let _logTypeFilter = null;  // 'IN' | 'OUT' | null
 let _srvTxFull = false;     // true when the last sync hit the 100-row cap (older rows live only on the server)
 let _srvTxOldest = '';      // local date of the oldest row in that 100-row window
@@ -4935,7 +4941,7 @@ function logRangeBounds() {
   }
 }
 function logRangeActive() { return _logRange !== 'all' && !(_logRange === 'custom' && !_logFrom && !_logTo); }
-function logActiveCount() { return (logRangeActive() ? 1 : 0) + (_logCats.length ? 1 : 0) + (_logTypeFilter ? 1 : 0); }
+function logActiveCount() { return (logRangeActive() ? 1 : 0) + (_logCats.length ? 1 : 0) + (_logPurposes.length ? 1 : 0) + (_logTypeFilter ? 1 : 0); }
 function logFilterLabel(withSearch) {
   const parts = [];
   if (logRangeActive()) {
@@ -4943,6 +4949,7 @@ function logFilterLabel(withSearch) {
     parts.push(_logRange === 'custom' ? `${_logFrom || '…'} → ${_logTo || '…'}` : names[_logRange]);
   }
   if (_logCats.length) parts.push(_logCats.length <= 2 ? _logCats.join(', ') : _logCats.length + ' categories');
+  if (_logPurposes.length) parts.push(_logPurposes.length <= 2 ? _logPurposes.join(', ') : _logPurposes.length + ' purposes');
   if (_logTypeFilter) parts.push(_logTypeFilter === 'IN' ? 'Inward' : 'Outward');
   if (withSearch) {
     const q = (document.getElementById('logSearch')?.value || '').trim();
@@ -4964,12 +4971,13 @@ function getLogTxs() {
     }
     if (_logTypeFilter && t.type !== _logTypeFilter) return false;
     if (_logCats.length && !_logCats.includes(t.category || 'Uncategorized')) return false;
+    if (_logPurposes.length && !_logPurposes.includes((t.details && t.details.purpose) || '')) return false;
     return true;
   });
 }
 
 function clearLogFilters(silent) {
-  _logRange = 'all'; _logFrom = ''; _logTo = ''; _logCats = []; _logTypeFilter = null;
+  _logRange = 'all'; _logFrom = ''; _logTo = ''; _logCats = []; _logPurposes = []; _logTypeFilter = null;
   _selectedTx.clear();
   if (!silent) { renderLogFilterSheet(); renderLog(); }
 }
@@ -4988,6 +4996,11 @@ function toggleLogCat(i) {
   else { const c = _logCatList[i]; _logCats = _logCats.includes(c) ? _logCats.filter(x => x !== c) : [..._logCats, c]; }
   _logFilterChanged();
 }
+function toggleLogPurpose(i) {
+  if (i < 0) _logPurposes = [];
+  else { const p = _logPurposeList[i]; _logPurposes = _logPurposes.includes(p) ? _logPurposes.filter(x => x !== p) : [..._logPurposes, p]; }
+  _logFilterChanged();
+}
 function setLogType(k) { _logTypeFilter = k || null; _logFilterChanged(); }
 
 function renderLogFilterSheet() {
@@ -4997,6 +5010,14 @@ function renderLogFilterSheet() {
   const f = document.getElementById('logFromDate'), to = document.getElementById('logToDate');
   if (f) f.value = _logFrom;
   if (to) to.value = _logTo;
+  const pbox = document.getElementById('logPurposeChips');
+  if (pbox) {
+    _logPurposeList = [...new Set([...txPurposes(), 'Lab inventory',
+      ...S.transactions.filter(x => x.groupId === gid() && !x._act && x.details && x.details.purpose).map(x => x.details.purpose),
+      ..._logPurposes])];
+    pbox.innerHTML = `<button type="button" class="exp-chip${_logPurposes.length ? '' : ' on'}" onclick="toggleLogPurpose(-1)">All</button>` +
+      _logPurposeList.map((p, k) => `<button type="button" class="exp-chip${_logPurposes.includes(p) ? ' on' : ''}" onclick="toggleLogPurpose(${k})">${_esc(p)}</button>`).join('');
+  }
   const box = document.getElementById('logCatChips');
   if (box) {
     _logCatList = [...new Set([
@@ -5046,12 +5067,14 @@ function mergeServerTx(rows) {
 // ask the server (from/to params) and merge, instead of silently showing a partial list.
 async function fetchLogRangeFromServer() {
   const [from, to] = logRangeBounds();
-  if (!from || !_srvTxFull || !_srvTxOldest || from > _srvTxOldest) return;
-  const key = gid() + '|' + from + '|' + to;
+  const needAll = !from && _logPurposes.length > 0;   // purpose filter, no date range: load older history too
+  if (!_srvTxFull || !_srvTxOldest) return;
+  if (!needAll && (!from || from > _srvTxOldest)) return;
+  const key = needAll ? gid() + '|all' : gid() + '|' + from + '|' + to;
   if (key === _logFetchKey) return;
   _logLoading = true; renderLog();
   try {
-    const q = `groupId=${encodeURIComponent(gid())}&from=${from}` + (to ? `&to=${to}` : '') + '&limit=2000';
+    const q = `groupId=${encodeURIComponent(gid())}` + (needAll ? '' : `&from=${from}` + (to ? `&to=${to}` : '')) + '&limit=2000';
     const res = await fetch(`${RAILWAY_URL}/api/transactions?${q}`);
     if (!res.ok) throw new Error('http ' + res.status);
     const rows = await res.json();
