@@ -2956,6 +2956,7 @@ function inboxCardHTML(e) {
   const mine = inboxMine(e), labInv = e.purpose === 'Lab inventory', out = e.direction === 'OUT';
   const meta = [`<span class="badge bg-green">${_esc(e.purpose)}</span>`, (out ? 'Outward ' : 'Inward ') + fmtDateShort(e.inwardDate)];
   if (e.pocName) meta.push((out ? 'Receiver: ' : 'POC: ') + _esc(e.pocName));
+  if (out && e.returnable) meta.push(e.returnable === 'RETURNABLE' ? '<span class="badge bg-warn">Returnable</span>' : '<span class="badge bg-gray">Non-returnable</span>');
   return `<div style="background:var(--surface2);border:1.5px solid ${mine ? 'var(--accent-l)' : 'var(--border)'};border-radius:var(--r);padding:14px">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
       <div style="min-width:0">
@@ -2964,7 +2965,7 @@ function inboxCardHTML(e) {
       </div>
       ${mine ? '<span class="badge bg-green" style="flex-shrink:0">Assigned to you</span>' : ''}
     </div>
-    <div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.7">${meta.join(' · ')}${e.requestId ? '<br>Request ID: ' + _esc(e.requestId) : ''}${e.keepUntil ? '<br>Keep until ' + fmtDateShort(e.keepUntil) : ''}${e.remarks ? '<br>' + _esc(e.remarks) : ''}</div>
+    <div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.7">${meta.join(' · ')}${e.requestId ? '<br>Request ID: ' + _esc(e.requestId) : ''}${e.keepUntil ? '<br>' + (out ? 'Return by ' : 'Keep until ') + fmtDateShort(e.keepUntil) : ''}${e.remarks ? '<br>' + _esc(e.remarks) : ''}</div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn btn-primary btn-sm" style="flex:1" onclick="acceptInbox('${e.id}')">${labInv ? '📦 Add to stock' : '✅ Accept'}</button>
       <button class="btn btn-ghost btn-sm" onclick="dismissInbox('${e.id}')">Dismiss</button>
@@ -3065,15 +3066,17 @@ function keepCardHTML(e) {
   else { tag = `Due ${fmtDateShort(e.keepUntil)} (in ${d} d)`; col = 'var(--muted)'; }
   const meta = [];
   if (e.purpose) meta.push(`<span class="badge bg-green">${_esc(e.purpose)}</span>`);
-  if (e.labMember) meta.push('POC: ' + _esc(e.labMember));
+  const out = e.type === 'OUT';
+  if (out) { if (e.receiver) meta.push('Receiver: ' + _esc(e.receiver)); }
+  else if (e.labMember) meta.push('POC: ' + _esc(e.labMember));
   return `<div style="background:var(--surface2);border:1.5px solid ${d !== null && d < 0 ? '#ffc9cb' : 'var(--border)'};border-radius:var(--r);padding:14px">
     <div style="font-weight:700;font-size:14px">${_esc(e.itemName)} <span style="font-family:var(--mono);font-size:12px;color:var(--muted)">× ${e.qty}${e.unit && e.unit !== 'units' ? ' ' + _esc(e.unit) : ''}</span></div>
-    <div style="font-size:12px;color:var(--muted);margin-top:2px">From: ${_esc(e.person)} · inward ${fmtDateShort(e.date)}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:2px">${out ? 'Sent by' : 'From'}: ${_esc(e.person)} · ${out ? 'outward' : 'inward'} ${fmtDateShort(e.date)}</div>
     <div style="font-size:13px;font-weight:700;color:${col};margin-top:8px">⏳ ${tag}</div>
     <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.7">${meta.join(' · ')}${e.requestId ? '<br>Request ID: ' + _esc(e.requestId) : ''}${e.notes ? '<br>' + _esc(e.notes) : ''}</div>
     <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn btn-primary btn-sm" style="flex:1" onclick="closeKeep('${e.id}','RETURNED')">↩ Returned</button>
-      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="closeKeep('${e.id}','DISPOSED')">🗑 Disposed</button>
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="closeKeep('${e.id}','RETURNED')">${out ? '↩ Came back' : '↩ Returned'}</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="closeKeep('${e.id}','DISPOSED')">${out ? '✕ Not returning' : '🗑 Disposed'}</button>
     </div>
   </div>`;
 }
@@ -3088,17 +3091,18 @@ function renderKeep() {
 
 async function closeKeep(id, how) {
   const e = _keepOpen.find(x => x.id === id); if (!e || _keepBusy) return;
-  const word = how === 'RETURNED' ? 'Returned' : 'Disposed';
-  if (!confirm(`Mark "${e.itemName}" × ${e.qty} as ${word}?\n\nIt leaves this list and cannot be reopened from the app.`)) return;
+  const out = e.type === 'OUT';
+  const word = how === 'RETURNED' ? (out ? 'Came back' : 'Returned') : (out ? 'Not returning' : 'Disposed');
+  if (!confirm(`"${e.itemName}" × ${e.qty}: ${word}?\n\nIt leaves this list and cannot be reopened from the app.`)) return;
   _keepBusy = true;
   try {
     const r = await pApi('POST', `/api/transactions/${encodeURIComponent(id)}/close`, { groupId: gid(), person: S.user?.name || S.user?.email || '', how });
     _keepOpen = _keepOpen.filter(x => x.id !== id);
     const t = S.transactions.find(x => String(x._serverId) === id);
     if (t) t.details = { ...(t.details || {}), closed: r.closed };
-    logAct(`Marked ${word.toLowerCase()}: ${e.itemName} × ${e.qty} from ${e.person}`); save();
+    logAct(`${word}: ${e.itemName} × ${e.qty}${out ? ' sent by ' : ' from '}${e.person}`); save();
     updateKeepBanner(); renderKeep();
-    toast(`✅ Marked ${word.toLowerCase()}`, 'ok');
+    toast(`✅ ${word}`, 'ok');
   } catch (err) {
     toast(err.message, 'err');
     if (/already closed/i.test(err.message)) syncKeepOpen().then(() => { updateKeepBanner(); renderKeep(); });
