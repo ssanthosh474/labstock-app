@@ -1,7 +1,7 @@
 {
   "name": "LabStock — Lab Inventory",
   "short_name": "LabStock",
-  "description": "Lab inventory management with Telegram integration",
+  "description": "Lab inventory management",
   "start_url": "/labstock-app/",
   "display": "standalone",
   "orientation": "portrait",
