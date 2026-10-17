@@ -1352,6 +1352,15 @@ select.form-input { cursor: pointer; }
         <div style="font-size:11px;color:var(--muted)">Entries with no purpose are hidden while a purpose is selected.</div>
       </div>
       <div class="form-group">
+        <label class="form-label">Entries</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="logKindChips">
+          <button type="button" class="exp-chip" data-k="" onclick="setLogKind('')">All</button>
+          <button type="button" class="exp-chip" data-k="STOCK" onclick="setLogKind('STOCK')">Stock changes</button>
+          <button type="button" class="exp-chip" data-k="LOG" onclick="setLogKind('LOG')">Log only</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted)">Log only = entries that did not change stock (Form entries and Log only entries).</div>
+      </div>
+      <div class="form-group">
         <label class="form-label">Type</label>
         <div style="display:flex;gap:6px" id="logTypeChips">
           <button type="button" class="exp-chip" data-k="" onclick="setLogType('')">All</button>
@@ -2518,7 +2527,7 @@ function openSheet(id) {
   }
   if (id === 'taxManageSheet') renderTaxonomyManage();
   if (id === 'logFilterSheet') renderLogFilterSheet();
-  if (id === 'exportSheet') { updateExportSummary(); renderStockFilters(); }
+  if (id === 'exportSheet') { updateExportSummary(); renderStockFilters(); ensureFullLog().then(updateExportSummary); }
   if (id === 'groupSheet') renderGroupSheet();
   if (id === 'membersSheet') { switchMemTab('list'); renderMembersSheet(); }
   if (id === 'activitySheet') { if(typeof _selectedLogs!=='undefined') _selectedLogs.clear(); renderActivity(); }
@@ -4714,6 +4723,16 @@ let _logFrom = '', _logTo = '';
 let _logCats = [];          // selected categories; empty = all
 let _logCatList = [];
 let _logPurposes = [], _logPurposeList = [];   // selected purposes; empty = all
+let _logKind = '';          // '' = all | 'STOCK' = stock changes | 'LOG' = log-only entries
+let _logFullFor = '';       // group whose full history was loaded for export
+// One chip per spelling, ignoring capitals; the label is the spelling used most often (ties: first seen).
+function ciChips(values) {
+  const count = new Map(), best = new Map();
+  values.filter(Boolean).forEach(v => count.set(v, (count.get(v) || 0) + 1));
+  count.forEach((n, v) => { const k = v.toLowerCase(), cur = best.get(k); if (!cur || n > cur.n) best.set(k, { v, n }); });
+  return [...best.values()].map(x => x.v).sort((a, b) => a.localeCompare(b));
+}
+const ciHas = (list, v) => list.some(x => String(x).toLowerCase() === String(v || '').toLowerCase());
 let _logTypeFilter = null;  // 'IN' | 'OUT' | null
 let _srvTxFull = false;     // true when the last sync hit the 100-row cap (older rows live only on the server)
 let _srvTxOldest = '';      // local date of the oldest row in that 100-row window
@@ -4753,7 +4772,7 @@ function logRangeBounds() {
   }
 }
 function logRangeActive() { return _logRange !== 'all' && !(_logRange === 'custom' && !_logFrom && !_logTo); }
-function logActiveCount() { return (logRangeActive() ? 1 : 0) + (_logCats.length ? 1 : 0) + (_logPurposes.length ? 1 : 0) + (_logTypeFilter ? 1 : 0); }
+function logActiveCount() { return (logRangeActive() ? 1 : 0) + (_logCats.length ? 1 : 0) + (_logPurposes.length ? 1 : 0) + (_logKind ? 1 : 0) + (_logTypeFilter ? 1 : 0); }
 function logFilterLabel(withSearch) {
   const parts = [];
   if (logRangeActive()) {
@@ -4762,6 +4781,7 @@ function logFilterLabel(withSearch) {
   }
   if (_logCats.length) parts.push(_logCats.length <= 2 ? _logCats.join(', ') : _logCats.length + ' categories');
   if (_logPurposes.length) parts.push(_logPurposes.length <= 2 ? _logPurposes.join(', ') : _logPurposes.length + ' purposes');
+  if (_logKind) parts.push(_logKind === 'LOG' ? 'Log only' : 'Stock changes');
   if (_logTypeFilter) parts.push(_logTypeFilter === 'IN' ? 'Inward' : 'Outward');
   if (withSearch) {
     const q = (document.getElementById('logSearch')?.value || '').trim();
@@ -4782,14 +4802,16 @@ function getLogTxs() {
       if (!d || (from && d < from) || (to && d > to)) return false;
     }
     if (_logTypeFilter && t.type !== _logTypeFilter) return false;
-    if (_logCats.length && !_logCats.includes(t.category || 'Uncategorized')) return false;
-    if (_logPurposes.length && !_logPurposes.includes((t.details && t.details.purpose) || '')) return false;
+    if (_logCats.length && !ciHas(_logCats, t.category || 'Uncategorized')) return false;
+    if (_logPurposes.length && !ciHas(_logPurposes, (t.details && t.details.purpose) || '')) return false;
+    if (_logKind === 'LOG' && t.source !== 'LOG_ONLY') return false;
+    if (_logKind === 'STOCK' && (t.source === 'LOG_ONLY' || t.source === 'PRODUCT')) return false;
     return true;
   });
 }
 
 function clearLogFilters(silent) {
-  _logRange = 'all'; _logFrom = ''; _logTo = ''; _logCats = []; _logPurposes = []; _logTypeFilter = null;
+  _logRange = 'all'; _logFrom = ''; _logTo = ''; _logCats = []; _logPurposes = []; _logKind = ''; _logTypeFilter = null;
   _selectedTx.clear();
   if (!silent) { renderLogFilterSheet(); renderLog(); }
 }
@@ -4805,41 +4827,43 @@ function setLogCustom() {
 }
 function toggleLogCat(i) {
   if (i < 0) _logCats = [];
-  else { const c = _logCatList[i]; _logCats = _logCats.includes(c) ? _logCats.filter(x => x !== c) : [..._logCats, c]; }
+  else { const c = _logCatList[i]; _logCats = ciHas(_logCats, c) ? _logCats.filter(x => x.toLowerCase() !== c.toLowerCase()) : [..._logCats, c]; }
   _logFilterChanged();
 }
 function toggleLogPurpose(i) {
   if (i < 0) _logPurposes = [];
-  else { const p = _logPurposeList[i]; _logPurposes = _logPurposes.includes(p) ? _logPurposes.filter(x => x !== p) : [..._logPurposes, p]; }
+  else { const p = _logPurposeList[i]; _logPurposes = ciHas(_logPurposes, p) ? _logPurposes.filter(x => x.toLowerCase() !== p.toLowerCase()) : [..._logPurposes, p]; }
   _logFilterChanged();
 }
 function setLogType(k) { _logTypeFilter = k || null; _logFilterChanged(); }
+function setLogKind(k) { _logKind = k || ''; _logFilterChanged(); }
 
 function renderLogFilterSheet() {
   document.querySelectorAll('#logRangeChips .exp-chip').forEach(b => b.classList.toggle('on', b.dataset.k === _logRange));
   document.querySelectorAll('#logTypeChips .exp-chip').forEach(b => b.classList.toggle('on', b.dataset.k === (_logTypeFilter || '')));
+  document.querySelectorAll('#logKindChips .exp-chip').forEach(b => b.classList.toggle('on', b.dataset.k === _logKind));
   const row = document.getElementById('logCustomRow'); if (row) row.style.display = _logRange === 'custom' ? 'flex' : 'none';
   const f = document.getElementById('logFromDate'), to = document.getElementById('logToDate');
   if (f) f.value = _logFrom;
   if (to) to.value = _logTo;
   const pbox = document.getElementById('logPurposeChips');
   if (pbox) {
-    _logPurposeList = [...new Set([...txPurposes(), 'Lab inventory',
+    _logPurposeList = ciChips([...txPurposes(), 'Lab inventory',
       ...S.transactions.filter(x => x.groupId === gid() && !x._act && x.details && x.details.purpose).map(x => x.details.purpose),
-      ..._logPurposes])];
+      ..._logPurposes]);
     pbox.innerHTML = `<button type="button" class="exp-chip${_logPurposes.length ? '' : ' on'}" onclick="toggleLogPurpose(-1)">All</button>` +
-      _logPurposeList.map((p, k) => `<button type="button" class="exp-chip${_logPurposes.includes(p) ? ' on' : ''}" onclick="toggleLogPurpose(${k})">${_esc(p)}</button>`).join('');
+      _logPurposeList.map((p, k) => `<button type="button" class="exp-chip${ciHas(_logPurposes, p) ? ' on' : ''}" onclick="toggleLogPurpose(${k})">${_esc(p)}</button>`).join('');
   }
   const box = document.getElementById('logCatChips');
   if (box) {
-    _logCatList = [...new Set([
+    _logCatList = ciChips([
       ...getItems().map(i => i.category),
       ...S.transactions.filter(x => x.groupId === gid() && !x._act).map(x => x.category || 'Uncategorized'),
       ..._logCats
-    ].filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    ]);
     const top = box.scrollTop;
     box.innerHTML = `<button type="button" class="exp-chip${_logCats.length ? '' : ' on'}" onclick="toggleLogCat(-1)">All</button>` +
-      _logCatList.map((c, k) => `<button type="button" class="exp-chip${_logCats.includes(c) ? ' on' : ''}" onclick="toggleLogCat(${k})">${_esc(c)}</button>`).join('');
+      _logCatList.map((c, k) => `<button type="button" class="exp-chip${ciHas(_logCats, c) ? ' on' : ''}" onclick="toggleLogCat(${k})">${_esc(c)}</button>`).join('');
     box.scrollTop = top;
   }
 }
@@ -4877,9 +4901,21 @@ function mergeServerTx(rows) {
 
 // The app only caches the newest 100 rows. If the chosen range starts before that window,
 // ask the server (from/to params) and merge, instead of silently showing a partial list.
+// Loads up to 2000 rows of this group once, so an All-time export is not limited to the cached newest 100.
+async function ensureFullLog() {
+  if (!_srvTxFull || _logFullFor === gid()) return;
+  try {
+    const res = await fetch(`${RAILWAY_URL}/api/transactions?groupId=${encodeURIComponent(gid())}&limit=2000`);
+    if (!res.ok) throw new Error('http ' + res.status);
+    const rows = await res.json();
+    mergeServerTx(rows);
+    _logFullFor = gid();
+    if (rows.length >= 2000) toast('Only the newest 2000 entries could be loaded', 'wrn');
+  } catch (e) { toast('Could not load the full history — export may be incomplete', 'wrn'); }
+}
 async function fetchLogRangeFromServer() {
   const [from, to] = logRangeBounds();
-  const needAll = !from && _logPurposes.length > 0;   // purpose filter, no date range: load older history too
+  const needAll = !from && logActiveCount() > 0;   // any filter without a date range: load older history too
   if (!_srvTxFull || !_srvTxOldest) return;
   if (!needAll && (!from || from > _srvTxOldest)) return;
   const key = needAll ? gid() + '|all' : gid() + '|' + from + '|' + to;
@@ -5087,8 +5123,9 @@ function exportCSV() { openSheet('exportSheet'); }
 
 function getFilteredTx() { return getLogTxs(); }
 
-function doExport(format) {
+async function doExport(format) {
   if (!isAdmin()) { toast('Admin only','err'); return; }
+  await ensureFullLog();
   const txs = getFilteredTx();
   if (!txs.length) { toast('No transactions to export','wrn'); return; }
   const g = S.groups.find(g => g.id === gid());
