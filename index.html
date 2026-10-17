@@ -570,6 +570,12 @@ select.form-input { cursor: pointer; }
 .exp-chip { font-size:12px; padding:6px 12px; border-radius:20px; border:1.5px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer; font-family:var(--body); font-weight:600; }
 .exp-chip.on { background:var(--accent-bg); color:var(--accent); border-color:var(--accent-l); }
 
+#logPage{position:fixed;inset:0;z-index:150;background:var(--bg);display:none;flex-direction:column;transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1)}
+#logPage.open{display:flex;transform:translateX(0)}
+.ld-row{display:flex;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);font-size:14px}
+.ld-row:last-child{border-bottom:none}
+.ld-k{color:var(--muted);font-size:12px;flex-shrink:0;padding-top:2px}
+.ld-v{font-weight:600;text-align:right;word-break:break-word;min-width:0}
 #toast {
   position: fixed; top: calc(70px + var(--safe-top)); left: 16px; right: 16px;
   background: var(--text); color: white; border-radius: var(--r);
@@ -913,8 +919,10 @@ select.form-input { cursor: pointer; }
             Select all
           </label>
           <button onclick="deleteSelectedTx()" style="padding:5px 12px;border-radius:6px;border:none;background:var(--danger);color:white;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete selected</button>
+          <button onclick="_selectedTx.clear();renderLog()" style="padding:5px 12px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface2);font-size:12px;font-weight:600;cursor:pointer">Cancel</button>
         </div>
         <div id="logKpiFilterChip" style="display:none;margin-bottom:10px"></div>
+        <div id="logHint" style="display:none;font-size:11px;color:var(--muted);margin:-4px 0 10px">Tap a row to open it. Long-press a row to select (admin).</div>
         <div class="card" id="logList"></div>
       </div>
     </div>
@@ -1142,6 +1150,15 @@ select.form-input { cursor: pointer; }
 <!-- ════════════════════════════════════
      BOTTOM SHEETS
 ════════════════════════════════════ -->
+
+<!-- Log detail page (phase D) -->
+<div id="logPage">
+  <div class="product-topbar">
+    <div class="product-back" onclick="closeLogPage()">←</div>
+    <div style="flex:1;font-family:var(--display);font-size:16px;font-weight:700">Log entry</div>
+  </div>
+  <div class="product-scroll" id="logPageBody"></div>
+</div>
 
 <!-- Transaction Sheet -->
 <div class="sheet-overlay" id="txSheet" onclick="sheetBgClose(event,'txSheet')">
@@ -2568,6 +2585,13 @@ window.addEventListener('popstate', function(e) {
     openSheets[openSheets.length - 1].classList.remove('open');
     return;
   }
+  const lp = document.getElementById('logPage');
+  if (lp && lp.classList.contains('open')) {
+    lp.classList.remove('open');
+    setTimeout(() => { lp.style.display = 'none'; }, 300);
+    _logPageId = null;
+    return;
+  }
   const productPage = document.getElementById('productPage');
   if (productPage && productPage.classList.contains('open')) {
     productPage.classList.remove('open');
@@ -2909,11 +2933,13 @@ function renderKeep() {
     : '<div class="empty"><div class="empty-icon">⏳</div><p>Nothing to return or dispose.</p></div>';
 }
 
-async function closeKeep(id, how) {
-  const e = _keepOpen.find(x => x.id === id); if (!e || _keepBusy) return;
-  const out = e.type === 'OUT';
-  const word = how === 'RETURNED' ? (out ? 'Came back' : 'Returned') : (out ? 'Not returning' : 'Disposed');
-  if (!confirm(`"${e.itemName}" × ${e.qty}: ${word}?\n\nIt leaves this list and cannot be reopened from the app.`)) return;
+function keepWord(how, out) { return how === 'RETURNED' ? (out ? 'Came back' : 'Returned') : (out ? 'Not returning' : 'Disposed'); }
+
+// Shared by the Open items sheet and the Log detail page. e = { itemName, qty, person, type }.
+async function closeEntry(id, how, e) {
+  if (_keepBusy) return false;
+  const out = e.type === 'OUT', word = keepWord(how, out);
+  if (!confirm(`"${e.itemName}" × ${e.qty}: ${word}?\n\nIt leaves the open list and cannot be reopened from the app.`)) return false;
   _keepBusy = true;
   try {
     const r = await pApi('POST', `/api/transactions/${encodeURIComponent(id)}/close`, { groupId: gid(), person: S.user?.name || S.user?.email || '', how });
@@ -2921,12 +2947,19 @@ async function closeKeep(id, how) {
     const t = S.transactions.find(x => String(x._serverId) === id);
     if (t) t.details = { ...(t.details || {}), closed: r.closed };
     logAct(`${word}: ${e.itemName} × ${e.qty}${out ? ' sent by ' : ' from '}${e.person}`); save();
-    updateKeepBanner(); renderKeep();
+    updateKeepBanner();
     toast(`✅ ${word}`, 'ok');
+    return true;
   } catch (err) {
     toast(err.message, 'err');
     if (/already closed/i.test(err.message)) syncKeepOpen().then(() => { updateKeepBanner(); renderKeep(); });
+    return false;
   } finally { _keepBusy = false; }
+}
+
+async function closeKeep(id, how) {
+  const e = _keepOpen.find(x => x.id === id); if (!e) return;
+  if (await closeEntry(id, how, e)) renderKeep();
 }
 
 // ── FORM INBOX: Lab inventory entries add stock (N7c-2) ──
@@ -4960,6 +4993,8 @@ function renderLog() {
   }
 
   const hasSel = _selectedTx.size > 0;
+  const hint = document.getElementById('logHint');
+  if (hint) { let seen = ''; try { seen = localStorage.getItem('lp_hint_seen') || ''; } catch (x) {} hint.style.display = (isAdmin() && !hasSel && !seen && txs.length) ? 'block' : 'none'; }
   if (bar) { bar.style.display = hasSel ? 'flex' : 'none'; }
   if (delBtn) { delBtn.style.display = hasSel ? '' : 'none'; }
   if (title) { title.textContent = hasSel ? _selectedTx.size + ' selected' : (nActive || q ? `Log · ${txs.length}` : 'Transaction Log'); }
@@ -4972,8 +5007,8 @@ function renderLog() {
   el.innerHTML = loadingRow + txs.map(t => {
     const isIn = t.type==='IN';
     const sel = _selectedTx.has(t.id);
-    return `<div class="list-row${sel?' selected':''}" style="${sel?'background:var(--accent-bg)':''};gap:10px" onclick="logToggleRow('${t.id}')">
-      <input type="checkbox" onclick="event.stopPropagation();logToggleRow('${t.id}')" ${sel?'checked':''} style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
+    return `<div class="list-row${sel?' selected':''}" data-tx="${t.id}" style="${sel?'background:var(--accent-bg);':''}gap:10px;-webkit-touch-callout:none" onclick="logRowTap('${t.id}')">
+      ${hasSel?`<input type="checkbox" onclick="event.stopPropagation();logToggleRow('${t.id}')" ${sel?'checked':''} style="accent-color:var(--accent);width:20px;height:20px;flex-shrink:0">`:''}
       <div class="row-icon ${isIn?'in':'out'}" style="flex-shrink:0">${isIn?'📦':'🔻'}</div>
       <div class="row-body">
         <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='LOG_ONLY'?'<span class="badge bg-gray">LOG</span>':''}${t.source==='PRODUCT'?'<span class="badge bg-gray">PRODUCT</span>':''}${t.details?.purpose?`<span class="badge bg-green" style="margin-left:4px">${_esc(t.details.purpose)}</span>`:''}</div>
@@ -4992,22 +5027,146 @@ function logToggleAll(checked) {
   if(checked) txs.forEach(t=>_selectedTx.add(t.id)); else _selectedTx.clear();
   renderLog();
 }
-function deleteSelectedTx() {
-  if(!_selectedTx.size) return;
-  if(!confirm(`Delete ${_selectedTx.size} transaction(s)? Cannot be undone.`)) return;
-  const toDelete = S.transactions.filter(t => _selectedTx.has(t.id));
-  S.transactions = S.transactions.filter(t => !_selectedTx.has(t.id));
-  _selectedTx.clear(); save(); renderLog(); renderHome(); updateAlertBadge();
-  toast('Transactions deleted', 'wrn');
-  // Block sync briefly — otherwise the next auto-sync can re-pull rows
-  // from the server before the DELETE calls below land, resurrecting them.
+// ── LOG DETAIL PAGE + LONG-PRESS SELECT (phase D) ──
+let _logPageId = null, _lpTimer = null, _lpFired = false, _lpX = 0, _lpY = 0;
+const LOG_SRC = { APP: 'App', LOG_ONLY: 'Log only', PRODUCT: 'Product' };
+function logTxById(id) { return S.transactions.find(t => !t._act && String(t.id) === String(id)); }
+
+// Removes rows locally, then on the server. Stock is never reversed.
+function removeTx(list) {
+  const ids = new Set(list.map(t => t.id)), sids = new Set(list.map(t => String(t._serverId || '')));
+  S.transactions = S.transactions.filter(t => !ids.has(t.id));
+  _selectedTx.clear();
+  if (_keepOpen.some(k => sids.has(k.id))) { _keepOpen = _keepOpen.filter(k => !sids.has(k.id)); updateKeepBanner(); }
+  save(); renderLog(); renderHome(); updateAlertBadge();
+  // Block sync briefly, otherwise the next auto-sync can re-pull rows before the DELETE lands
   lastSyncTime = Date.now() + 6000;
-  toDelete.forEach(t => {
-    // Only rows that exist server-side have _serverId; a purely local,
-    // never-synced entry has nothing to delete remotely.
-    if (!t._serverId) return;
+  list.forEach(t => {
+    if (!t._serverId) return;   // never synced: nothing to delete remotely
     fetch(`${RAILWAY_URL}/api/transactions/${encodeURIComponent(t._serverId)}`, { method: 'DELETE' }).catch(() => {});
   });
+}
+function deleteConfirmText(list) {
+  const stockRows = list.filter(t => t.source !== 'LOG_ONLY').length;
+  return `Delete ${list.length} transaction(s)? Cannot be undone.` + (stockRows ? `\n\nStock is not reversed (${stockRows} stock-changing row${stockRows !== 1 ? 's' : ''}).` : '');
+}
+function deleteSelectedTx() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  if (!_selectedTx.size) return;
+  const list = S.transactions.filter(t => _selectedTx.has(t.id));
+  if (!confirm(deleteConfirmText(list))) return;
+  removeTx(list);
+  toast('Transactions deleted', 'wrn');
+}
+// Tap opens the page; once anything is selected, tap toggles selection. Long-press (admin) starts selecting.
+function logRowTap(id) {
+  if (_lpFired) { _lpFired = false; return; }
+  if (_selectedTx.size) logToggleRow(id); else openLogPage(id);
+}
+(function initLogLongPress() {
+  const el = document.getElementById('logList'); if (!el) return;
+  const stop = () => clearTimeout(_lpTimer);
+  el.addEventListener('pointerdown', e => {
+    _lpFired = false; stop();
+    if (!isAdmin()) return;
+    const row = e.target.closest('[data-tx]'); if (!row) return;
+    _lpX = e.clientX; _lpY = e.clientY;
+    _lpTimer = setTimeout(() => {
+      _lpFired = true;
+      if (navigator.vibrate) navigator.vibrate(15);
+      try { localStorage.setItem('lp_hint_seen', '1'); } catch (x) {}
+      logToggleRow(row.dataset.tx);
+    }, 450);
+  });
+  el.addEventListener('pointermove', e => { if (Math.abs(e.clientX - _lpX) > 10 || Math.abs(e.clientY - _lpY) > 10) stop(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(n => el.addEventListener(n, stop));
+  el.addEventListener('contextmenu', e => e.preventDefault());
+})();
+
+function openLogPage(id) {
+  const t = logTxById(id); if (!t) return;
+  const page = document.getElementById('logPage');
+  const wasOpen = page.classList.contains('open');
+  _logPageId = t.id;
+  renderLogPage(t);
+  document.getElementById('logPageBody').scrollTop = 0;
+  page.style.display = 'flex';
+  requestAnimationFrame(() => page.classList.add('open'));
+  if (!wasOpen) history.pushState({ nav: 'logdetail' }, '', '');
+}
+function closeLogPage() {
+  const page = document.getElementById('logPage');
+  page.classList.remove('open');
+  setTimeout(() => { page.style.display = 'none'; }, 300);
+  _logPageId = null;
+  if (history.state && history.state.nav === 'logdetail') histBack();
+}
+function renderLogPage(t) {
+  const d = t.details || {}, out = t.type === 'OUT', logOnly = t.source === 'LOG_ONLY', prod = t.source === 'PRODUCT';
+  const unit = t.unit ? ' ' + t.unit : '';
+  const main = [], keep = [];
+  const add = (arr, k, v, col) => {
+    if (v === undefined || v === null || String(v).trim() === '') return;
+    arr.push(`<div class="ld-row"><div class="ld-k">${k}</div><div class="ld-v"${col ? ` style="color:${col}"` : ''}>${_esc(v)}</div></div>`);
+  };
+  add(main, 'Date', t.date ? fmtDateShort(t.date) : '');
+  add(main, out ? 'By' : 'From', t.person);
+  add(main, 'Lab member', t.labMember);
+  add(main, 'Receiver', d.receiver);
+  add(main, 'Category', t.category);
+  add(main, 'Location', t.location);
+  add(main, 'Code', t.itemCode);
+  add(main, 'Notes', t.notes);
+  add(main, 'Purpose', d.purpose);
+  add(main, 'Request ID', d.requestId);
+  add(main, 'NVM number', d.nvm);
+  if (!logOnly && t.stockAfter !== undefined && t.stockAfter !== null) add(main, 'Stock after', t.stockAfter + unit);
+  add(main, 'Source', (LOG_SRC[t.source] || t.source || '') + (d.via === 'form' ? ' (via Form)' : ''));
+  add(main, 'Form entry', d.form_id);
+  add(main, 'Recorded', t.timestamp ? new Date(t.timestamp).toLocaleString() : '');
+  if (d.returnable) add(keep, 'Returnable', d.returnable === 'RETURNABLE' ? 'Returnable' : 'Non-returnable');
+  if (d.keep_until) {
+    add(keep, out ? 'Return by' : 'Keep until', fmtDateShort(d.keep_until));
+    add(keep, 'Duration', d.keep_range);
+    if (d.closed) add(keep, 'Status', `${keepWord(d.closed.how, out)} by ${d.closed.by || '?'}${d.closed.at ? ' on ' + new Date(d.closed.at).toLocaleDateString() : ''}`, 'var(--accent)');
+    else {
+      const n = daysUntil(d.keep_until);
+      if (n !== null) add(keep, 'Status', n < 0 ? `Overdue ${-n} d` : n === 0 ? 'Due today' : `Open, due in ${n} d`, n < 0 ? 'var(--danger)' : n <= KEEP_SOON_DAYS ? 'var(--warn)' : '');
+    }
+  }
+  const col = logOnly ? 'var(--text)' : out ? 'var(--danger)' : 'var(--accent)';
+  const big = (logOnly ? '' : out ? '−' : '+') + t.qty + unit;
+  const kind = logOnly
+    ? '<span class="badge bg-gray">LOG ONLY</span> <span style="font-size:13px;color:var(--muted)">Logged, no stock change</span>'
+    : `<span class="badge ${out ? 'bg-red' : 'bg-green'}">${out ? '▼ OUTWARD' : '▲ INWARD'}</span>${prod ? ' <span class="badge bg-gray">PRODUCT</span>' : ''}`;
+  let act = '';
+  if (logOnly && d.keep_until && !d.closed && t._serverId) {
+    act += `<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="logPageClose('RETURNED')">${out ? '↩ Came back' : '↩ Returned'}</button><button class="btn btn-ghost" style="flex:1" onclick="logPageClose('DISPOSED')">${out ? '✕ Not returning' : '🗑 Disposed'}</button></div>`;
+  }
+  const item = !prod && getItems().find(i => i.name.toLowerCase() === String(t.itemName || '').toLowerCase());
+  if (item) act += `<button class="btn btn-ghost btn-full" onclick="logPageOpenItem('${item.id}')">📦 Open item</button>`;
+  if (isAdmin()) act += '<button class="btn btn-danger btn-full" onclick="logPageDelete()">🗑 Delete entry</button>';
+  document.getElementById('logPageBody').innerHTML = `<div style="padding:20px 16px 0">
+    <div class="product-name">${_esc(t.itemName || t.name || 'Unknown')}</div>
+    <div class="product-stock-num" style="color:${col};margin-bottom:8px">${_esc(big)}</div>
+    <div style="margin-bottom:16px">${kind}</div>
+    <div class="card">${main.join('')}</div>
+    ${keep.length ? `<div class="card">${keep.join('')}</div>` : ''}
+    <div style="display:flex;flex-direction:column;gap:10px">${act}</div></div>`;
+}
+async function logPageClose(how) {
+  const t = logTxById(_logPageId); if (!t || !t._serverId) return;
+  const ok = await closeEntry(String(t._serverId), how, { itemName: t.itemName, qty: t.qty, person: t.person, type: t.type });
+  const t2 = logTxById(_logPageId);
+  if (ok && t2) renderLogPage(t2);
+}
+function logPageOpenItem(itemId) { closeLogPage(); setTimeout(() => openProductPage(itemId), 320); }
+function logPageDelete() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  const t = logTxById(_logPageId); if (!t) return;
+  if (!confirm(deleteConfirmText([t]).replace('1 transaction(s)', `"${t.itemName}" × ${t.qty}`))) return;
+  removeTx([t]); closeLogPage();
+  toast('Entry deleted', 'wrn');
 }
 function renderHome() {
   const today = localDateStr();
@@ -5022,7 +5181,7 @@ function renderHome() {
   if (!recent.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>No transactions yet. Tap + to log one!</p></div>'; return; }
   el.innerHTML = recent.map(t => {
     const isIn = t.type==='IN';
-    return `<div class="list-row">
+    return `<div class="list-row" onclick="openLogPage('${t.id}')" style="cursor:pointer">
       <div class="row-icon ${isIn?'in':'out'}">${isIn?'📦':'🔻'}</div>
       <div class="row-body">
         <div class="row-title">${t.itemName||t.name||'Unknown Item'}</div>
@@ -6099,7 +6258,7 @@ function closeProductPage() {
     } else {
       // Check if any sheet is open
       const openSheet = document.querySelector('.sheet-overlay.open');
-      swipeTarget = openSheet ? 'sheet:' + openSheet.id : null;
+      swipeTarget = openSheet ? 'sheet:' + openSheet.id : (document.getElementById('logPage')?.classList.contains('open') ? 'log' : null);
     }
   }, { passive: true });
 
@@ -6114,7 +6273,9 @@ function closeProductPage() {
     const absX = Math.abs(tx), absY = Math.abs(ty);
     // Right swipe: tx > 60, more horizontal than vertical
     if (tx > 60 && absX > absY * 1.5) {
-      if (swipeTarget === 'product') {
+      if (swipeTarget === 'log') {
+        closeLogPage();
+      } else if (swipeTarget === 'product') {
         closeProductPage();
       } else if (swipeTarget.startsWith('sheet:')) {
         const id = swipeTarget.replace('sheet:', '');
