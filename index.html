@@ -3972,17 +3972,11 @@ async function syncPhotoIndex() {
 }
 
 function itemRowHTML(item, extra) {
-  const pct = Math.min(100,(item.stock/Math.max(item.minStock*3,1))*100);
   const low = item.stock <= item.minStock;
-  const watch = item.stock <= item.minStock*1.5;
-  const color = low ? 'var(--danger)' : watch ? 'var(--warn)' : 'var(--accent-l)';
-  const badge = low ? '<span class="badge bg-red">LOW</span>' : watch ? '<span class="badge bg-warn">WATCH</span>' : '';
-  let expiryBadge = '';
   const dLeft = item.expiry ? daysUntil(item.expiry) : null;
-  if (dLeft !== null) {
-    if (dLeft < 0) expiryBadge = '<span class="badge bg-red" style="font-size:9px">⛔ EXPIRED</span>';
-    else if (dLeft <= EXPIRY_WARN_DAYS) expiryBadge = `<span class="badge bg-warn" style="font-size:9px">⚠️ ${dLeft}d</span>`;
-  }
+  const badge = (low ? '<span class="badge bg-red">LOW</span>' : '') +
+    (dLeft !== null && dLeft < 0 ? ' <span class="badge bg-red">EXPIRED</span>' : '');
+  // Date line only while sorting or filtering by expiry (it is the thing being sorted)
   const sortVal = document.getElementById('invSort')?.value || '';
   const showExpDetail = stockMode === 'items' && (_showExpiringOnly || sortVal.startsWith('expiry'));
   let expLine = '';
@@ -3994,14 +3988,10 @@ function itemRowHTML(item, extra) {
   return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
       ${itemIconHTML(item, low)}
       <div class="row-body">
-        <div class="row-title">${item.name} ${badge} ${expiryBadge} ${item.code?`<span class="badge bg-gray" style="font-size:9px">${item.code}</span>`:''}</div>
-        <div class="row-sub">${item.category}${item.location?' • 📍'+item.location:''}</div>
+        <div class="row-title">${item.name} ${badge}</div>
         ${expLine}${extra || ''}
-        <div class="stock-wrap">
-          <div class="stock-bar"><div class="stock-fill" style="width:${pct}%;background:${color}"></div></div>
-          <span class="stock-num" style="color:${color}">${item.stock} ${item.unit}</span>
-        </div>
       </div>
+      <div class="row-right"><div class="row-val" style="font-size:16px;color:${low ? 'var(--danger)' : 'var(--text)'}">${item.stock} <span style="font-size:11px;font-weight:400;color:var(--muted)">${item.unit}</span></div></div>
       <span style="color:var(--muted);font-size:20px">›</span>
     </div>`;
 }
@@ -4269,7 +4259,6 @@ function productItemRowHTML(pi) {
     <div class="row-icon in" style="width:52px;height:52px;overflow:hidden;font-size:22px">${thumb}</div>
     <div class="row-body">
       <div class="row-title">${_esc(pi.name)}</div>
-      ${pi.note ? `<div class="row-sub">${_esc(pi.note)}</div>` : ''}
       <div class="row-val in" style="font-size:16px;margin-top:2px">${pi.qty}</div>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
@@ -5009,11 +4998,12 @@ function renderLog() {
     const sel = _selectedTx.has(t.id);
     return `<div class="list-row${sel?' selected':''}" data-tx="${t.id}" style="${sel?'background:var(--accent-bg);':''}gap:10px;-webkit-touch-callout:none" onclick="logRowTap('${t.id}')">
       ${hasSel?`<input type="checkbox" onclick="event.stopPropagation();logToggleRow('${t.id}')" ${sel?'checked':''} style="accent-color:var(--accent);width:20px;height:20px;flex-shrink:0">`:''}
-      <div class="row-icon ${isIn?'in':'out'}" style="flex-shrink:0">${isIn?'📦':'🔻'}</div>
+      <div class="row-icon ${t.source==='LOG_ONLY'?'':(isIn?'in':'out')}" style="flex-shrink:0${t.source==='LOG_ONLY'?';background:var(--surface2)':''}">${t.source==='LOG_ONLY'?'📝':(isIn?'📦':'🔻')}</div>
       <div class="row-body">
-        <div class="row-title">${t.itemName||t.name||'Unknown'} ${t.source==='LOG_ONLY'?'<span class="badge bg-gray">LOG</span>':''}${t.source==='PRODUCT'?'<span class="badge bg-gray">PRODUCT</span>':''}${t.details?.purpose?`<span class="badge bg-green" style="margin-left:4px">${_esc(t.details.purpose)}</span>`:''}</div>
-        <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'?'}${t.source==='PRODUCT'&&t.notes?' • '+_esc(t.notes):''}${t.details?.requestId?' • Req '+_esc(t.details.requestId)+' • NVM '+_esc(t.details.nvm||''):''} • ${t.source==='LOG_ONLY'?t.qty+' '+(t.unit||'')+' logged, no stock change':(isIn?'+':'−')+t.qty+' '+(t.unit||'')}</div>
+        <div class="row-title">${_esc(t.itemName||t.name||'Unknown')}${t.source==='LOG_ONLY'?' <span class="badge bg-gray">LOG</span>':''}</div>
+        <div class="row-sub">${t.date||'Today'}</div>
       </div>
+      <div class="row-val ${t.source==='LOG_ONLY'?'':(isIn?'in':'out')}" style="font-size:16px${t.source==='LOG_ONLY'?';color:var(--muted)':''}">${t.source==='LOG_ONLY'?'':(isIn?'+':'−')}${t.qty}</div>
     </div>`;
   }).join('');
 }
