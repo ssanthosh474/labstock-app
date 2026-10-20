@@ -1825,6 +1825,7 @@ function ic(n) {
   if (!ICONS[n]) { console.warn('[icon] missing', n); return ''; }
   return '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[n] + '</svg>';
 }
+function dot(c) { return '<span class="dot dot-' + c + '"></span>'; }
 function hydrateIcons(root) {
   (root || document).querySelectorAll('i[data-ic]').forEach(function(el) { el.outerHTML = ic(el.getAttribute('data-ic')); });
 }
@@ -1946,7 +1947,7 @@ function showInstallInstructions() {
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isAndroid = /android/i.test(navigator.userAgent);
   if (isIOS) {
-    toast('Tap the Share button (⬆) → "Add to Home Screen"', 'ok');
+    toast('Tap Share → "Add to Home Screen"', 'ok');
   } else if (isAndroid) {
     if (deferredInstallPrompt) installApp();
     else toast('Tap browser menu (⋮) → "Add to Home Screen"', 'ok');
@@ -1975,7 +1976,7 @@ function detectInviteOnLoad() {
     // Fix 3: Show MEMBER login UI — no group creation step
     document.getElementById('loginStep1').innerHTML = `
       <div style="text-align:center;margin-bottom:16px">
-        <div style="font-size:32px;margin-bottom:8px">👋</div>
+        <div style="font-size:32px;margin-bottom:8px">${ic('user-round')}</div>
         <div style="font-size:15px;font-weight:700">You're invited!</div>
         <div style="font-size:13px;color:var(--muted);margin-top:4px">Join <strong>${groupName}</strong> as a lab member</div>
       </div>
@@ -2297,7 +2298,7 @@ function acceptPendingInvite(inv) {
   }).catch(() => {});
   showApp();
   setTimeout(() => syncFromServer(true), 800);
-  toast(`✅ Joined "${inv.groupName}"! Welcome to the group.`, 'ok');
+  toast(`Joined "${inv.groupName}"! Welcome to the group.`, 'ok');
 }
 
 function signInGoogle() {
@@ -2381,7 +2382,7 @@ async function fixMyAccount() {
   const user = S.user;
   if (!user) { toast('Not logged in', 'err'); return; }
 
-  toast('🔧 Fetching your account from server...', 'ok');
+  toast('Fetching your account from server...', 'ok');
 
   try {
     // Step 1: fetch groups from server for this user
@@ -2441,7 +2442,7 @@ async function fixMyAccount() {
     localStorage.setItem('ls2', JSON.stringify(fresh));
     localStorage.setItem('migrated_v1', '1');
 
-    toast(`✅ Fixed! Found "${myGroup.name}" with ${cleanMembers.filter(m=>m.groupId===myGroup.id).length} members. Reloading...`, 'ok');
+    toast(`Fixed! Found "${myGroup.name}" with ${cleanMembers.filter(m=>m.groupId===myGroup.id).length} members. Reloading...`, 'ok');
     setTimeout(() => location.reload(), 1200);
 
   } catch(e) {
@@ -2631,12 +2632,12 @@ function renderGroupSheet() {
     <div style="background:${active?'var(--accent-bg)':'var(--surface2)'};border:1.5px solid ${active?'var(--accent-l)':'var(--border)'};border-radius:var(--r);padding:14px;transition:box-shadow .15s">
       <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
         <div onclick="setGroup('${g.id}')" style="font-weight:700;font-size:15px;cursor:pointer;flex:1;line-height:1.3">
-          🧪 ${g.name}
+          ${ic('flask-conical')} ${g.name}
           ${active?'<span class="badge bg-green" style="font-size:10px;margin-left:5px;vertical-align:middle">Active</span>':''}
         </div>
         ${isOwner?`<div style="display:flex;gap:6px;flex-shrink:0">
-          <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();showGroupForm('${g.id}')">✏️</button>
-          <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteGroup('${g.id}')">🗑️</button>
+          <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();showGroupForm('${g.id}')">${ic('pencil')}</button>
+          <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();deleteGroup('${g.id}')">${ic('trash-2')}</button>
         </div>`:''}
       </div>
       <div onclick="setGroup('${g.id}')" style="font-size:12px;color:var(--muted);cursor:pointer;margin-bottom:8px">
@@ -2777,7 +2778,7 @@ function inboxCardHTML(e) {
     </div>
     <div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.7">${meta.join(' · ')}${e.requestId ? '<br>Request ID: ' + _esc(e.requestId) : ''}${e.keepUntil ? '<br>' + (out ? 'Return by ' : 'Keep until ') + fmtDateShort(e.keepUntil) : ''}${e.remarks ? '<br>' + _esc(e.remarks) : ''}</div>
     <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn btn-primary btn-sm" style="flex:1" onclick="acceptInbox('${e.id}')">${labInv ? '📦 Add to stock' : '✅ Accept'}</button>
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="acceptInbox('${e.id}')">${labInv ? (ic('package') + ' Add to stock') : (ic('check') + ' Accept')}</button>
       <button class="btn btn-ghost btn-sm" onclick="dismissInbox('${e.id}')">Dismiss</button>
     </div>
   </div>`;
@@ -2788,7 +2789,7 @@ function renderInbox() {
   document.getElementById('inboxTitle').textContent = list.length ? `${list.length} form ${list.length === 1 ? 'entry needs' : 'entries need'} completing` : 'Form entries';
   document.getElementById('inboxBody').innerHTML = list.length
     ? list.map(inboxCardHTML).join('')
-    : '<div class="empty"><div class="empty-icon">📥</div><p>No pending form entries.</p></div>';
+    : ('<div class="empty"><div class="empty-icon">' + ic('inbox') + '</div><p>No pending form entries.</p></div>');
 }
 
 async function inboxAction(id, kind, extra) {
@@ -2811,7 +2812,7 @@ async function acceptInbox(id) {
   if (r.tx) S.transactions.unshift({ ...r.tx, id: 'srv_' + r.tx.id, _serverId: String(r.tx.id), groupId: gid(), source: 'LOG_ONLY' });
   logAct(`Form entry recorded: ${e.material} × ${e.qty} from ${e.sender}`); save();
   updateInboxBadge(); renderInbox(); renderHome();
-  toast('✅ Recorded in the Log (no stock change)', 'ok');
+  toast('Recorded in the Log (no stock change)', 'ok');
 }
 
 async function dismissInbox(id) {
@@ -2839,7 +2840,7 @@ function renderPurposeEditor() {
     const fixed = PURPOSE_FIXED.includes(p.toLowerCase());
     return `<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px">
       <div style="flex:1;min-width:0;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(p)}</div>
-      ${fixed ? '<span class="badge bg-gray">fixed</span>' : `<button onclick="deletePurpose(${i})" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:12px;cursor:pointer;flex-shrink:0">🗑</button>`}
+      ${fixed ? '<span class="badge bg-gray">fixed</span>' : `<button onclick="deletePurpose(${i})" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:12px;cursor:pointer;flex-shrink:0">${ic('trash-2')}</button>`}
     </div>`;
   }).join('') + '<div style="display:flex;align-items:center;gap:8px;border:1px dashed var(--border);border-radius:10px;padding:10px 12px;color:var(--muted);font-size:13px"><div style="flex:1">Lab inventory · changes stock, added by the Form itself</div><span class="badge bg-gray">fixed</span></div>';
 }
@@ -2929,11 +2930,11 @@ function keepCardHTML(e) {
   return `<div style="background:var(--surface2);border:1.5px solid ${d !== null && d < 0 ? '#ffc9cb' : 'var(--border)'};border-radius:var(--r);padding:14px">
     <div style="font-weight:700;font-size:14px">${_esc(e.itemName)} <span style="font-family:var(--mono);font-size:12px;color:var(--muted)">× ${e.qty}${e.unit && e.unit !== 'units' ? ' ' + _esc(e.unit) : ''}</span></div>
     <div style="font-size:12px;color:var(--muted);margin-top:2px">${out ? 'Sent by' : 'From'}: ${_esc(e.person)} · ${out ? 'outward' : 'inward'} ${fmtDateShort(e.date)}</div>
-    <div style="font-size:13px;font-weight:700;color:${col};margin-top:8px">⏳ ${tag}</div>
+    <div style="font-size:13px;font-weight:700;color:${col};margin-top:8px">${ic('hourglass')} ${tag}</div>
     <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.7">${meta.join(' · ')}${e.requestId ? '<br>Request ID: ' + _esc(e.requestId) : ''}${e.notes ? '<br>' + _esc(e.notes) : ''}</div>
     <div style="display:flex;gap:8px;margin-top:10px">
-      <button class="btn btn-primary btn-sm" style="flex:1" onclick="closeKeep('${e.id}','RETURNED')">${out ? '↩ Came back' : '↩ Returned'}</button>
-      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="closeKeep('${e.id}','DISPOSED')">${out ? '✕ Not returning' : '🗑 Disposed'}</button>
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="closeKeep('${e.id}','RETURNED')">${out ? (ic('undo-2') + ' Came back') : (ic('undo-2') + ' Returned')}</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="closeKeep('${e.id}','DISPOSED')">${out ? (ic('x') + ' Not returning') : (ic('trash-2') + ' Disposed')}</button>
     </div>
   </div>`;
 }
@@ -2943,7 +2944,7 @@ function renderKeep() {
   document.getElementById('keepTitle').textContent = _keepOpen.length ? `${_keepOpen.length} open${over ? ' · ' + over + ' overdue' : ''}` : 'Open items';
   document.getElementById('keepBody').innerHTML = _keepOpen.length
     ? _keepOpen.map(keepCardHTML).join('')
-    : '<div class="empty"><div class="empty-icon">⏳</div><p>Nothing to return or dispose.</p></div>';
+    : ('<div class="empty"><div class="empty-icon">' + ic('hourglass') + '</div><p>Nothing to return or dispose.</p></div>');
 }
 
 function keepWord(how, out) { return how === 'RETURNED' ? (out ? 'Came back' : 'Returned') : (out ? 'Not returning' : 'Disposed'); }
@@ -2961,7 +2962,7 @@ async function closeEntry(id, how, e) {
     if (t) t.details = { ...(t.details || {}), closed: r.closed };
     logAct(`${word}: ${e.itemName} × ${e.qty}${out ? ' sent by ' : ' from '}${e.person}`); save();
     updateKeepBanner();
-    toast(`✅ ${word}`, 'ok');
+    toast(`${word}`, 'ok');
     return true;
   } catch (err) {
     toast(err.message, 'err');
@@ -3052,7 +3053,7 @@ async function submitISNew() {
   if (!confirm(`Add new item?\n\n${name}\nCategory: ${cat}\nStock: ${e.qty} ${unit}`)) return;
   const btn = document.getElementById('isSaveNew'); btn.disabled = true; btn.textContent = 'Saving…';
   finishIS(await inboxAction(e.id, 'accept', { mode: 'new', item }));
-  btn.disabled = false; btn.textContent = '✅ Add new item';
+  btn.disabled = false; btn.innerHTML = (ic('check') + ' Add new item');
 }
 function finishIS(r) {
   const e = _isEntry; if (!r || !e) return;
@@ -3068,7 +3069,7 @@ function finishIS(r) {
   logAct(`Form entry added to stock: ${e.material} × ${e.qty} from ${e.sender}`); save();
   closeSheet('isSheet');
   updateInboxBadge(); renderInbox(); refreshCurrentView(); updateAlertBadge();
-  toast(`✅ ${e.qty} added to ${it ? it.name : e.material}${it ? ' → ' + it.stock + ' ' + (it.unit || '') : ''}`, 'ok');
+  toast(`${e.qty} added to ${it ? it.name : e.material}${it ? ' → ' + it.stock + ' ' + (it.unit || '') : ''}`, 'ok');
 }
 
 // ── GOOGLE FORM TOKEN (N7a) ──
@@ -3086,7 +3087,7 @@ async function showFormToken(regen) {
   } catch (e) { toast('Could not get token: ' + e.message, 'err'); }
 }
 function copyFormToken() {
-  navigator.clipboard.writeText(_formTok).then(() => toast('📋 Token copied', 'ok')).catch(() => prompt('Token:', _formTok));
+  navigator.clipboard.writeText(_formTok).then(() => toast('Token copied', 'ok')).catch(() => prompt('Token:', _formTok));
 }
 
 function deleteGroup(id) {
@@ -3238,7 +3239,7 @@ function handleInviteLink(code) {
       })
       .catch(() => syncFromServer(true));
 
-    toast(`✅ Joined "${groupName}"! Loading inventory...`, 'ok');
+    toast(`Joined "${groupName}"! Loading inventory...`, 'ok');
   } catch(e) {
     toast('Invalid invite link', 'err');
   }
@@ -3283,7 +3284,7 @@ function renderMembersSheet() {
 
   const pendingCount = (S.pendingInvites||[]).filter(p=>p.groupId===S.activeGroupId).length;
   const pendingTab = document.getElementById('memTab-pending');
-  if(pendingTab) pendingTab.textContent = pendingCount>0 ? `⏳ Pending (${pendingCount})` : '⏳ Pending';
+  if(pendingTab) pendingTab.innerHTML = pendingCount>0 ? `${ic('hourglass')} Pending (${pendingCount})` : (ic('hourglass') + ' Pending');
 
  // Show cached members or skeleton
   if (S.members.filter(m => m.groupId === S.activeGroupId).length > 0) {
@@ -3323,7 +3324,7 @@ function _renderMembersList(el) {
     mems.unshift({ id:'admin_'+grp.id, groupId:grp.id, email:grp.adminEmail, name:grp.adminEmail.split('@')[0], role:'admin', joined:grp.created||'' });
   }
   if (!mems.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🧑‍🔬</div><p>No members yet.<br>Tap + Add to invite.</p></div>';
+    el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('user-round') + '</div><p>No members yet.<br>Tap + Add to invite.</p></div>');
     return;
   }
   const curIsAdmin = isAdmin();
@@ -3344,10 +3345,10 @@ function _renderMembersList(el) {
         <div style="font-size:12px;color:var(--muted);margin-top:2px;word-break:break-all">${m.email}</div>
         ${canEdit ? `<div style="display:flex;gap:6px;margin-top:8px">
           <button onclick="changeRole('${m.id}')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface2);font-size:11px;font-weight:600;cursor:pointer">
-            ${isAdmMem?'⬇ Member':'⬆ Admin'}
+            ${isAdmMem?(ic('download') + ' Member'):(ic('arrow-up') + ' Admin')}
           </button>
           <button onclick="confirmRemoveMem('${m.id}')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:11px;font-weight:600;cursor:pointer">
-            🗑 Remove
+            ${ic('trash-2')} Remove
           </button>
         </div>` : ''}
       </div>
@@ -3377,7 +3378,7 @@ async function renderPendingSheet() {
 
   const pending = (S.pendingInvites||[]).filter(p => p.groupId===S.activeGroupId);
   if (!pending.length) {
-    el.innerHTML = '<div class="empty" style="padding:32px 20px"><div class="empty-icon">📭</div><p>No pending invites.<br>Add a member and they\'ll appear here.</p></div>';
+    el.innerHTML = ('<div class="empty" style="padding:32px 20px"><div class="empty-icon">' + ic('inbox') + '</div><p>No pending invites.<br>Add a member and they\'ll appear here.</p></div>');
     return;
   }
   el.innerHTML = pending.map(p => `
@@ -3388,8 +3389,8 @@ async function renderPendingSheet() {
         <div class="m-email">${p.email}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:3px">Invited ${new Date(p.created).toLocaleDateString()} • ${p.role}</div>
         <div style="display:flex;gap:6px;margin-top:8px">
-          <button onclick="resendInvite('${p.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 10px">🔗 Resend Link</button>
-          <button onclick="cancelInvite('${p.id}')" class="btn btn-danger btn-sm" style="font-size:11px;padding:5px 10px">✕ Cancel</button>
+          <button onclick="resendInvite('${p.id}')" class="btn btn-ghost btn-sm" style="font-size:11px;padding:5px 10px">${ic('link')} Resend Link</button>
+          <button onclick="cancelInvite('${p.id}')" class="btn btn-danger btn-sm" style="font-size:11px;padding:5px 10px">${ic('x')} Cancel</button>
         </div>
       </div>
       <span class="badge bg-warn">pending</span>
@@ -3404,7 +3405,7 @@ async function shareInviteLink() {
     navigator.share({ title: 'Join LabStock', text: 'Join our lab inventory group:', url: link });
   } else {
     navigator.clipboard.writeText(link).then(() => {
-      toast('📋 Invite link copied! Send it to your team.', 'ok');
+      toast('Invite link copied! Send it to your team.', 'ok');
     }).catch(() => { prompt('Copy this invite link:', link); });
   }
 }
@@ -3421,7 +3422,7 @@ function resendInvite(invId) {
   if (navigator.share) {
     navigator.share({ title: 'Join LabStock', text: `Join our lab group as ${inv.role}:`, url: link });
   } else {
-    navigator.clipboard.writeText(link).then(() => toast('📋 Invite link copied!','ok')).catch(() => prompt('Invite link:', link));
+    navigator.clipboard.writeText(link).then(() => toast('Invite link copied!','ok')).catch(() => prompt('Invite link:', link));
   }
 }
 
@@ -3572,8 +3573,8 @@ function renderTaxonomyManage() {
         <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${v}</div>
         <div style="font-size:11px;color:var(--muted)">${count} item${count!==1?'s':''}</div>
       </div>
-      <button onclick="renameTaxonomyValue('${safe}')" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;flex-shrink:0">✏️</button>
-      <button onclick="deleteTaxonomyValue('${safe}')" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:12px;cursor:pointer;flex-shrink:0">🗑</button>
+      <button onclick="renameTaxonomyValue('${safe}')" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;flex-shrink:0">${ic('pencil')}</button>
+      <button onclick="deleteTaxonomyValue('${safe}')" style="padding:6px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:12px;cursor:pointer;flex-shrink:0">${ic('trash-2')}</button>
     </div>`;
   }).join('');
 }
@@ -3672,9 +3673,9 @@ function updateExpiryPreview() {
   if (hint) hint.style.display = document.getElementById('editId').value ? 'block' : 'none';
   const d = v ? daysUntil(v) : null;
   if (d === null) { pv.textContent = _expChip === 'none' ? 'No expiry' : ''; pv.style.color = 'var(--muted)'; return; }
-  if (d < 0)       { pv.textContent = `⛔ Expired ${fmtDateShort(v)} (${-d} d ago)`; pv.style.color = 'var(--danger)'; }
-  else if (d === 0){ pv.textContent = `⚠️ Expires today (${fmtDateShort(v)})`; pv.style.color = 'var(--warn)'; }
-  else if (d <= EXPIRY_WARN_DAYS){ pv.textContent = `⚠️ Expires ${fmtDateShort(v)} (in ${d} d)`; pv.style.color = 'var(--warn)'; }
+  if (d < 0)       { pv.innerHTML = `${ic('ban')} Expired ${fmtDateShort(v)} (${-d} d ago)`; pv.style.color = 'var(--danger)'; }
+  else if (d === 0){ pv.innerHTML = `${ic('triangle-alert')} Expires today (${fmtDateShort(v)})`; pv.style.color = 'var(--warn)'; }
+  else if (d <= EXPIRY_WARN_DAYS){ pv.innerHTML = `${ic('triangle-alert')} Expires ${fmtDateShort(v)} (in ${d} d)`; pv.style.color = 'var(--warn)'; }
   else             { pv.textContent = `Expires ${fmtDateShort(v)} (in ${d} d)`; pv.style.color = 'var(--accent)'; }
 }
 
@@ -3711,7 +3712,7 @@ function saveItem() {
     if (duplicate) code = generateItemCode(cat) + '_' + Date.now().toString().slice(-3);
     S.inventory.push({id:'i_'+Date.now(), groupId:gid(), name, code, category:cat, location:loc, stock, unit, minStock:min, expiry});
     logAct(`Added: ${name} [${code}]`);
-    toast(`✅ Item added! Code: ${code}`,'ok');
+    toast(`Item added! Code: ${code}`,'ok');
   }
   document.getElementById('editId').value = ''; // reset for next Add
   save(); closeSheet('addItemSheet'); renderInv(); updateAlertBadge();
@@ -3836,7 +3837,7 @@ function _doDeleteItem(item) {
   logAct(`Deleted: ${item.name}`); save(); renderInv(); updateAlertBadge();
 
   const toastEl = document.getElementById('toast');
-  toastEl.innerHTML = '🗑️ "' + item.name + '" deleted  <button onclick="undoDelete()" style="background:white;color:var(--text);border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px">UNDO</button>';
+  toastEl.innerHTML = (ic('trash-2') + ' "') + item.name + '" deleted  <button onclick="undoDelete()" style="background:white;color:var(--text);border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;margin-left:4px">UNDO</button>';
   toastEl.className = 'show wrn';
   clearTimeout(window._t);
 
@@ -3855,7 +3856,7 @@ function undoDelete() {
   S.inventory.push(_deletedItem);
   _deletedItem = null;
   save(); renderInv(); updateAlertBadge();
-  toast('↩️ "' + name + '" restored', 'ok');
+  toast('"' + name + '" restored', 'ok');
 }
 
 let _showLowOnly = false;
@@ -3888,7 +3889,7 @@ function toggleExpiryFilter() {
 function updateExpiryBtn() {
   const btn = document.getElementById('invFilterExp'); if (!btn) return;
   const n = getItems().filter(isExpiringItem).length;
-  btn.textContent = '⏳ Expiring' + (n ? ' (' + n + ')' : '');
+  btn.innerHTML = (ic('hourglass') + ' Expiring') + (n ? ' (' + n + ')' : '');
   btn.style.background  = _showExpiringOnly ? 'var(--warn)' : 'var(--surface2)';
   btn.style.color       = _showExpiringOnly ? 'white' : 'var(--text)';
   btn.style.borderColor = _showExpiringOnly ? 'var(--warn)' : 'var(--border)';
@@ -3940,7 +3941,7 @@ function renderInv() {
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
   if (title) title.textContent = `${items.length} Item${items.length!==1?'s':''}`;
-  if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items found.</p></div>'; return; }
+  if (!items.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('package') + '</div><p>No items found.</p></div>'); return; }
   el.innerHTML = items.map(i => itemRowHTML(i)).join('');
 }
 
@@ -3956,14 +3957,14 @@ function itemPhotoUrl(item) {
 function itemIconHTML(item, low) {
   const u = itemPhotoUrl(item);
   return u
-    ? `<div class="row-icon ${low?'warn':'in'}" style="overflow:hidden;padding:0"><img src="${u}" loading="lazy" alt="" onerror="this.parentNode.textContent='${low?'⚠️':'📦'}'" style="width:100%;height:100%;object-fit:cover"></div>`
-    : `<div class="row-icon ${low?'warn':'in'}">${low?'⚠️':'📦'}</div>`;
+    ? `<div class="row-icon ${low?'warn':'in'}" style="overflow:hidden;padding:0"><img src="${u}" loading="lazy" alt="" onerror="this.parentNode.innerHTML=ic('${low?'triangle-alert':'package'}')" style="width:100%;height:100%;object-fit:cover"></div>`
+    : `<div class="row-icon ${low?'warn':'in'}">${low?ic('triangle-alert'):ic('package')}</div>`;
 }
 function itemTileIconHTML(item, low) {
   const u = itemPhotoUrl(item);
   return u
-    ? `<div style="width:56px;height:56px;border-radius:12px;overflow:hidden;background:var(--surface2)"><img src="${u}" loading="lazy" alt="" onerror="this.parentNode.textContent='${low?'⚠️':'📦'}'" style="width:100%;height:100%;object-fit:cover"></div>`
-    : `<div style="font-size:20px">${low?'⚠️':'📦'}</div>`;
+    ? `<div style="width:56px;height:56px;border-radius:12px;overflow:hidden;background:var(--surface2)"><img src="${u}" loading="lazy" alt="" onerror="this.parentNode.innerHTML=ic('${low?'triangle-alert':'package'}')" style="width:100%;height:100%;object-fit:cover"></div>`
+    : `<div style="font-size:20px">${low?ic('triangle-alert'):ic('package')}</div>`;
 }
 function setPhotoIdx(name, ver) {
   if (!S.photoIdx) S.photoIdx = {};
@@ -3996,7 +3997,7 @@ function itemRowHTML(item, extra) {
   if (showExpDetail && item.expiry && dLeft !== null) {
     const col = dLeft < 0 ? 'var(--danger)' : dLeft <= EXPIRY_WARN_DAYS ? 'var(--warn)' : 'var(--muted)';
     const txt = dLeft < 0 ? `${-dLeft}d ago` : dLeft === 0 ? 'today' : `${dLeft}d`;
-    expLine = `<div class="row-sub" style="color:${col};font-weight:600">⏳ ${fmtDateShort(item.expiry)} · ${txt}</div>`;
+    expLine = `<div class="row-sub" style="color:${col};font-weight:600">${ic('hourglass')} ${fmtDateShort(item.expiry)} · ${txt}</div>`;
   }
   return `<div class="list-row" onclick="openProductPage('${item.id}')" style="cursor:pointer">
       ${itemIconHTML(item, low)}
@@ -4026,7 +4027,7 @@ function toggleViewMode() {
 
 function updateViewModeBtn() {
   const btn = document.getElementById('viewModeToggle');
-  if (btn) btn.textContent = stockViewMode === 'grid' ? '☰ List' : '⊞ Grid';
+  if (btn) btn.innerHTML = stockViewMode === 'grid' ? (ic('list') + ' List') : (ic('layout-grid') + ' Grid');
   ['invSort','invFilterCat','invFilterLow','invFilterExp'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = stockViewMode === 'grid' ? 'none' : '';
@@ -4046,12 +4047,12 @@ function renderGridView(q) {
     });
     const cats = Object.keys(counts).sort((a,b) => a.localeCompare(b));
     if (title) title.textContent = `${cats.length} Categor${cats.length!==1?'ies':'y'}`;
-    if (!cats.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">🗂</div><p>No items yet.</p></div>'; return; }
+    if (!cats.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('folder') + '</div><p>No items yet.</p></div>'); return; }
     el.innerHTML = `<div class="tile-grid">` + cats.map(c => {
       const d = counts[c];
       const safe = c.replace(/'/g, "\\'");
       return `<div class="category-tile" onclick="openGridCategory('${safe}')">
-        <div style="font-size:24px;margin-bottom:6px">🗂</div>
+        <div style="font-size:24px;margin-bottom:6px">${ic('folder')}</div>
         <div style="font-weight:700;font-size:14px;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c}</div>
         <div style="font-size:12px;color:var(--muted)">${d.total} item${d.total!==1?'s':''}${d.low?` &bull; <span style="color:var(--danger);font-weight:600">${d.low} low</span>`:''}</div>
       </div>`;
@@ -4059,8 +4060,8 @@ function renderGridView(q) {
   } else {
     let items = getItems().filter(i => i.category === _gridCategory);
     if (q) items = items.filter(i => i.name.toLowerCase().includes(q) || (i.code||'').toLowerCase().includes(q));
-    if (title) title.innerHTML = `<span onclick="backToGridCategories()" style="cursor:pointer;color:var(--accent)">← Categories</span> &nbsp;·&nbsp; 🗂 ${_gridCategory}`;
-    if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items in this category.</p></div>'; return; }
+    if (title) title.innerHTML = `<span onclick="backToGridCategories()" style="cursor:pointer;color:var(--accent)">← Categories</span> &nbsp;·&nbsp; ${ic('folder')} ${_gridCategory}`;
+    if (!items.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('package') + '</div><p>No items in this category.</p></div>'); return; }
     el.innerHTML = `<div class="tile-grid">` + items.map(itemGridCardHTML).join('') + `</div>`;
   }
 }
@@ -4133,9 +4134,9 @@ function renderLocationList() {
   const title = document.getElementById('invCountTitle');
   if (title) title.textContent = `${locs.length} Location${locs.length!==1?'s':''}`;
   updateLocPrintAllBtn();
-  if (!locs.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📍</div><p>No locations found.</p></div>'; return; }
+  if (!locs.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('map-pin') + '</div><p>No locations found.</p></div>'); return; }
   el.innerHTML = locs.map(l => `<div class="list-row" style="cursor:pointer" onclick="openLocationView('${l.key.replace(/'/g,"\\'")}')">
-      <div class="row-icon info">📍</div>
+      <div class="row-icon info">${ic('map-pin')}</div>
       <div class="row-body">
         <div class="row-title">${l.label}</div>
         <div class="row-sub">${l.count} item${l.count!==1?'s':''}</div>
@@ -4154,9 +4155,9 @@ function openLocationView(key) {
   const items = getItems().filter(i => (i.location||'').trim().toLowerCase() === key);
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
-  if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; 📍 ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">⬛ QR</button>`;
+  if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; ${ic('map-pin')} ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">${ic('qr-code')} QR</button>`;
   updateLocPrintAllBtn();
-  if (!items.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📦</div><p>No items at this location.</p></div>'; return; }
+  if (!items.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('package') + '</div><p>No items at this location.</p></div>'); return; }
   el.innerHTML = items.map(i => itemRowHTML(i)).join('');
 }
 
@@ -4252,11 +4253,11 @@ function renderProductList() {
   updateLocPrintAllBtn();
   if (!ps.length) {
     const msg = q ? 'No products match.' : 'No products yet.' + (isAdmin() ? '<br>Tap + Product to create one.' : '');
-    el.innerHTML = `<div class="empty"><div class="empty-icon">🧩</div><p>${msg}</p></div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">${ic('puzzle')}</div><p>${msg}</p></div>`;
     return;
   }
   el.innerHTML = ps.map(p => `<div class="list-row" style="cursor:pointer" onclick="openProductView('${p.id}')">
-      <div class="row-icon info"${p.photoV > 0 ? ' style="overflow:hidden;padding:0"' : ''}>${p.photoV > 0 ? `<img src="${prPhotoUrl(p)}" loading="lazy" alt="" onerror="this.parentNode.textContent='🧩'" style="width:100%;height:100%;object-fit:cover">` : '🧩'}</div>
+      <div class="row-icon info"${p.photoV > 0 ? ' style="overflow:hidden;padding:0"' : ''}>${p.photoV > 0 ? `<img src="${prPhotoUrl(p)}" loading="lazy" alt="" onerror="this.parentNode.innerHTML=ic('puzzle')" style="width:100%;height:100%;object-fit:cover">` : ic('puzzle')}</div>
       <div class="row-body"><div class="row-title">${_esc(p.name)}</div><div class="row-sub">${p.items.length} item${p.items.length !== 1 ? 's' : ''}</div></div>
       <span style="color:var(--muted);font-size:20px">›</span>
     </div>`).join('');
@@ -4267,7 +4268,7 @@ function productItemRowHTML(pi) {
   const canOut = true;   // Request Flow removed: everyone can do OUT
   const thumb = pi.photoV > 0
     ? `<img src="${piPhotoUrl(pi)}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover">`
-    : '📦';
+    : ic('package');
   return `<div class="list-row"${adm ? ` onclick="openPISheet('${pi.id}')" style="cursor:pointer"` : ''}>
     <div class="row-icon in" style="width:52px;height:52px;overflow:hidden;font-size:22px">${thumb}</div>
     <div class="row-body">
@@ -4289,17 +4290,17 @@ function openProductView(id) {
   _productView = id;
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
-  if (title) title.innerHTML = `<span onclick="backToProductList()" style="cursor:pointer;color:var(--accent)">← Products</span> &nbsp;·&nbsp; 🧩 ${_esc(p.name)}`;
+  if (title) title.innerHTML = `<span onclick="backToProductList()" style="cursor:pointer;color:var(--accent)">← Products</span> &nbsp;·&nbsp; ${ic('puzzle')} ${_esc(p.name)}`;
   updateLocPrintAllBtn();
   const adm = isAdmin();
   const items = [...p.items].sort((a, b) => a.name.localeCompare(b.name));
   const head = '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">' +
     `<div style="flex:1;font-size:12px;color:var(--muted)">${items.length} item${items.length !== 1 ? 's' : ''} · product-only stock</div>` +
     (adm ? '<button class="btn btn-primary btn-sm" onclick="openPISheet()">+ Add item</button>' +
-           '<button class="btn btn-ghost btn-sm" onclick="renameProduct()">✏️</button>' +
-           '<button class="btn btn-danger btn-sm" onclick="deleteProduct()">🗑</button>' : '') + '</div>';
+           ('<button class="btn btn-ghost btn-sm" onclick="renameProduct()">' + ic('pencil') + '</button>') +
+           ('<button class="btn btn-danger btn-sm" onclick="deleteProduct()">' + ic('trash-2') + '</button>') : '') + '</div>';
   el.innerHTML = head + (items.length ? items.map(productItemRowHTML).join('')
-    : '<div class="empty"><div class="empty-icon">🧩</div><p>No items in this product yet.</p></div>');
+    : ('<div class="empty"><div class="empty-icon">' + ic('puzzle') + '</div><p>No items in this product yet.</p></div>'));
 }
 
 function backToProductList() { _productView = null; renderProductList(); }
@@ -4325,7 +4326,7 @@ function updatePRPreview() {
   else if (_prPhoto === undefined && p && p.photoV > 0) src = prPhotoUrl(p);
   document.getElementById('prPreview').innerHTML = src
     ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">`
-    : '<span style="font-size:36px;opacity:.3">🧩</span>';
+    : ('<span style="font-size:36px;opacity:.3">' + ic('puzzle') + '</span>');
   document.getElementById('prRemovePhoto').style.display = src ? '' : 'none';
 }
 async function prPickPhoto(ev) {
@@ -4395,7 +4396,7 @@ function updatePIPreview() {
   else if (_piPhoto === undefined && pi && pi.photoV > 0) src = piPhotoUrl(pi);
   document.getElementById('piPreview').innerHTML = src
     ? `<img src="${src}" style="width:100%;height:100%;object-fit:cover">`
-    : '<span style="font-size:36px;opacity:.3">📷</span>';
+    : ('<span style="font-size:36px;opacity:.3">' + ic('camera') + '</span>');
   document.getElementById('piRemovePhoto').style.display = src ? '' : 'none';
 }
 
@@ -4429,7 +4430,7 @@ async function savePI() {
     upsertLocalPI(r.item); save();
     closeSheet('piSheet');
     renderStockView();
-    toast(r.photoFailed ? 'Saved, but the image upload failed — edit the item to retry' : '🧩 Saved', r.photoFailed ? 'wrn' : 'ok');
+    toast(r.photoFailed ? 'Saved, but the image upload failed — edit the item to retry' : 'Saved', r.photoFailed ? 'wrn' : 'ok');
     setTimeout(() => syncFromServer(true), 300); // pulls the Log entry the server wrote
   } catch (e) { toast('Could not save: ' + e.message, 'err'); }
   btn.disabled = false; btn.textContent = 'Save';
@@ -4551,7 +4552,7 @@ function renderTxItemResults() {
     return `<div class="list-row" style="padding:10px 12px;cursor:pointer" onmousedown="selectTxItem('${i.id}')">
       <div class="row-body">
         <div class="row-title" style="font-size:13px">${i.name}</div>
-        <div class="row-sub">${i.stock} ${i.unit}${low?' ⚠️':''} • ${i.category}</div>
+        <div class="row-sub">${i.stock} ${i.unit}${low?(' ' + ic('triangle-alert')):''} • ${i.category}</div>
       </div>
     </div>`;
   }).join('');
@@ -4562,7 +4563,7 @@ function renderTxItemResults() {
       const safe = raw.trim().replace(/'/g, "\\'");
       if (txLogOnlyState) {
         html += `<div class="list-row" style="padding:10px 12px;cursor:pointer;color:var(--text2);font-weight:700" onmousedown="selectFreeformLogItem('${safe}')">
-          📝 Log "${raw.trim()}" — not in current stock
+          ${ic('file-text')} Log "${raw.trim()}" — not in current stock
         </div>`;
       } else {
         html += `<div class="list-row" style="padding:10px 12px;cursor:pointer;color:var(--accent);font-weight:700" onmousedown="addNewItemFromTx('${safe}')">
@@ -4711,8 +4712,8 @@ function submitTx(override=null) {
     ['txQty','txNotes'].forEach(x=>document.getElementById(x).value='');
     setTxMode(false);
   }
-  toast(`${d.logOnly?'📝 Logged':d.type==='IN'?'▲ Inward':'▼ Outward'}: ${d.qty} ${item.unit} of ${item.name}`,'ok');
-  if (!d.logOnly && item.stock<=item.minStock) setTimeout(()=>toast(`⚠ Low stock: ${item.name} (${item.stock} left)`,'wrn'),2000);
+  toast(`${d.logOnly?'Logged':d.type==='IN'?'▲ Inward':'▼ Outward'}: ${d.qty} ${item.unit} of ${item.name}`,'ok');
+  if (!d.logOnly && item.stock<=item.minStock) setTimeout(()=>toast(`Low stock: ${item.name} (${item.stock} left)`,'wrn'),2000);
   renderHome(); renderInv(); updateAlertBadge();
   // Refresh product page immediately (stock number update)
   if (_currentProductId && document.getElementById('productPage')?.classList.contains('open')) {
@@ -4737,7 +4738,7 @@ function submitTx(override=null) {
     if (r.ok) return r.json();
     let msg = 'server ' + r.status;
     try { msg = (await r.json()).error || msg; } catch (e) {}
-    toast('⚠️ Not saved to server: ' + msg, 'err');   // was silent before
+    toast('Not saved to server: ' + msg, 'err');   // was silent before
     return null;
   }).then(result => {
     // After server confirms, store server's transaction id for dedup
@@ -4981,12 +4982,12 @@ function renderLog() {
   const nActive = logActiveCount();
   const q = (document.getElementById('logSearch')?.value || '').trim();
 
-  if (fbtn) fbtn.textContent = '🔎 Filter' + (nActive ? ` (${nActive})` : '');
+  if (fbtn) fbtn.innerHTML = (ic('list-filter') + ' Filter') + (nActive ? ` (${nActive})` : '');
   if (chipWrap) {
     if (nActive) {
       chipWrap.style.display = 'block';
       chipWrap.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 10px;border-radius:20px;background:var(--accent-bg);color:var(--accent);border:1.5px solid var(--accent-l)">
-        ${_esc(logFilterLabel(false))} <span onclick="clearLogFilters()" style="cursor:pointer;font-weight:800">✕</span>
+        ${_esc(logFilterLabel(false))} <span onclick="clearLogFilters()" style="cursor:pointer;font-weight:800">${ic('x')}</span>
       </span>`;
     } else {
       chipWrap.style.display = 'none';
@@ -5003,7 +5004,7 @@ function renderLog() {
 
   const loadingRow = _logLoading ? '<div class="sheet-loading">Loading older transactions…</div>' : '';
   if (!txs.length) {
-    el.innerHTML = loadingRow + `<div class="empty"><div class="empty-icon">↕️</div><p>${nActive || q ? 'No transactions match these filters.' : 'No transactions yet.'}</p></div>`;
+    el.innerHTML = loadingRow + `<div class="empty"><div class="empty-icon">${ic('arrow-up-down')}</div><p>${nActive || q ? 'No transactions match these filters.' : 'No transactions yet.'}</p></div>`;
     return;
   }
   el.innerHTML = loadingRow + txs.map(t => {
@@ -5011,7 +5012,7 @@ function renderLog() {
     const sel = _selectedTx.has(t.id);
     return `<div class="list-row${sel?' selected':''}" data-tx="${t.id}" style="${sel?'background:var(--accent-bg);':''}gap:10px;-webkit-touch-callout:none" onclick="logRowTap('${t.id}')">
       ${hasSel?`<input type="checkbox" onclick="event.stopPropagation();logToggleRow('${t.id}')" ${sel?'checked':''} style="accent-color:var(--accent);width:20px;height:20px;flex-shrink:0">`:''}
-      <div class="row-icon ${t.source==='LOG_ONLY'?'':(isIn?'in':'out')}" style="flex-shrink:0${t.source==='LOG_ONLY'?';background:var(--surface2)':''}">${t.source==='LOG_ONLY'?'📝':(isIn?'📦':'🔻')}</div>
+      <div class="row-icon ${t.source==='LOG_ONLY'?'':(isIn?'in':'out')}" style="flex-shrink:0${t.source==='LOG_ONLY'?';background:var(--surface2)':''}">${t.source==='LOG_ONLY'?ic('file-text'):(isIn?ic('package'):ic('arrow-down'))}</div>
       <div class="row-body">
         <div class="row-title">${_esc(t.itemName||t.name||'Unknown')}${t.source==='LOG_ONLY'?' <span class="badge bg-gray">LOG</span>':''}</div>
         <div class="row-sub">${t.date||'Today'}</div>
@@ -5144,11 +5145,11 @@ function renderLogPage(t) {
     : `<span class="badge ${out ? 'bg-red' : 'bg-green'}">${out ? '▼ OUTWARD' : '▲ INWARD'}</span>${prod ? ' <span class="badge bg-gray">PRODUCT</span>' : ''}`;
   let act = '';
   if (logOnly && d.keep_until && !d.closed && t._serverId) {
-    act += `<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="logPageClose('RETURNED')">${out ? '↩ Came back' : '↩ Returned'}</button><button class="btn btn-ghost" style="flex:1" onclick="logPageClose('DISPOSED')">${out ? '✕ Not returning' : '🗑 Disposed'}</button></div>`;
+    act += `<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="logPageClose('RETURNED')">${out ? (ic('undo-2') + ' Came back') : (ic('undo-2') + ' Returned')}</button><button class="btn btn-ghost" style="flex:1" onclick="logPageClose('DISPOSED')">${out ? (ic('x') + ' Not returning') : (ic('trash-2') + ' Disposed')}</button></div>`;
   }
   const item = !prod && getItems().find(i => i.name.toLowerCase() === String(t.itemName || '').toLowerCase());
-  if (item) act += `<button class="btn btn-ghost btn-full" onclick="logPageOpenItem('${item.id}')">📦 Open item</button>`;
-  if (isAdmin()) act += '<button class="btn btn-danger btn-full" onclick="logPageDelete()">🗑 Delete entry</button>';
+  if (item) act += `<button class="btn btn-ghost btn-full" onclick="logPageOpenItem('${item.id}')">${ic('package')} Open item</button>`;
+  if (isAdmin()) act += ('<button class="btn btn-danger btn-full" onclick="logPageDelete()">' + ic('trash-2') + ' Delete entry</button>');
   document.getElementById('logPageBody').innerHTML = `<div style="padding:20px 16px 0">
     <div class="product-name">${_esc(t.itemName || t.name || 'Unknown')}</div>
     <div class="product-stock-num" style="color:${col};margin-bottom:8px">${_esc(big)}</div>
@@ -5181,11 +5182,11 @@ function renderHome() {
   document.getElementById('kpiOut').textContent = new Set(todayTx.filter(t=>t.type==='OUT').map(t=>t.itemName)).size;
   const recent = S.transactions.filter(t=>t.groupId===gid()&&!t._act).slice(0,6);
   const el = document.getElementById('homeRecent');
-  if (!recent.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>No transactions yet. Tap + to log one!</p></div>'; return; }
+  if (!recent.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('clipboard-list') + '</div><p>No transactions yet. Tap + to log one!</p></div>'); return; }
   el.innerHTML = recent.map(t => {
     const isIn = t.type==='IN';
     return `<div class="list-row" onclick="openLogPage('${t.id}')" style="cursor:pointer">
-      <div class="row-icon ${isIn?'in':'out'}">${isIn?'📦':'🔻'}</div>
+      <div class="row-icon ${isIn?'in':'out'}">${isIn?ic('package'):ic('arrow-down')}</div>
       <div class="row-body">
         <div class="row-title">${t.itemName||t.name||'Unknown Item'}</div>
         <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'Unknown'}</div>
@@ -5214,7 +5215,7 @@ function renderActivity() {
   const hasSelected = _selectedLogs.size > 0;
 
   if (!logs.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>No activity yet.</p></div>';
+    el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('clipboard-list') + '</div><p>No activity yet.</p></div>');
     return;
   }
 
@@ -5226,7 +5227,7 @@ function renderActivity() {
         ${_selectedLogs.size === logs.length && logs.length > 0 ? 'checked' : ''}>
       <span>${_selectedLogs.size > 0 ? _selectedLogs.size + ' selected' : 'Select all'}</span>
     </label>
-    ${hasSelected ? `<button onclick="deleteSelectedLogs()" style="padding:6px 14px;border-radius:8px;border:none;background:var(--danger);color:white;font-size:12px;font-weight:700;cursor:pointer">🗑 Delete (${_selectedLogs.size})</button>` : ''}
+    ${hasSelected ? `<button onclick="deleteSelectedLogs()" style="padding:6px 14px;border-radius:8px;border:none;background:var(--danger);color:white;font-size:12px;font-weight:700;cursor:pointer">${ic('trash-2')} Delete (${_selectedLogs.size})</button>` : ''}
   </div>`;
 
   el.innerHTML = toolbar + logs.map(l => `
@@ -5235,7 +5236,7 @@ function renderActivity() {
         ${_selectedLogs.has(l.id)?'checked':''} style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
       <div class="row-body">
         <div class="row-title" style="font-size:13px">${l.action}</div>
-        <div class="row-sub">👤 ${l.user} • ${new Date(l.timestamp).toLocaleString()}</div>
+        <div class="row-sub">${ic('user')} ${l.user} • ${new Date(l.timestamp).toLocaleString()}</div>
       </div>
     </div>`).join('');
 }
@@ -5408,7 +5409,7 @@ function renderStockFilters() {
   _stkCatList = [...new Set(getItems().map(i => i.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   _stkCats = _stkCats.filter(c => _stkCatList.includes(c));
   const pri = document.getElementById('stkPriChips'), cat = document.getElementById('stkCatChips');
-  if (pri) pri.innerHTML = [['P0', '🔴 P0 Critical'], ['P1', '🟡 P1 Moderate'], ['P2', '🟢 P2 Balanced']]
+  if (pri) pri.innerHTML = [['P0', (dot('r') + ' P0 Critical')], ['P1', (dot('y') + ' P1 Moderate')], ['P2', (dot('g') + ' P2 Balanced')]]
     .map(([k, l]) => `<button type="button" class="exp-chip${_stkPri.includes(k) ? ' on' : ''}" onclick="toggleStkPri('${k}')">${l}</button>`).join('');
   if (cat) {
     const top = cat.scrollTop;
@@ -5456,7 +5457,7 @@ function doStockExport(format) {
         i.stock,
         i.unit,
         i.minStock,
-        i.priority.emoji + ' ' + i.priority.label
+        i.priority.level + ' ' + i.priority.label.charAt(0) + i.priority.label.slice(1).toLowerCase()
       ]);
     });
     const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
@@ -5577,7 +5578,7 @@ function exportQRLinksCSV() {
   if (rows.length === 1) { toast('Nothing to export yet', 'wrn'); return; }
   const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   dlFile(`labstock_qr_links_${localDateStr()}.csv`, 'text/csv', csv);
-  toast(`📥 ${rows.length-1} QR links exported!`, 'ok');
+  toast(`${rows.length-1} QR links exported!`, 'ok');
 }
 
 // ── BULK IMPORT (N3) ─────────────────────────────────────────
@@ -5598,7 +5599,7 @@ function loadScriptOnce(src) {
 
 const BULK_CFG = {
   items: {
-    title: 'Bulk Upload Items', btn: '✅ Import Items', noun: 'item', file: 'labstock_items_template.csv',
+    title: 'Bulk Upload Items', btn: (ic('check') + ' Import Items'), noun: 'item', file: 'labstock_items_template.csv',
     info: 'Columns: <strong>Item Name, Category, Unit, Stock</strong><br>Optional: Unique Code, Location, Min Stock, Expiry.<br>A blank cell never overwrites an existing item.',
     need: [{ label: 'Item Name', keys: ['itemname', 'name', 'item'] }],
     tpl: `Item Name,Unique Code,Category,Location,Unit,Stock,Min Stock,Expiry
@@ -5608,7 +5609,7 @@ Micropipette Tips,CSM-001,Consumables,Drawer 3,box,20,5,
 Petri Dishes,GLS-001,Glassware,Shelf C1,pcs,50,10,`
   },
   products: {
-    title: 'Bulk Upload Products', btn: '✅ Import Products', noun: 'product item', file: 'labstock_products_template.csv',
+    title: 'Bulk Upload Products', btn: (ic('check') + ' Import Products'), noun: 'product item', file: 'labstock_products_template.csv',
     info: 'Columns: <strong>Product, Item, Qty</strong><br>Optional: Note. Images stay manual.<br>An item already in that product is skipped, so re-uploading is safe.',
     need: [{ label: 'Product', keys: ['product', 'productname'] }, { label: 'Item', keys: ['item', 'itemname', 'name'] }],
     tpl: `Product,Item,Qty,Note
@@ -5617,7 +5618,7 @@ Pump Kit A,Fitting 1/4 inch,10,
 Test Rig B,Pressure gauge,2,Calibrated`
   },
   log: {
-    title: 'Bulk Upload Log (no stock change)', btn: '✅ Import Log Entries', noun: 'log entr', file: 'labstock_log_template.csv',
+    title: 'Bulk Upload Log (no stock change)', btn: (ic('check') + ' Import Log Entries'), noun: 'log entr', file: 'labstock_log_template.csv',
     info: 'Columns: <strong>Date, Type, Item, Qty, Person</strong><br>Optional: Lab Member, Notes, Purpose, Request ID, NVM Number.<br>Type is IN or OUT. Dates: YYYY-MM-DD or DD/MM/YYYY, not in the future. Stock is never changed. Field RCA needs Request ID and NVM Number.',
     need: [{ label: 'Date', keys: ['date', 'inwarddate'] }, { label: 'Type', keys: ['type', 'intype', 'inout'] }, { label: 'Item', keys: ['item', 'itemname', 'material', 'materialname', 'name'] }, { label: 'Qty', keys: ['qty', 'quantity', 'count'] }, { label: 'Person', keys: ['person', 'by', 'givenby', 'takenby', 'sender', 'sendername'] }],
     tpl: `Date,Type,Item,Qty,Person,Lab Member,Notes,Purpose,Request ID,NVM Number
@@ -5709,16 +5710,16 @@ function bulkSample(d) {
 }
 function bulkErrHtml(list, label) {
   if (!list.length) return '';
-  return `<br><br>⚠️ ${list.length} ${label}:<br>` + list.slice(0, 6).map(e => `• Row ${e.n}: ${_esc(e.reason)}`).join('<br>') + (list.length > 6 ? `<br>…and ${list.length - 6} more` : '');
+  return `<br><br>${ic('triangle-alert')} ${list.length} ${label}:<br>` + list.slice(0, 6).map(e => `• Row ${e.n}: ${_esc(e.reason)}`).join('<br>') + (list.length > 6 ? `<br>…and ${list.length - 6} more` : '');
 }
 function showBulkPreview(errors, fatal) {
   const prev = document.getElementById('bulkPreview'), btn = document.getElementById('bulkImportBtn');
   prev.style.display = 'block';
   if (fatal || !_bulkData.length) {
-    prev.innerHTML = `<div class="info-box" style="font-size:12px;background:var(--danger-bg);border-color:#ffc9cb">❌ <strong>${_esc(fatal || 'No rows could be read.')}</strong>${bulkErrHtml(errors, 'rows skipped')}</div>`;
+    prev.innerHTML = `<div class="info-box" style="font-size:12px;background:var(--danger-bg);border-color:#ffc9cb">${ic('circle-x')} <strong>${_esc(fatal || 'No rows could be read.')}</strong>${bulkErrHtml(errors, 'rows skipped')}</div>`;
     btn.style.display = 'none'; return;
   }
-  prev.innerHTML = `<div class="info-box" style="font-size:12px">✅ <strong>${_bulkData.length} ${BULK_CFG[_bulkKind].noun}${_bulkKind === 'log' ? (_bulkData.length === 1 ? 'y' : 'ies') : (_bulkData.length === 1 ? '' : 's')}</strong> ready to import${bulkErrHtml(errors, 'rows will be skipped')}<br><br>${_bulkData.slice(0, 3).map(bulkSample).join('<br>')}${_bulkData.length > 3 ? `<br>…and ${_bulkData.length - 3} more` : ''}</div>`;
+  prev.innerHTML = `<div class="info-box" style="font-size:12px">${ic('check')} <strong>${_bulkData.length} ${BULK_CFG[_bulkKind].noun}${_bulkKind === 'log' ? (_bulkData.length === 1 ? 'y' : 'ies') : (_bulkData.length === 1 ? '' : 's')}</strong> ready to import${bulkErrHtml(errors, 'rows will be skipped')}<br><br>${_bulkData.slice(0, 3).map(bulkSample).join('<br>')}${_bulkData.length > 3 ? `<br>…and ${_bulkData.length - 3} more` : ''}</div>`;
   btn.style.display = '';
 }
 function showBulkResult(headline, skipped, warn) {
@@ -5726,7 +5727,7 @@ function showBulkResult(headline, skipped, warn) {
   document.getElementById('bulkFile').value = '';
   document.getElementById('bulkImportBtn').style.display = 'none';
   const prev = document.getElementById('bulkPreview'); prev.style.display = 'block';
-  prev.innerHTML = `<div class="info-box" style="font-size:12px">${headline}${warn ? `<br>⚠️ ${_esc(warn)}` : ''}${bulkErrHtml(skipped || [], 'skipped')}</div>`;
+  prev.innerHTML = `<div class="info-box" style="font-size:12px">${headline}${warn ? `<br>${ic('triangle-alert')} ${_esc(warn)}` : ''}${bulkErrHtml(skipped || [], 'skipped')}</div>`;
 }
 
 function openBulk(kind) {
@@ -5744,7 +5745,7 @@ function openBulk(kind) {
 function downloadTemplate() {
   const c = BULK_CFG[_bulkKind];
   dlFile(c.file, 'text/csv', c.tpl);
-  toast('📥 Template downloaded!', 'ok');
+  toast('Template downloaded!', 'ok');
 }
 
 async function previewBulk(event) {
@@ -5825,14 +5826,14 @@ function importItemsBulk() {
       if (!r.ok) throw new Error(j.error || ('server ' + r.status));
       if (j.logFailed) toast('Imported, but the Log entries failed to save', 'wrn');
       setTimeout(() => syncFromServer(true), 800);
-    }).catch(e => toast('⚠️ Server import FAILED: ' + e.message + ' — not saved to server', 'err'));
+    }).catch(e => toast('Server import FAILED: ' + e.message + ' — not saved to server', 'err'));
   }
 
   _bulkData = [];
   document.getElementById('bulkFile').value = '';
   document.getElementById('bulkPreview').style.display = 'none';
   document.getElementById('bulkImportBtn').style.display = 'none';
-  toast(`✅ ${added} added, ${updated} updated!`, 'ok');
+  toast(`${added} added, ${updated} updated!`, 'ok');
 }
 
 async function importProductsBulk() {
@@ -5841,7 +5842,7 @@ async function importProductsBulk() {
   logAct(`Bulk imported products: ${r.added} item(s), ${r.productsAdded} new product(s)`); save();
   await syncProducts();
   if (curTab === 'inv' && stockMode === 'products') renderStockView();
-  showBulkResult(`🧩 <strong>${r.added} item${r.added !== 1 ? 's' : ''}</strong> added${r.productsAdded ? ` in ${r.productsAdded} new product${r.productsAdded !== 1 ? 's' : ''}` : ''}`, r.skipped, r.logFailed ? 'Items saved, but their Log entries failed' : '');
+  showBulkResult(`${ic('puzzle')} <strong>${r.added} item${r.added !== 1 ? 's' : ''}</strong> added${r.productsAdded ? ` in ${r.productsAdded} new product${r.productsAdded !== 1 ? 's' : ''}` : ''}`, r.skipped, r.logFailed ? 'Items saved, but their Log entries failed' : '');
   setTimeout(() => syncFromServer(true), 500);
 }
 
@@ -5849,7 +5850,7 @@ async function importLogBulk() {
   const who = S.user?.name || S.user?.email || '';
   const r = await pApi('POST', '/api/transactions/log-only/bulk', { groupId: gid(), person: who, rows: _bulkData });
   logAct(`Bulk imported log: ${r.added} entr${r.added === 1 ? 'y' : 'ies'} (no stock change)`); save();
-  showBulkResult(`📝 <strong>${r.added} log entr${r.added === 1 ? 'y' : 'ies'}</strong> added` + (r.duplicates ? ` · ${r.duplicates} duplicate${r.duplicates !== 1 ? 's' : ''} skipped` : ''), r.skipped.filter(s => !/^duplicate/.test(s.reason)), '');
+  showBulkResult(`${ic('file-text')} <strong>${r.added} log entr${r.added === 1 ? 'y' : 'ies'}</strong> added` + (r.duplicates ? ` · ${r.duplicates} duplicate${r.duplicates !== 1 ? 's' : ''} skipped` : ''), r.skipped.filter(s => !/^duplicate/.test(s.reason)), '');
   setTimeout(() => syncFromServer(true), 500);
 }
 
@@ -5857,8 +5858,10 @@ function resetData() {
   if (!confirm('Delete ALL data? Cannot undo.')) return;
   localStorage.removeItem('ls2'); location.reload();
 }
+const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2300}-\u{23FF}][\uFE0F\u200D\u{1F300}-\u{1FAFF}]*/gu;
 function toast(msg, type='ok') {
   const el = document.getElementById('toast');
+  msg = String(msg).replace(EMOJI_RE, '').replace(/^\s+/, '').replace(/!+\s*$/, '');
   el.textContent = msg; el.className = `show ${type}`;
   clearTimeout(window._t);
   window._t = setTimeout(()=>el.classList.remove('show'), 3200);
@@ -6037,7 +6040,7 @@ async function uploadLocalExpiryOnce(serverItems) {
     ));
     if (ok.every(Boolean)) {
       localStorage.setItem(flag, '1');
-      if (todo.length) toast(`⏳ ${todo.length} expiry date${todo.length !== 1 ? 's' : ''} synced to server`, 'ok');
+      if (todo.length) toast(`${todo.length} expiry date${todo.length !== 1 ? 's' : ''} synced to server`, 'ok');
     }
   } catch (e) {}
 }
@@ -6067,7 +6070,7 @@ function _connectRealtime(groupId) {
   let heartbeat;
   let retries = 0;
   ws.onopen = () => {
-    console.log('[Realtime] Connected ✅');
+    console.log(('[Realtime] Connected ' + ic('check')));
     retries = 0;
     ws.send(JSON.stringify({
       topic: `realtime:public:inventory:group_id=eq.${groupId}`,
@@ -6148,10 +6151,10 @@ function openProductPage(itemId) {
     expiryRow.style.display = '';
     const daysLeft = daysUntil(item.expiry);
     if (daysLeft < 0) {
-      expiryEl.textContent = `⛔ Expired (${item.expiry})`;
+      expiryEl.innerHTML = `${ic('ban')} Expired (${item.expiry})`;
       expiryEl.style.color = 'var(--danger)';
     } else if (daysLeft <= EXPIRY_WARN_DAYS) {
-      expiryEl.textContent = `⚠️ ${item.expiry} (${daysLeft}d left)`;
+      expiryEl.innerHTML = `${ic('triangle-alert')} ${item.expiry} (${daysLeft}d left)`;
       expiryEl.style.color = 'var(--warn)';
     } else {
       expiryEl.textContent = item.expiry;
@@ -6190,15 +6193,15 @@ function openProductPage(itemId) {
     .slice(0, 5);
   const rList = document.getElementById('productRecentList');
   if (!recentTx.length) {
-    rList.innerHTML = '<div class="empty" style="padding:24px 16px"><div class="empty-icon" style="font-size:32px">↕️</div><p>No transactions yet</p></div>';
+    rList.innerHTML = ('<div class="empty" style="padding:24px 16px"><div class="empty-icon" style="font-size:32px">' + ic('arrow-up-down') + '</div><p>No transactions yet</p></div>');
   } else {
     rList.innerHTML = recentTx.map(t => {
       const isIn = t.type === 'IN';
       const isLog = t.source === 'LOG_ONLY';
       return `<div class="list-row">
-        <div class="row-icon ${isIn?'in':'out'}">${isLog?'📝':(isIn?'📦':'🔻')}</div>
+        <div class="row-icon ${isIn?'in':'out'}">${isLog?ic('file-text'):(isIn?ic('package'):ic('arrow-down'))}</div>
         <div class="row-body">
-          <div class="row-title">${isLog?'📝 Logged':(isIn ? '▲ Inward' : '▼ Outward')}: ${t.qty} ${t.unit||item.unit}</div>
+          <div class="row-title">${isLog?(ic('file-text') + ' Logged'):(isIn ? '▲ Inward' : '▼ Outward')}: ${t.qty} ${t.unit||item.unit}</div>
           <div class="row-sub">${t.date||'Today'} • ${isIn?'From':'By'}: ${t.person||'Unknown'}${isLog?' • no stock change':''}</div>
         </div>
         <div class="row-val ${isIn?'in':'out'}">${isLog?'•':(isIn?'+':'−')}${t.qty}</div>
@@ -6376,7 +6379,7 @@ async function handlePhotoUpload(event) {
       document.getElementById('productPhotoPlaceholder').style.display = 'none';
       document.getElementById('photoDeleteBtn').style.display = 'flex';
       if (_upOk) setPhotoIdx(item.name, Date.now());
-      toast(_upOk ? '📷 Photo saved!' : '📷 Saved on this phone only — server upload failed', _upOk ? 'ok' : 'wrn');
+      toast(_upOk ? 'Photo saved!' : 'Saved on this phone only — server upload failed', _upOk ? 'ok' : 'wrn');
     };
     img.src = e.target.result;
   };
@@ -6769,14 +6772,14 @@ function populateAddMemberPanel() {
 function copyInviteLink() {
   const link = generateInviteLink(S.activeGroupId);
   navigator.clipboard.writeText(link)
-    .then(() => toast('📋 Invite link copied!', 'ok'))
+    .then(() => toast('Invite link copied!', 'ok'))
     .catch(() => { prompt('Copy this link:', link); });
 }
 
 function copyGroupCode() {
   const code = getGroupCode(S.activeGroupId);
   navigator.clipboard.writeText(code)
-    .then(() => toast('📋 Group code copied: ' + code, 'ok'))
+    .then(() => toast('Group code copied: ' + code, 'ok'))
     .catch(() => { prompt('Group code:', code); });
 }
 
@@ -6793,9 +6796,9 @@ function checkExpiryAlerts() {
   });
 
   if (expired.length) {
-    toast(`⛔ ${expired.length} item(s) EXPIRED! Check inventory.`, 'err');
+    toast(`${expired.length} item(s) EXPIRED! Check inventory.`, 'err');
   } else if (expiring.length) {
-    toast(`⚠️ ${expiring.length} item(s) expiring within ${EXPIRY_WARN_DAYS} days`, 'wrn');
+    toast(`${expiring.length} item(s) expiring within ${EXPIRY_WARN_DAYS} days`, 'wrn');
   }
 }
 
@@ -6865,11 +6868,11 @@ function _showPublicLocationView(locationKey, groupId) {
     '<div style="min-height:100vh;background:#f5f3ee;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px">' +
     '<div style="max-width:400px;width:100%">' +
     '<div style="text-align:center;margin-bottom:20px">' +
-    '<div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div>' +
-    '<div style="font-size:12px;color:#888;margin-top:4px">📍 ' + locLabel + '</div></div>' +
+    ('<div style="font-size:28px;font-weight:800;color:#2d6a4f">' + ic('flask-conical') + ' LabStock</div>') +
+    ('<div style="font-size:12px;color:#888;margin-top:4px">' + ic('map-pin') + ' ') + locLabel + '</div></div>' +
     '<div id="pubLocCard" style="background:white;border-radius:16px;padding:20px;box-shadow:0 2px 16px rgba(0,0,0,.08)">' +
-    '<div style="text-align:center;color:#888;padding:20px">⏳ Loading items...</div></div>' +
-    '<a href="' + cleanUrl + '" style="display:block;margin-top:16px;text-align:center;padding:14px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">🔑 Sign in for full access</a>' +
+    ('<div style="text-align:center;color:#888;padding:20px">' + ic('hourglass') + ' Loading items...</div></div>') +
+    '<a href="' + cleanUrl + ('" style="display:block;margin-top:16px;text-align:center;padding:14px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">' + ic('key-round') + ' Sign in for full access</a>') +
     '<p style="text-align:center;font-size:11px;color:#aaa;margin-top:10px">Scan again after signing in to manage stock</p>' +
     '</div></div>';
 
@@ -6884,7 +6887,7 @@ function _showPublicLocationView(locationKey, groupId) {
       if (!items.length) {
         c.innerHTML =
           '<div style="text-align:center;padding:24px">' +
-          '<div style="font-size:32px;margin-bottom:12px">❌</div>' +
+          ('<div style="font-size:32px;margin-bottom:12px">' + ic('circle-x') + '</div>') +
           '<div style="color:#e53935;font-weight:700;font-size:15px">No items found</div>' +
           '<div style="color:#aaa;font-size:12px;margin-top:6px">Location: ' + locLabel + '</div>' +
           '</div>';
@@ -6902,7 +6905,7 @@ function _showPublicLocationView(locationKey, groupId) {
     })
     .catch(() => {
       const c = document.getElementById('pubLocCard');
-      if (c) c.innerHTML = '<div style="color:#e53935;text-align:center;padding:20px">❌ Could not load items.<br><span style="font-size:12px;color:#aaa">Check your connection</span></div>';
+      if (c) c.innerHTML = ('<div style="color:#e53935;text-align:center;padding:20px">' + ic('circle-x') + ' Could not load items.<br><span style="font-size:12px;color:#aaa">Check your connection</span></div>');
     });
 }
 
@@ -6915,11 +6918,11 @@ function _showPublicItemView(itemCode, groupId) {
     '<div style="min-height:100vh;background:#f5f3ee;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:24px 16px">' +
     '<div style="max-width:400px;width:100%">' +
     '<div style="text-align:center;margin-bottom:20px">' +
-    '<div style="font-size:28px;font-weight:800;color:#2d6a4f">🧪 LabStock</div>' +
+    ('<div style="font-size:28px;font-weight:800;color:#2d6a4f">' + ic('flask-conical') + ' LabStock</div>') +
     '<div style="font-size:12px;color:#888;margin-top:4px">Lab Inventory</div></div>' +
     '<div id="pubCard" style="background:white;border-radius:16px;padding:24px;box-shadow:0 2px 16px rgba(0,0,0,.08)">' +
-    '<div style="text-align:center;color:#888;padding:20px">⏳ Loading item...</div></div>' +
-    '<a href="' + cleanUrl + '" style="display:block;margin-top:16px;text-align:center;padding:14px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">🔑 Sign in for full access</a>' +
+    ('<div style="text-align:center;color:#888;padding:20px">' + ic('hourglass') + ' Loading item...</div></div>') +
+    '<a href="' + cleanUrl + ('" style="display:block;margin-top:16px;text-align:center;padding:14px;background:#2d6a4f;color:white;border-radius:12px;text-decoration:none;font-weight:700;font-size:15px">' + ic('key-round') + ' Sign in for full access</a>') +
     '<p style="text-align:center;font-size:11px;color:#aaa;margin-top:10px">Scan again after signing in to manage stock</p>' +
     '</div></div>';
 
@@ -6941,7 +6944,7 @@ function _showPublicItemView(itemCode, groupId) {
       if (!item) {
         c.innerHTML =
           '<div style="text-align:center;padding:24px">' +
-          '<div style="font-size:32px;margin-bottom:12px">❌</div>' +
+          ('<div style="font-size:32px;margin-bottom:12px">' + ic('circle-x') + '</div>') +
           '<div style="color:#e53935;font-weight:700;font-size:15px">Item not found</div>' +
           '<div style="color:#aaa;font-size:12px;margin-top:6px">Code: ' + itemCode + '</div>' +
           '<div style="color:#aaa;font-size:11px;margin-top:4px">The item may have been deleted or the QR is outdated</div>' +
@@ -6951,7 +6954,7 @@ function _showPublicItemView(itemCode, groupId) {
       const low = item.stock <= (item.minStock || 10);
       const watch = item.stock <= (item.minStock || 10) * 1.5;
       const color = low ? '#e53935' : watch ? '#e07a00' : '#2d6a4f';
-      const statusText = low ? '⚠️ LOW STOCK' : '✅ In Stock';
+      const statusText = low ? (ic('triangle-alert') + ' LOW STOCK') : (ic('check') + ' In Stock');
       const statusBg = low ? '#fdecea' : '#e8f5e9';
       c.innerHTML =
         '<div style="font-size:20px;font-weight:800;margin-bottom:4px;color:#1a1a1a">' + item.name + '</div>' +
@@ -6965,14 +6968,14 @@ function _showPublicItemView(itemCode, groupId) {
         '<div style="font-size:11px;color:#888;margin-top:2px">min level</div></div></div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
         (item.category ? '<span style="padding:4px 10px;background:#e8f5e9;color:#2d6a4f;border-radius:20px;font-size:12px">' + item.category + '</span>' : '') +
-        (item.location ? '<span style="padding:4px 10px;background:#f3f4f6;color:#555;border-radius:20px;font-size:12px">📍 ' + item.location + '</span>' : '') +
+        (item.location ? ('<span style="padding:4px 10px;background:#f3f4f6;color:#555;border-radius:20px;font-size:12px">' + ic('map-pin') + ' ') + item.location + '</span>' : '') +
         '<span style="padding:4px 10px;background:' + statusBg + ';color:' + color + ';border-radius:20px;font-size:12px;font-weight:700">' + statusText + '</span>' +
         '</div>' +
         '<div style="font-size:11px;color:#bbb;margin-top:16px;text-align:center">View only · Sign in for full access</div>';
     })
     .catch(() => {
       const c = document.getElementById('pubCard');
-      if (c) c.innerHTML = '<div style="color:#e53935;text-align:center;padding:20px">❌ Could not load item.<br><span style="font-size:12px;color:#aaa">Check your connection</span></div>';
+      if (c) c.innerHTML = ('<div style="color:#e53935;text-align:center;padding:20px">' + ic('circle-x') + ' Could not load item.<br><span style="font-size:12px;color:#aaa">Check your connection</span></div>');
     });
 }
 
@@ -7072,7 +7075,7 @@ async function _joinGroupDirectly(groupId, groupName, groupDesc, adminEmail) {
     }
   } catch(e) {}
   syncFromServer(true);
-  toast(`✅ Joined "${groupName}"! Loading inventory...`, 'ok');
+  toast(`Joined "${groupName}"! Loading inventory...`, 'ok');
 }
 load();
 // Check for invite link on page load
