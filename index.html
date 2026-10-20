@@ -661,8 +661,8 @@ select.form-input { cursor: pointer; }
 #piPage.open{display:flex;transform:translateX(0)}
 /* ── PHASE A: easy clicks ── */
 button,.btn,.exp-chip,select,.nav-tab{touch-action:manipulation}
-.hdr-actions{display:flex;gap:8px;width:100%}
-.hdr-actions .btn{flex:1}
+.hdr-actions{display:flex;flex-wrap:wrap;gap:8px;width:100%}
+.hdr-actions .btn{flex:1;padding-left:10px;padding-right:10px}
 div:has(> .exp-chip){gap:8px !important}
 .section-title span[onclick]{display:inline-block;padding:12px 8px 12px 0}
 .hit{position:relative}
@@ -910,6 +910,8 @@ div:has(> .exp-chip){gap:8px !important}
         <div class="section-hd" style="flex-wrap:wrap;gap:8px">
           <div class="section-title" id="invCountTitle" style="width:100%">All Items</div>
           <div class="hdr-actions">
+          <button class="btn btn-ghost btn-sm" onclick="toggleProdView()" id="btnProdView" style="display:none"></button>
+          <button class="btn btn-ghost btn-sm" onclick="openProdExport()" id="btnProdExport" style="display:none"><i data-ic="download"></i> Export</button>
           <button class="btn btn-ghost btn-sm" onclick="openLocationQRPrintAll()" id="btnLocPrintAll" style="display:none"><i data-ic="printer"></i> Print All</button>
           <button class="btn btn-primary btn-sm" onclick="newProduct()" id="btnNewProduct" style="display:none">+ Product</button>
           <button class="btn btn-ghost btn-sm" onclick="openBulk(stockMode==='products'?'products':'items')" id="btnBulk"><i data-ic="inbox"></i> Bulk</button>
@@ -1495,6 +1497,31 @@ div:has(> .exp-chip){gap:8px !important}
           <button class="btn btn-ghost" onclick="doStockExport('print')" style="flex-direction:column;gap:4px;padding:14px">
             <span style="font-size:22px"><i data-ic="printer"></i></span><span style="font-size:12px">Print / PDF</span>
           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Products BOM export (N8d) -->
+<div class="sheet-overlay" id="prodExportSheet" onclick="sheetBgClose(event,'prodExportSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Export products (BOM)</div>
+      <button class="sheet-close" onclick="closeSheet('prodExportSheet')"><i data-ic="x"></i></button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-group">
+        <label class="form-label">Products</label>
+        <div id="bomChips" style="display:flex;gap:8px;flex-wrap:wrap;max-height:180px;overflow-y:auto"></div>
+      </div>
+      <div class="info-box" id="bomSummary" style="font-size:12px"></div>
+      <div class="form-group">
+        <label class="form-label">Format</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+          <button class="btn btn-ghost" onclick="doProdExport('csv')" style="flex-direction:column;gap:4px;padding:14px"><span style="font-size:22px"><i data-ic="chart-column"></i></span><span style="font-size:12px">CSV / Excel</span></button>
+          <button class="btn btn-ghost" onclick="doProdExport('print')" style="flex-direction:column;gap:4px;padding:14px"><span style="font-size:22px"><i data-ic="printer"></i></span><span style="font-size:12px">Print / PDF</span></button>
         </div>
       </div>
     </div>
@@ -4152,6 +4179,9 @@ function updateLocPrintAllBtn() {
   if (np) np.style.display = (stockMode === 'products' && !_productView && isAdmin()) ? '' : 'none';
   const bb = document.getElementById('btnBulk');
   if (bb) bb.style.display = (stockMode === 'items' || (stockMode === 'products' && !_productView && isAdmin())) ? '' : 'none';
+  const pv = document.getElementById('btnProdView'), pe = document.getElementById('btnProdExport');
+  if (pv) { pv.style.display = stockMode === 'products' ? '' : 'none'; pv.innerHTML = prodViewMode === 'grid' ? (ic('list') + ' List') : (ic('layout-grid') + ' Grid'); }
+  if (pe) pe.style.display = (stockMode === 'products' && isAdmin()) ? '' : 'none';
 }
 
 // Groups items by trimmed+lowercased location. Display label = most
@@ -4302,6 +4332,7 @@ function renderProductList() {
     el.innerHTML = `<div class="empty"><div class="empty-icon">${ic('puzzle')}</div><p>${msg}</p></div>`;
     return;
   }
+  if (prodViewMode === 'grid') { el.innerHTML = '<div class="tile-grid" style="padding:10px">' + ps.map(productCardHTML).join('') + '</div>'; return; }
   el.innerHTML = ps.map(p => `<div class="list-row" style="cursor:pointer" onclick="openProductView('${p.id}')">
       <div class="row-icon info"${p.photoV > 0 ? ' style="overflow:hidden;padding:0"' : ''}>${p.photoV > 0 ? `<img src="${prPhotoUrl(p)}" loading="lazy" alt="" onerror="this.parentNode.innerHTML=ic('puzzle')" style="width:100%;height:100%;object-fit:cover">` : ic('puzzle')}</div>
       <div class="row-body"><div class="row-title">${_esc(p.name)}</div><div class="row-sub">${p.items.length} item${p.items.length !== 1 ? 's' : ''}</div></div>
@@ -4347,7 +4378,7 @@ function openProductView(id) {
     (adm ? '<button class="btn btn-primary btn-sm" onclick="openPISheet()">+ Add item</button>' +
            ('<button class="btn btn-ghost btn-sm" onclick="renameProduct()">' + ic('pencil') + '</button>') +
            ('<button class="btn btn-danger btn-sm" onclick="deleteProduct()">' + ic('trash-2') + '</button>') : '') + '</div>';
-  el.innerHTML = head + (items.length ? items.map(productItemRowHTML).join('')
+  el.innerHTML = head + (items.length ? (prodViewMode === 'grid' ? '<div class="tile-grid" style="padding:10px">' + items.map(productItemCardHTML).join('') + '</div>' : items.map(productItemRowHTML).join(''))
     : ('<div class="empty"><div class="empty-icon">' + ic('puzzle') + '</div><p>No items in this product yet.</p></div>'));
 }
 
@@ -4631,6 +4662,86 @@ async function saveImage(url, base) {
   const d = document.getElementById('photoDeleteBtn'), b = document.getElementById('photoDownloadBtn');
   if (d && b) new MutationObserver(() => { b.style.display = d.style.display; }).observe(d, { attributes: true, attributeFilter: ['style'] });
 })();
+
+// ── PRODUCTS: GRID / LIST + BOM EXPORT (N8 c, d) ──
+let prodViewMode = 'grid', _bomSel = [];
+try { prodViewMode = localStorage.getItem('labstock_prod_view') === 'list' ? 'list' : 'grid'; } catch (e) {}
+function toggleProdView() {
+  prodViewMode = prodViewMode === 'grid' ? 'list' : 'grid';
+  try { localStorage.setItem('labstock_prod_view', prodViewMode); } catch (e) {}
+  renderStockView();
+}
+function prodTileHTML(onclick, imgUrl, fallbackIcon, name, sub, subStyle) {
+  const img = imgUrl
+    ? `<img src="${imgUrl}" loading="lazy" alt="" onerror="this.parentNode.innerHTML=ic('${fallbackIcon}')" style="width:100%;height:100%;object-fit:cover">`
+    : ic(fallbackIcon);
+  return `<div class="category-tile" onclick="${onclick}" style="padding:0;overflow:hidden">
+    <div style="aspect-ratio:1/1;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:40px;color:var(--muted);overflow:hidden">${img}</div>
+    <div style="padding:10px 12px"><div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_esc(name)}</div><div style="font-size:12px;${subStyle}">${sub}</div></div>
+  </div>`;
+}
+function productCardHTML(p) {
+  return prodTileHTML(`openProductView('${p.id}')`, p.photoV > 0 ? prPhotoUrl(p) : '', 'puzzle', p.name, p.items.length + ' item' + (p.items.length !== 1 ? 's' : ''), 'color:var(--muted)');
+}
+function productItemCardHTML(pi) {
+  return prodTileHTML(`openPIPage('${pi.id}')`, pi.photoV > 0 ? piPhotoUrl(pi) : '', 'package', pi.name, String(pi.qty), 'font-weight:700;color:var(--accent)');
+}
+function openProdExport() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  _bomSel = _productView ? [_productView] : [];
+  renderBomSheet(); openSheet('prodExportSheet');
+}
+function toggleBomProd(id) {
+  if (!id) _bomSel = [];
+  else _bomSel = _bomSel.includes(id) ? _bomSel.filter(x => x !== id) : [..._bomSel, id];
+  renderBomSheet();
+}
+function bomProducts() {
+  const all = prods().sort((a, b) => a.name.localeCompare(b.name));
+  return _bomSel.length ? all.filter(p => _bomSel.includes(p.id)) : all;
+}
+function bomRows() {
+  const rows = [];
+  bomProducts().forEach(p => [...p.items].sort((a, b) => a.name.localeCompare(b.name)).forEach(i => rows.push([p.name, i.name, i.qty, i.note || ''])));
+  return rows;
+}
+function renderBomSheet() {
+  const all = prods().sort((a, b) => a.name.localeCompare(b.name));
+  _bomSel = _bomSel.filter(id => all.some(p => p.id === id));
+  document.getElementById('bomChips').innerHTML = `<button type="button" class="exp-chip${_bomSel.length ? '' : ' on'}" onclick="toggleBomProd('')">All</button>` +
+    all.map(p => `<button type="button" class="exp-chip${_bomSel.includes(p.id) ? ' on' : ''}" onclick="toggleBomProd('${p.id}')">${_esc(p.name)}</button>`).join('');
+  const n = bomProducts().length, m = bomRows().length;
+  document.getElementById('bomSummary').innerHTML = `<strong>${m} item${m !== 1 ? 's' : ''}</strong> in ${n} product${n !== 1 ? 's' : ''} will be exported<br>Columns: Product, Item, Qty, Note (same as the Products bulk upload).`;
+}
+function doProdExport(format) {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  const rows = bomRows();
+  if (!rows.length) { toast('No items to export', 'wrn'); return; }
+  const sel = bomProducts(), g = S.groups.find(x => x.id === gid());
+  const slug = (_bomSel.length === 1 && sel[0] ? sel[0].name : 'products').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'products';
+  const fname = `labstock_${slug}_${localDateStr()}`;
+  if (format === 'csv') {
+    const csv = '\uFEFF' + [['Product', 'Item', 'Qty', 'Note'], ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    dlFile(fname + '.csv', 'text/csv', csv);
+    toast('Products CSV downloaded', 'ok');
+  } else {
+    const win = window.open('', '_blank');
+    if (!win) { toast('Allow popups for this site', 'err'); return; }
+    const blocks = sel.filter(p => p.items.length).map(p =>
+      `<h3>${_esc(p.name)} <span>${p.items.length} item${p.items.length !== 1 ? 's' : ''}</span></h3><table><thead><tr><th>Item</th><th style="width:70px">Qty</th><th>Note</th></tr></thead><tbody>` +
+      [...p.items].sort((a, b) => a.name.localeCompare(b.name)).map(i => `<tr><td>${_esc(i.name)}</td><td><b>${i.qty}</b></td><td>${_esc(i.note || '')}</td></tr>`).join('') + '</tbody></table>').join('');
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>LabStock Products BOM</title>
+    <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:20px;color:#1a1a1a}h2{color:#2d6a4f;margin-bottom:4px}p{font-size:13px;color:#666;margin-bottom:16px}
+    h3{margin:22px 0 8px;font-size:15px;color:#2d6a4f}h3 span{font-size:12px;font-weight:400;color:#888}table{width:100%;border-collapse:collapse;font-size:13px;page-break-inside:auto}
+    th{background:#2d6a4f;color:white;padding:7px 10px;text-align:left}td{padding:7px 10px;border:1px solid #ddd}tr{page-break-inside:avoid}
+    button{background:#2d6a4f;color:white;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;margin-bottom:12px}@media print{button{display:none}body{padding:8px}}</style></head>
+    <body><h2>LabStock Products BOM</h2><p>${_esc(g ? g.name : '')} | ${new Date().toLocaleDateString()} | ${sel.length} product${sel.length !== 1 ? 's' : ''}, ${rows.length} item${rows.length !== 1 ? 's' : ''}</p>
+    <button onclick="window.print()">Print / Save as PDF</button>${blocks}</body></html>`);
+    win.document.close();
+    toast('Print window opened', 'ok');
+  }
+  closeSheet('prodExportSheet');
+}
 
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
 let txTypeState = 'IN';
