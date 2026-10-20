@@ -675,6 +675,40 @@ div:has(> .exp-chip){gap:8px !important}
   .product-back{width:44px;height:44px}
   .install-dismiss{min-width:44px}
 }
+
+/* ── PHASE E: wide screens (phone layout above 600 px is untouched) ── */
+@media (min-width:600px){
+  .page{max-width:880px;margin-left:auto;margin-right:auto}
+  .kpi-row{grid-template-columns:repeat(4,1fr)}
+  .tile-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+  .sheet-overlay{align-items:center;justify-content:center;padding:24px}
+  .sheet{max-width:560px;border-radius:20px;max-height:90vh;animation:dialogIn .2s ease}
+  .sheet-handle{display:none}
+  @keyframes dialogIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+  #toast{left:50%;right:auto;width:min(520px,calc(100% - 32px));transform:translate(-50%,-20px)}
+  #toast.show{transform:translate(-50%,0)}
+  .product-photo-wrap{max-height:360px}
+  .product-scroll>*{max-width:640px;margin-left:auto;margin-right:auto}
+}
+@media (min-width:1024px){
+  :root{--rail-w:88px}
+  .bottom-nav{top:0;bottom:0;right:auto;width:var(--rail-w);height:auto;flex-direction:column;align-items:stretch;justify-content:flex-start;padding:16px 0;border-top:none;border-right:1px solid var(--border);box-shadow:none;z-index:11}
+  .nav-tab{flex:0 0 auto;padding:14px 0}
+  .nav-tab:hover{background:var(--surface2)}
+  .nav-tab.active{background:var(--accent-bg)}
+  .nav-tab.active .nav-icon{transform:none}
+  .topbar{margin-left:var(--rail-w)}
+  .page-scroll{margin-left:var(--rail-w);padding-bottom:24px;overflow-y:auto !important}
+  .fab{bottom:24px;right:28px}
+  #offlineBanner{bottom:0;left:var(--rail-w)}
+  #productPage,#logPage,#piPage{left:auto;width:min(560px,100%);border-left:1px solid var(--border);box-shadow:-8px 0 32px rgba(0,0,0,.14)}
+  /* detail panel open: list rows stay clickable (master-detail), everything else behind it is inert */
+  .topbar,.page-scroll{transition:margin-right .3s}
+  body:has(#productPage.open,#logPage.open,#piPage.open) .topbar,body:has(#productPage.open,#logPage.open,#piPage.open) .page-scroll{margin-right:560px}
+  body:has(#productPage.open,#logPage.open,#piPage.open) .bottom-nav{pointer-events:none;opacity:.5}
+  body:has(#productPage.open,#logPage.open,#piPage.open) .page-scroll{pointer-events:none}
+  body:has(#productPage.open,#logPage.open,#piPage.open) .page-scroll :is(.list-row,.category-tile){pointer-events:auto}
+}
 </style>
 </head>
 <body>
