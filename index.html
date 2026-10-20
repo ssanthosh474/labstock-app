@@ -657,6 +657,8 @@ select.form-input { cursor: pointer; }
   border-radius: 50%; animation: _spin .7s linear infinite;
 }
 
+#piPage{position:fixed;inset:0;z-index:150;background:var(--bg);display:none;flex-direction:column;transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1)}
+#piPage.open{display:flex;transform:translateX(0)}
 /* ── PHASE A: easy clicks ── */
 button,.btn,.exp-chip,select,.nav-tab{touch-action:manipulation}
 .hdr-actions{display:flex;gap:8px;width:100%}
@@ -1107,6 +1109,7 @@ div:has(> .exp-chip){gap:8px !important}
       <div class="product-photo-actions">
         <label class="photo-action-btn" for="photoFileInput"><i data-ic="camera"></i> Photo</label>
         <button class="photo-action-btn" id="photoDeleteBtn" onclick="deleteProductPhoto()" style="display:none"><i data-ic="trash-2"></i> Remove</button>
+        <button class="photo-action-btn" id="photoDownloadBtn" onclick="downloadItemPhoto()" style="display:none"><i data-ic="download"></i> Download</button>
       </div>
     </div>
     <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="handlePhotoUpload(event)">
@@ -1172,6 +1175,21 @@ div:has(> .exp-chip){gap:8px !important}
 <!-- ════════════════════════════════════
      BOTTOM SHEETS
 ════════════════════════════════════ -->
+
+<!-- Product-item page (N8b) -->
+<div id="piPage">
+  <div class="product-topbar">
+    <div class="product-back" onclick="closePIPage()">←</div>
+    <div style="flex:1;min-width:0;font-family:var(--display);font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="piPageTitle">Item</div>
+    <button class="btn btn-ghost btn-sm" id="piPageEdit" onclick="piPageEdit()"><i data-ic="pencil"></i> Edit</button>
+    <button class="btn btn-ghost btn-sm" id="piPageDel" onclick="piPageDelete()" style="color:var(--danger);border-color:#ffc9cb"><i data-ic="trash-2"></i></button>
+  </div>
+  <div class="product-scroll" id="piPageBody"></div>
+  <div class="product-action-bar">
+    <button class="btn-in" onclick="piPageMove('IN')">▲ IN</button>
+    <button class="btn-out" onclick="piPageMove('OUT')">▼ OUT</button>
+  </div>
+</div>
 
 <!-- Log detail page (phase D) -->
 <div id="logPage">
@@ -2625,6 +2643,13 @@ window.addEventListener('popstate', function(e) {
     _logPageId = null;
     return;
   }
+  const pp = document.getElementById('piPage');
+  if (pp && pp.classList.contains('open')) {
+    pp.classList.remove('open');
+    setTimeout(() => { pp.style.display = 'none'; }, 300);
+    _piPageId = null; _piPageHist = false;
+    return;
+  }
   const productPage = document.getElementById('productPage');
   if (productPage && productPage.classList.contains('open')) {
     productPage.classList.remove('open');
@@ -2634,6 +2659,7 @@ window.addEventListener('popstate', function(e) {
     updateAlertBadge();
     return;
   }
+  if (curTab === 'inv' && stockMode === 'products' && _productView) { _prodViewHist = false; _productView = null; renderProductList(); return; }
   if (curTab !== 'home') switchTab('home');
   // else: already home, no overlay open — let the browser exit normally
 });
@@ -4104,6 +4130,7 @@ let stockMode = 'items';
 let _locationView = null; // normalized location key currently being viewed, or null = location list
 
 function setStockMode(mode) {
+  if (_prodViewHist) { _prodViewHist = false; histBack(); }
   stockMode = mode;
   _locationView = null;
   _productView = null;
@@ -4288,7 +4315,7 @@ function productItemRowHTML(pi) {
   const thumb = pi.photoV > 0
     ? `<img src="${piPhotoUrl(pi)}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover">`
     : ic('package');
-  return `<div class="list-row"${adm ? ` onclick="openPISheet('${pi.id}')" style="cursor:pointer"` : ''}>
+  return `<div class="list-row" onclick="openPIPage('${pi.id}')" style="cursor:pointer">
     <div class="row-icon in" style="width:52px;height:52px;overflow:hidden;font-size:22px">${thumb}</div>
     <div class="row-body">
       <div class="row-title">${_esc(pi.name)}</div>
@@ -4306,7 +4333,9 @@ function openProductView(id) {
   if (!p || p.groupId !== gid()) { _productView = null; renderProductList(); return; }
   if (curTab !== 'inv') switchTab('inv');
   if (stockMode !== 'products') { stockMode = 'products'; setStockModeUIOnly(); }
+  const firstOpen = !_productView;
   _productView = id;
+  if (firstOpen && !_prodViewHist) { history.pushState({ nav: 'prodview' }, '', ''); _prodViewHist = true; }
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
   if (title) title.innerHTML = `<span onclick="backToProductList()" style="cursor:pointer;color:var(--accent)">← Products</span> &nbsp;·&nbsp; ${ic('puzzle')} ${_esc(p.name)}`;
@@ -4322,7 +4351,7 @@ function openProductView(id) {
     : ('<div class="empty"><div class="empty-icon">' + ic('puzzle') + '</div><p>No items in this product yet.</p></div>'));
 }
 
-function backToProductList() { _productView = null; renderProductList(); }
+function backToProductList() { leaveProductView(); }
 
 // ── product create / edit (name + image) ──
 let _prEditId = null, _prPhoto;   // _prPhoto: undefined = unchanged, null = remove, string = new dataURL
@@ -4389,7 +4418,7 @@ async function deleteProduct() {
     await pApi('DELETE', '/api/products/' + encodeURIComponent(p.id));
     S.products = S.products.filter(x => x.id !== p.id);
     logAct(`Product deleted: ${p.name}`); save();
-    _productView = null; renderProductList();
+    leaveProductView();
     toast('Product deleted', 'wrn');
   } catch (e) { toast('Could not delete: ' + e.message, 'err'); }
 }
@@ -4448,7 +4477,7 @@ async function savePI() {
     }
     upsertLocalPI(r.item); save();
     closeSheet('piSheet');
-    renderStockView();
+    renderStockView(); refreshPIPage();
     toast(r.photoFailed ? 'Saved, but the image upload failed — edit the item to retry' : 'Saved', r.photoFailed ? 'wrn' : 'ok');
     setTimeout(() => syncFromServer(true), 300); // pulls the Log entry the server wrote
   } catch (e) { toast('Could not save: ' + e.message, 'err'); }
@@ -4461,7 +4490,7 @@ async function deletePI() {
   try {
     await pApi('DELETE', '/api/product-items/' + encodeURIComponent(pi.id));
     const p = getProd(pi.productId); if (p) p.items = p.items.filter(x => x.id !== pi.id);
-    save(); closeSheet('piSheet'); renderStockView(); toast('Item deleted', 'wrn');
+    save(); closeSheet('piSheet'); renderStockView(); if (_piPageId === pi.id) closePIPage(); toast('Item deleted', 'wrn');
   } catch (e) { toast('Could not delete: ' + e.message, 'err'); }
 }
 
@@ -4492,12 +4521,116 @@ async function submitPIMove() {
     const r = await pApi('POST', `/api/product-items/${encodeURIComponent(pi.id)}/move`, { type: _pmType, qty, person, notes });
     upsertLocalPI(r.item);
     S.transactions.unshift({ ...r.tx, id: 'srv_' + r.tx.id, _serverId: String(r.tx.id), groupId: gid(), source: 'PRODUCT' });
-    save(); closeSheet('piMoveSheet'); renderStockView();
+    save(); closeSheet('piMoveSheet'); renderStockView(); refreshPIPage();
     const p = getProd(pi.productId);
     toast(`${_pmType === 'IN' ? '▲' : '▼'} ${qty} · ${pi.name} → ${r.item.qty} left (${p ? p.name : 'product'})`, 'ok');
   } catch (e) { toast(e.message, 'err'); }
   btn.disabled = false; btn.textContent = 'Submit';
 }
+
+// ── PRODUCT-ITEM PAGE, PRODUCT-VIEW BACK, IMAGE DOWNLOAD (N8 a, b, e) ──
+let _piPageId = null, _piPageHist = false, _prodViewHist = false;
+function leaveProductView() {
+  if (_prodViewHist) { _prodViewHist = false; histBack(); }
+  _productView = null; renderProductList();
+}
+function openPIPage(id) {
+  const pi = findPI(id); if (!pi) return;
+  const page = document.getElementById('piPage');
+  const wasOpen = page.classList.contains('open');
+  _piPageId = id;
+  renderPIPage(pi);
+  document.getElementById('piPageBody').scrollTop = 0;
+  page.style.display = 'flex';
+  requestAnimationFrame(() => page.classList.add('open'));
+  if (!wasOpen && !_piPageHist) { history.pushState({ nav: 'piitem' }, '', ''); _piPageHist = true; }
+}
+function closePIPage() {
+  const page = document.getElementById('piPage');
+  page.classList.remove('open');
+  setTimeout(() => { page.style.display = 'none'; }, 300);
+  _piPageId = null;
+  if (_piPageHist) { _piPageHist = false; histBack(); }
+}
+function refreshPIPage() {
+  if (!_piPageId) return;
+  const pi = findPI(_piPageId);
+  if (!pi) { closePIPage(); return; }
+  if (document.getElementById('piPage').classList.contains('open')) renderPIPage(pi);
+}
+function renderPIPage(pi) {
+  const p = getProd(pi.productId), pname = p ? p.name : '';
+  const adm = isAdmin();
+  const photo = pi.photoV > 0 ? piPhotoUrl(pi) : '';
+  const rec = S.transactions.filter(t => t.groupId === gid() && !t._act && t.source === 'PRODUCT' && t.itemName === pi.name && t.category === 'Product: ' + pname).slice(0, 5);
+  document.getElementById('piPageTitle').textContent = pi.name;
+  document.getElementById('piPageEdit').style.display = adm ? '' : 'none';
+  document.getElementById('piPageDel').style.display = adm ? '' : 'none';
+  const recHtml = rec.length ? rec.map(t => {
+    const isIn = t.type === 'IN';
+    return `<div class="list-row" onclick="openLogPage('${t.id}')" style="cursor:pointer">
+      <div class="row-icon ${isIn ? 'in' : 'out'}">${isIn ? ic('package') : ic('arrow-down')}</div>
+      <div class="row-body"><div class="row-title">${isIn ? '▲ Inward' : '▼ Outward'}: ${t.qty}</div><div class="row-sub">${t.date || 'Today'} • ${isIn ? 'From' : 'By'}: ${_esc(t.person || 'Unknown')}</div></div>
+      <div class="row-val ${isIn ? 'in' : 'out'}">${isIn ? '+' : '−'}${t.qty}</div>
+    </div>`;
+  }).join('') : ('<div class="empty" style="padding:24px 16px"><div class="empty-icon" style="font-size:32px">' + ic('arrow-up-down') + '</div><p>No transactions yet</p></div>');
+  document.getElementById('piPageBody').innerHTML = `
+    <div class="product-photo-wrap">${photo ? `<img src="${photo}" alt="" onerror="this.style.display='none'">` : `<div class="product-photo-placeholder">${ic('package')}</div>`}
+      ${photo ? `<div class="product-photo-actions"><button class="photo-action-btn" onclick="savePIPhoto()">${ic('download')} Download</button></div>` : ''}
+    </div>
+    <div class="product-info">
+      <div class="product-name">${_esc(pi.name)}</div>
+      <div class="product-code-row"><span class="badge bg-gray">${_esc(pname)}</span></div>
+      <div class="product-stock-big"><div><div class="product-stock-num" style="color:var(--accent)">${pi.qty}</div><div class="product-stock-unit">in this product</div></div></div>
+      ${pi.note ? `<div class="product-meta-grid" style="grid-template-columns:1fr"><div class="product-meta-item"><div class="product-meta-label">Note</div><div class="product-meta-val" style="font-weight:600">${_esc(pi.note)}</div></div></div>` : ''}
+      <div class="product-recent" style="padding:0"><div class="product-recent-title">Recent Activity</div><div class="card">${recHtml}</div></div>
+    </div>`;
+}
+function piPageEdit() { if (_piPageId) openPISheet(_piPageId); }
+async function piPageDelete() {
+  const pi = findPI(_piPageId); if (!pi || !isAdmin()) return;
+  _piEditId = pi.id; await deletePI();
+}
+function piPageMove(type) { if (_piPageId) openPIMove(_piPageId, type); }
+function savePIPhoto() { const pi = findPI(_piPageId); if (pi && pi.photoV > 0) saveImage(piPhotoUrl(pi), pi.name); }
+function downloadItemPhoto() {
+  const it = S.inventory.find(i => i.id === _currentProductId), img = document.getElementById('productPhoto');
+  if (!it || !img.src || img.style.display === 'none') { toast('No photo to download', 'wrn'); return; }
+  saveImage(img.src, it.name);
+}
+// data: URLs are read directly (the page CSP does not allow fetch() on them); server URLs are fetched (server sends CORS *).
+async function imgBlob(url) {
+  if (url.indexOf('data:') === 0) {
+    const parts = url.split(','), mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+    const bin = atob(parts[1]), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Blob([u8], { type: mime });
+  }
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('server ' + r.status);
+  return r.blob();
+}
+// iPhone: share sheet first (Save Image), because a download link inside a home-screen app often just opens the image.
+async function saveImage(url, base) {
+  try {
+    const blob = await imgBlob(url);
+    const ext = ((blob.type || 'image/jpeg').split('/')[1] || 'jpg').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '') || 'jpg';
+    const fname = (String(base).replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') || 'photo') + '.' + ext;
+    const file = new File([blob], fname, { type: blob.type || 'image/jpeg' });
+    if (/iphone|ipad|ipod/i.test(navigator.userAgent) && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: String(base) }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a'), u = URL.createObjectURL(blob);
+    a.href = u; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 4000);
+    toast('Photo downloaded', 'ok');
+  } catch (e) { toast('Could not download the photo: ' + e.message, 'err'); }
+}
+(function () {
+  const d = document.getElementById('photoDeleteBtn'), b = document.getElementById('photoDownloadBtn');
+  if (d && b) new MutationObserver(() => { b.style.display = d.style.display; }).observe(d, { attributes: true, attributeFilter: ['style'] });
+})();
 
 function quickTx(id, type) { openSheet('txSheet'); setTimeout(()=>{ selectTxItem(id); setTxType(type); },80); }
 let txTypeState = 'IN';
@@ -6031,7 +6164,7 @@ async function syncFromServer(force = false) {
       refreshCurrentView();
       updateAlertBadge();
     }
-    if (await syncProducts() && curTab === 'inv' && stockMode === 'products') renderStockView();
+    if (await syncProducts()) { if (curTab === 'inv' && stockMode === 'products') renderStockView(); refreshPIPage(); }
     if (await syncPhotoIndex() && curTab === 'inv') renderStockView();
     if (await syncInbox()) { updateInboxBadge(); if (document.getElementById('inboxSheet').classList.contains('open')) renderInbox(); }
     if (await syncKeepOpen()) { updateKeepBanner(); if (document.getElementById('keepSheet').classList.contains('open')) renderKeep(); }
@@ -6283,7 +6416,7 @@ function closeProductPage() {
     } else {
       // Check if any sheet is open
       const openSheet = document.querySelector('.sheet-overlay.open');
-      swipeTarget = openSheet ? 'sheet:' + openSheet.id : (document.getElementById('logPage')?.classList.contains('open') ? 'log' : null);
+      swipeTarget = openSheet ? 'sheet:' + openSheet.id : (document.getElementById('logPage')?.classList.contains('open') ? 'log' : (document.getElementById('piPage')?.classList.contains('open') ? 'pi' : null));
     }
   }, { passive: true });
 
@@ -6300,6 +6433,8 @@ function closeProductPage() {
     if (tx > 60 && absX > absY * 1.5) {
       if (swipeTarget === 'log') {
         closeLogPage();
+      } else if (swipeTarget === 'pi') {
+        closePIPage();
       } else if (swipeTarget === 'product') {
         closeProductPage();
       } else if (swipeTarget.startsWith('sheet:')) {
