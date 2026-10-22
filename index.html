@@ -5867,7 +5867,7 @@ function exportQRLinksCSV() {
   const gidVal = S.activeGroupId || '';
   const rows = [['Type','Name','Code / Item Count','Category','Direct QR URL']];
   getItems().forEach(i => {
-    const url = appUrl + '?item=' + encodeURIComponent(i.code || i.name) + '&name=' + encodeURIComponent(i.name) + (gidVal ? '&group=' + encodeURIComponent(gidVal) : '');
+    const url = itemQrUrl(i);
     rows.push(['Item', i.name, i.code || '', i.category || '', url]);
   });
   getNormalizedLocations().forEach(l => {
@@ -6251,6 +6251,7 @@ async function syncFromServer(force = false) {
           existing.stock = serverItem.stock; changed = true;
         }
         if (serverItem.code) existing.code = serverItem.code;
+        if (serverItem.qrId && existing.qrId !== serverItem.qrId) { existing.qrId = serverItem.qrId; changed = true; }
         if (serverItem.location) existing.location = serverItem.location;
         existing.category = serverItem.category || existing.category;
         // Expiry: before this group's one-time upload, never let an empty server value wipe a local date.
@@ -6265,6 +6266,7 @@ async function syncFromServer(force = false) {
           expiry: serverItem.expiry || '',
           name: serverItem.name,
           code: serverItem.code || '',
+          qrId: serverItem.qrId || '',
           category: serverItem.category || 'Uncategorized',
           location: serverItem.location || '',
           stock: serverItem.stock,
@@ -6783,22 +6785,51 @@ const QRGen = (() => {
 // downloadQR/printQR don't need to know which kind of QR is on screen.
 let _qrContext = null; // { title, subtitle, filenameBase }
 
+// ── PERMANENT QR LINKS (N9) ──
+// Labels carry a permanent id (?q=I-XXXXXX). Renaming or recoding an item never breaks a printed label.
+// Items the app has not yet synced (no qrId) fall back to the old name/code link.
+const QR_APP = 'https://ssanthosh474.github.io/labstock-app/';
+function itemQrUrl(item) {
+  if (item.qrId) return QR_APP + '?q=' + encodeURIComponent(item.qrId);
+  return QR_APP + '?item=' + encodeURIComponent(item.code || item.name) + '&name=' + encodeURIComponent(item.name) + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
+}
+function qrCodeLabel(item) { return (item.code || '') + (item.qrId ? (item.code ? ' · ' : '') + item.qrId : ''); }
+async function fetchItemQrId(item) {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(item.name)}?groupId=${encodeURIComponent(S.activeGroupId || '')}`);
+    if (!r.ok) return false;
+    const row = await r.json();
+    if (!row.qr_id) return false;
+    item.qrId = row.qr_id; save(); return true;
+  } catch (e) { return false; }
+}
+// 'removed' = id unknown (item deleted), null = server unreachable
+async function resolveQr(id) {
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/qr/${encodeURIComponent(id)}`);
+    if (r.status === 404) return 'removed';
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; }
+}
+
 function openQRSheet() {
   const item = S.inventory.find(i => i.id === _currentProductId);
   if (!item) return;
 
   _qrContext = { title: item.name, subtitle: (item.code||'') + (item.code&&item.category?' • ':'') + (item.category||''), filenameBase: item.name };
   document.getElementById('qrItemName').textContent = item.name;
-  document.getElementById('qrItemCode').textContent = item.code || '';
-
-  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
- const key = encodeURIComponent(item.code || item.name);
-  const nameKey = encodeURIComponent(item.name);
-  const url = appUrl + '?item=' + key + '&name=' + nameKey + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
-
+  document.getElementById('qrItemCode').textContent = qrCodeLabel(item);
   const wrap = document.getElementById('qrCanvas');
   wrap.innerHTML = '';
-  QRGen.render(url, wrap, 220);
+  QRGen.render(itemQrUrl(item), wrap, 220);
+  // item not yet synced with its permanent id: ask the server once, then redraw
+  if (!item.qrId) fetchItemQrId(item).then(ok => {
+    if (ok && _currentProductId === item.id) {
+      document.getElementById('qrItemCode').textContent = qrCodeLabel(item);
+      wrap.innerHTML = ''; QRGen.render(itemQrUrl(item), wrap, 220);
+    }
+  });
 
   openSheet('qrSheet');
 }
@@ -6890,7 +6921,8 @@ function openQRPrintAll() {
   const itemData = JSON.stringify(items.map(i => ({
     name: i.name,
     code: i.code || '',
-    category: i.category || ''
+    category: i.category || '',
+    qr: i.qrId || ''
   })));
 
   const win = window.open('', '_blank');
@@ -6918,7 +6950,7 @@ function openQRPrintAll() {
     'var APP_URL = "' + appUrl + '";' +
     'var grid = document.getElementById("qrGrid");' +
     'ITEMS.forEach(function(item) {' +
-    '  var url = APP_URL + "?item=" + encodeURIComponent(item.code || item.name) + "&name=" + encodeURIComponent(item.name);' +
+    '  var url = item.qr ? APP_URL + "?q=" + encodeURIComponent(item.qr) : APP_URL + "?item=" + encodeURIComponent(item.code || item.name) + "&name=" + encodeURIComponent(item.name);' +
     '  var cell = document.createElement("div"); cell.className = "cell";' +
     '  var qDiv = document.createElement("div"); qDiv.className = "qr";' +
     '  var nm = document.createElement("div"); nm.className = "name"; nm.textContent = item.name;' +
@@ -7108,14 +7140,21 @@ const _origRenderInv = renderInv;
 
 function handleQRDeepLink() {
   const params = new URLSearchParams(window.location.search);
-  const itemParam = params.get('item');
+  let itemParam = params.get('item');
   const locationParam = params.get('location');
-  const groupParam = params.get('group');
-  if (!itemParam && !locationParam) return false;
+  let groupParam = params.get('group');
+  const qParam = (params.get('q') || '').trim().toUpperCase();   // permanent item id (N9)
+  if (!itemParam && !locationParam && !qParam) return false;
 
   if (S.user) {
     // Logged-in: switch group if needed, then sync and open the right view
     setTimeout(async () => {
+      if (qParam) {
+        const hit = await resolveQr(qParam);
+        if (hit === 'removed') { toast('This item was removed', 'wrn'); window.history.replaceState({}, '', window.location.pathname); return; }
+        if (!hit) { toast('Could not look up this QR code. Check the connection', 'err'); return; }
+        itemParam = encodeURIComponent(hit.name); groupParam = hit.groupId;
+      }
       if (groupParam && groupParam !== S.activeGroupId) {
         const g = S.groups.find(g => g.id === groupParam);
         if (g) { S.activeGroupId = groupParam; save(); updateTopbar(); }
@@ -7135,7 +7174,7 @@ function handleQRDeepLink() {
         return;
       }
 
-      const item = getItems().find(i =>
+      const item = (qParam && getItems().find(i => i.qrId === qParam)) || getItems().find(i =>
         i.code?.toLowerCase() === itemParam.toLowerCase() ||
         i.name.toLowerCase() === decodeURIComponent(itemParam).toLowerCase()
       );
@@ -7151,6 +7190,7 @@ function handleQRDeepLink() {
     document.getElementById('loginScreen').style.display = 'none';
     hideAppSpinner();
     if (locationParam) _showPublicLocationView(locationParam, groupParam);
+    else if (qParam) _showPublicQrView(qParam);
     else _showPublicItemView(itemParam, groupParam);
   }
   return true;
@@ -7210,7 +7250,18 @@ function _showPublicLocationView(locationKey, groupId) {
     });
 }
 
-function _showPublicItemView(itemCode, groupId) {
+// Logged-out scan of a permanent-id label: look the item up by id, then reuse the normal public item card.
+async function _showPublicQrView(id) {
+  document.body.innerHTML = '<div style="padding:60px 20px;text-align:center;color:#888;font-family:system-ui,sans-serif">Loading item...</div>';
+  const hit = await resolveQr(id);
+  if (hit && hit !== 'removed') { _showPublicItemView(hit.code || hit.name, hit.groupId, hit); return; }
+  document.body.innerHTML = '<div style="min-height:100vh;background:#f5f3ee;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px"><div style="max-width:400px;width:100%;background:white;border-radius:16px;padding:28px;text-align:center;box-shadow:0 2px 16px rgba(0,0,0,.08)">' +
+    '<div style="font-size:18px;font-weight:800;color:#2d6a4f;margin-bottom:12px">LabStock</div>' +
+    '<div style="color:#e53935;font-weight:700;font-size:15px">' + (hit === 'removed' ? 'This item was removed' : 'Could not load this QR code') + '</div>' +
+    '<div style="color:#aaa;font-size:12px;margin-top:8px">' + (hit === 'removed' ? 'The item was deleted after this label was printed.' : 'Check your connection and scan again.') + '</div></div></div>';
+}
+
+function _showPublicItemView(itemCode, groupId, prefetched) {
   const params = new URLSearchParams(window.location.search);
   const itemName = params.get('name') || '';
   const cleanUrl = window.location.href.split('?')[0];
@@ -7229,8 +7280,7 @@ function _showPublicItemView(itemCode, groupId) {
 
   const url = RAILWAY_URL + '/api/inventory' + (groupId ? '?groupId=' + encodeURIComponent(groupId) : '');
 
-  fetch(url)
-    .then(r => r.ok ? r.json() : [])
+  (prefetched ? Promise.resolve([prefetched]) : fetch(url).then(r => r.ok ? r.json() : []))
     .then(allItems => {
       const c = document.getElementById('pubCard');
       if (!c) return;
