@@ -4267,7 +4267,7 @@ function openLocationView(key) {
   const items = getItems().filter(i => (i.location||'').trim().toLowerCase() === key);
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
-  if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; ${ic('map-pin')} ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">${ic('qr-code')} QR</button>`;
+  if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; ${ic('map-pin')} ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">${ic('qr-code')} QR</button>${isAdmin() ? ` <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="renameLocation()">${ic('pencil')} Rename</button>` : ''}`;
   updateLocPrintAllBtn();
   if (!items.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('package') + '</div><p>No items at this location.</p></div>'); return; }
   el.innerHTML = items.map(i => itemRowHTML(i)).join('');
@@ -5862,7 +5862,7 @@ function dlFile(filename, type, content) {
 // URLs (type column distinguishes them), reusing the same encoded URLs
 // already generated for each individual QR. No QR images — just links,
 // generated entirely client-side via the existing dlFile() pattern.
-function exportQRLinksCSV() {
+async function exportQRLinksCSV() {
   const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
   const gidVal = S.activeGroupId || '';
   const rows = [['Type','Name','Code / Item Count','Category','Direct QR URL']];
@@ -5870,8 +5870,9 @@ function exportQRLinksCSV() {
     const url = itemQrUrl(i);
     rows.push(['Item', i.name, i.code || '', i.category || '', url]);
   });
-  getNormalizedLocations().forEach(l => {
-    const url = appUrl + '?location=' + encodeURIComponent(l.key) + '&loclabel=' + encodeURIComponent(l.label) + (gidVal ? '&group=' + encodeURIComponent(gidVal) : '');
+  const locList = getNormalizedLocations(), locIds = await ensureLocationIds(locList);
+  locList.forEach(l => {
+    const url = locationQrUrl(l, locIds[l.key]);
     rows.push(['Location', l.label, String(l.count), '', url]);
   });
   if (rows.length === 1) { toast('Nothing to export yet', 'wrn'); return; }
@@ -6813,6 +6814,49 @@ async function resolveQr(id) {
   } catch (e) { return null; }
 }
 
+function locationQrUrl(l, id) {
+  if (id) return QR_APP + '?q=' + encodeURIComponent(id);
+  return QR_APP + '?location=' + encodeURIComponent(l.key) + '&loclabel=' + encodeURIComponent(l.label) + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
+}
+// [{key,label}] -> { key: 'L-XXXXXX' }. Ids are created on the server the first time and cached. {} (old links) when offline.
+async function ensureLocationIds(locs) {
+  const g = gid();
+  if (!S.locIds) S.locIds = {};
+  const cache = S.locIds[g] || (S.locIds[g] = {});
+  const need = locs.filter(l => !cache[l.key]);
+  if (need.length) {
+    try {
+      const r = await pApi('POST', '/api/locations/ensure', { groupId: g, names: need.map(l => l.label) });
+      Object.keys(r.locations || {}).forEach(k => { cache[k] = r.locations[k].id; });
+      save();
+    } catch (e) { toast('Could not get permanent location ids. Using the older link', 'wrn'); }
+  }
+  const out = {};
+  locs.forEach(l => { if (cache[l.key]) out[l.key] = cache[l.key]; });
+  return out;
+}
+async function renameLocation() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  const key = _locationView, locs = getNormalizedLocations(), loc = locs.find(l => l.key === key);
+  if (!loc) return;
+  const input = prompt(`Rename location "${loc.label}" to:`, loc.label);
+  if (input === null) return;
+  const to = input.trim().replace(/\s+/g, ' ').slice(0, 80), tl = to.toLowerCase();
+  if (!to || to === loc.label) return;
+  if (tl !== key && locs.some(l => l.key === tl)) { toast('A location with this name already exists. Pick another name', 'err'); return; }
+  if (!confirm(`Rename "${loc.label}" to "${to}"?\n\n${loc.count} item${loc.count !== 1 ? 's' : ''} will move to the new name. QR labels that use the permanent id keep working.`)) return;
+  try {
+    const r = await pApi('POST', '/api/locations/rename', { groupId: gid(), from: key, to, adminEmail: S.user?.email, person: S.user?.name || S.user?.email || '' });
+    getItems().filter(i => (i.location || '').trim().toLowerCase() === key).forEach(i => { i.location = to; });
+    const cache = (S.locIds || {})[gid()];
+    if (cache && cache[key]) { cache[tl] = cache[key]; if (tl !== key) delete cache[key]; }
+    logAct(`Location renamed: ${loc.label} → ${to} (${r.updated} item${r.updated !== 1 ? 's' : ''})`);
+    save(); renderInv(); updateAlertBadge();
+    openLocationView(tl);
+    toast(`Renamed to "${to}"`, 'ok');
+  } catch (e) { toast('Could not rename: ' + e.message, 'err'); }
+}
+
 function openQRSheet() {
   const item = S.inventory.find(i => i.id === _currentProductId);
   if (!item) return;
@@ -6841,15 +6885,14 @@ function openLocationQR(key, label) {
   _qrContext = { title: label, subtitle: 'Location', filenameBase: label };
   document.getElementById('qrItemName').textContent = label;
   document.getElementById('qrItemCode').textContent = 'Location';
-
-  const appUrl = 'https://ssanthosh474.github.io/labstock-app/';
-  const url = appUrl + '?location=' + encodeURIComponent(key) + '&loclabel=' + encodeURIComponent(label) + (S.activeGroupId ? '&group=' + encodeURIComponent(S.activeGroupId) : '');
-
   const wrap = document.getElementById('qrCanvas');
   wrap.innerHTML = '';
-  QRGen.render(url, wrap, 220);
-
   openSheet('qrSheet');
+  const loc = { key, label };
+  ensureLocationIds([loc]).then(ids => {
+    document.getElementById('qrItemCode').textContent = 'Location' + (ids[key] ? ' · ' + ids[key] : '');
+    wrap.innerHTML = ''; QRGen.render(locationQrUrl(loc, ids[key]), wrap, 220);
+  });
 }
 
 function downloadQR() {
@@ -6967,7 +7010,7 @@ function openQRPrintAll() {
 // Same pattern as openQRPrintAll() above, keyed by normalized location
 // instead of item. Deferred item from Phase 4 — no new dependency, reuses
 // the same QRCode.js CDN script and print CSS.
-function openLocationQRPrintAll() {
+async function openLocationQRPrintAll() {
   const locs = getNormalizedLocations();
   if (!locs.length) { toast('No locations to print', 'wrn'); return; }
 
@@ -6975,10 +7018,13 @@ function openLocationQRPrintAll() {
   const groupName = S.groups.find(g => g.id === S.activeGroupId)?.name || '';
   const gidVal = S.activeGroupId || '';
 
-  const locData = JSON.stringify(locs.map(l => ({ key: l.key, label: l.label, count: l.count })));
-
+  // open the window first (a popup after a network wait gets blocked), fill it once the ids are known
   const win = window.open('', '_blank');
   if (!win) { toast('Allow popups for this site', 'err'); return; }
+  win.document.write('<p style="font-family:Arial;padding:20px">Preparing labels...</p>');
+  const lids = await ensureLocationIds(locs);
+  const locData = JSON.stringify(locs.map(l => ({ key: l.key, label: l.label, count: l.count, id: lids[l.key] || '' })));
+  win.document.open();
 
   win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Location QR Codes</title>' +
     '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>' +
@@ -7003,7 +7049,7 @@ function openLocationQRPrintAll() {
     'var GID = "' + gidVal + '";' +
     'var grid = document.getElementById("qrGrid");' +
     'LOCS.forEach(function(loc) {' +
-    '  var url = APP_URL + "?location=" + encodeURIComponent(loc.key) + "&loclabel=" + encodeURIComponent(loc.label) + (GID ? "&group=" + encodeURIComponent(GID) : "");' +
+    '  var url = loc.id ? APP_URL + "?q=" + encodeURIComponent(loc.id) : APP_URL + "?location=" + encodeURIComponent(loc.key) + "&loclabel=" + encodeURIComponent(loc.label) + (GID ? "&group=" + encodeURIComponent(GID) : "");' +
     '  var cell = document.createElement("div"); cell.className = "cell";' +
     '  var qDiv = document.createElement("div"); qDiv.className = "qr";' +
     '  var nm = document.createElement("div"); nm.className = "name"; nm.textContent = "📍 " + loc.label;' +
@@ -7141,7 +7187,7 @@ const _origRenderInv = renderInv;
 function handleQRDeepLink() {
   const params = new URLSearchParams(window.location.search);
   let itemParam = params.get('item');
-  const locationParam = params.get('location');
+  let locationParam = params.get('location');
   let groupParam = params.get('group');
   const qParam = (params.get('q') || '').trim().toUpperCase();   // permanent item id (N9)
   if (!itemParam && !locationParam && !qParam) return false;
@@ -7151,9 +7197,11 @@ function handleQRDeepLink() {
     setTimeout(async () => {
       if (qParam) {
         const hit = await resolveQr(qParam);
-        if (hit === 'removed') { toast('This item was removed', 'wrn'); window.history.replaceState({}, '', window.location.pathname); return; }
+        if (hit === 'removed') { toast(qParam.indexOf('L-') === 0 ? 'This location was removed' : 'This item was removed', 'wrn'); window.history.replaceState({}, '', window.location.pathname); return; }
         if (!hit) { toast('Could not look up this QR code. Check the connection', 'err'); return; }
-        itemParam = encodeURIComponent(hit.name); groupParam = hit.groupId;
+        if (hit.type === 'location') locationParam = encodeURIComponent(String(hit.name).trim().toLowerCase());
+        else itemParam = encodeURIComponent(hit.name);
+        groupParam = hit.groupId;
       }
       if (groupParam && groupParam !== S.activeGroupId) {
         const g = S.groups.find(g => g.id === groupParam);
@@ -7199,9 +7247,9 @@ function handleQRDeepLink() {
 // Public (logged-out) read-only view for a location QR scan — same
 // treatment as the single-item public view, just listing every item at
 // that location instead of one item.
-function _showPublicLocationView(locationKey, groupId) {
+function _showPublicLocationView(locationKey, groupId, prefetched, label) {
   const params = new URLSearchParams(window.location.search);
-  const locLabel = params.get('loclabel') || decodeURIComponent(locationKey);
+  const locLabel = label || params.get('loclabel') || decodeURIComponent(locationKey);
   const cleanUrl = window.location.href.split('?')[0];
   const normKey = decodeURIComponent(locationKey).trim().toLowerCase();
 
@@ -7219,8 +7267,7 @@ function _showPublicLocationView(locationKey, groupId) {
 
   const url = RAILWAY_URL + '/api/inventory' + (groupId ? '?groupId=' + encodeURIComponent(groupId) : '');
 
-  fetch(url)
-    .then(r => r.ok ? r.json() : [])
+  (prefetched ? Promise.resolve(prefetched) : fetch(url).then(r => r.ok ? r.json() : []))
     .then(allItems => {
       const c = document.getElementById('pubLocCard');
       if (!c) return;
@@ -7254,11 +7301,12 @@ function _showPublicLocationView(locationKey, groupId) {
 async function _showPublicQrView(id) {
   document.body.innerHTML = '<div style="padding:60px 20px;text-align:center;color:#888;font-family:system-ui,sans-serif">Loading item...</div>';
   const hit = await resolveQr(id);
+  if (hit && hit !== 'removed' && hit.type === 'location') { _showPublicLocationView(encodeURIComponent(String(hit.name).trim().toLowerCase()), hit.groupId, hit.items || [], hit.name); return; }
   if (hit && hit !== 'removed') { _showPublicItemView(hit.code || hit.name, hit.groupId, hit); return; }
   document.body.innerHTML = '<div style="min-height:100vh;background:#f5f3ee;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px"><div style="max-width:400px;width:100%;background:white;border-radius:16px;padding:28px;text-align:center;box-shadow:0 2px 16px rgba(0,0,0,.08)">' +
     '<div style="font-size:18px;font-weight:800;color:#2d6a4f;margin-bottom:12px">LabStock</div>' +
-    '<div style="color:#e53935;font-weight:700;font-size:15px">' + (hit === 'removed' ? 'This item was removed' : 'Could not load this QR code') + '</div>' +
-    '<div style="color:#aaa;font-size:12px;margin-top:8px">' + (hit === 'removed' ? 'The item was deleted after this label was printed.' : 'Check your connection and scan again.') + '</div></div></div>';
+    '<div style="color:#e53935;font-weight:700;font-size:15px">' + (hit === 'removed' ? (String(id).toUpperCase().indexOf('L-') === 0 ? 'This location was removed' : 'This item was removed') : 'Could not load this QR code') + '</div>' +
+    '<div style="color:#aaa;font-size:12px;margin-top:8px">' + (hit === 'removed' ? 'It was deleted after this label was printed.' : 'Check your connection and scan again.') + '</div></div></div>';
 }
 
 function _showPublicItemView(itemCode, groupId, prefetched) {
