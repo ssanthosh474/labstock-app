@@ -1020,6 +1020,11 @@ div:has(> .exp-chip){gap:8px !important}
             <div class="row-body"><div class="row-title">Purposes</div><div class="row-sub">Edit the Log and Form purpose list</div></div>
             <span style="color:var(--muted)">›</span>
           </div>
+          <div class="list-row" id="googleRow" onclick="openGoogle()">
+            <div class="row-icon info"><i data-ic="link"></i></div>
+            <div class="row-body"><div class="row-title">Connect Google</div><div class="row-sub" id="googleRowSub">Google Sheet sync</div></div>
+            <span style="color:var(--muted)">›</span>
+          </div>
           <div class="list-row" id="activityRow" onclick="openSheet('activitySheet')">
             <div class="row-icon info"><i data-ic="clipboard-list"></i></div>
             <div class="row-body"><div class="row-title">Activity Log</div><div class="row-sub">Admin only</div></div>
@@ -1848,6 +1853,19 @@ div:has(> .exp-chip){gap:8px !important}
   </div>
 </div>
 
+<!-- Connect Google (N10a) -->
+<div class="sheet-overlay" id="googleSheet" onclick="sheetBgClose(event,'googleSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title">Connect Google</div>
+      <button class="sheet-close" onclick="closeSheet('googleSheet')"><i data-ic="x"></i></button>
+    </div>
+    <div class="sheet-body" id="googleBody"></div>
+    <div class="sheet-footer"><button class="btn btn-ghost btn-full" onclick="closeSheet('googleSheet')">Close</button></div>
+  </div>
+</div>
+
 <!-- Purpose list editor (N7d-3) -->
 <div class="sheet-overlay" id="purposeSheet" onclick="sheetBgClose(event,'purposeSheet')">
   <div class="sheet">
@@ -2585,6 +2603,7 @@ function updateTopbar() {
   // Hide admin-only items for members
   document.getElementById('activityRow').style.display = role === 'admin' ? '' : 'none';
   document.getElementById('purposeRow').style.display = role === 'admin' ? '' : 'none';
+  document.getElementById('googleRow').style.display = isGroupOwner() ? '' : 'none';
   document.getElementById('btnExport').style.display = role === 'admin' ? '' : 'none';
   document.getElementById('btnLogBulk').style.display = role === 'admin' ? '' : 'none';
 }
@@ -2931,6 +2950,81 @@ async function dismissInbox(id) {
   logAct(`Form entry dismissed: ${e.material} × ${e.qty} from ${e.sender}`); save();
   updateInboxBadge(); renderInbox();
   toast('Entry dismissed', 'wrn');
+}
+
+// ── CONNECT GOOGLE: SHEET SYNC (N10a) ──
+// Group owner pastes a Sheet link; the server then keeps two tabs ("LabStock Stock", "LabStock Log") up to date.
+let _gs = null, _gsErr = '', _gsLoading = false, _gsBusy = false;
+function isGroupOwner() { const g = S.groups.find(x => x.id === gid()); return !!g && !!S.user && g.adminEmail === S.user.email; }
+const gsPath = tail => `/api/groups/${encodeURIComponent(gid())}/sheet${tail || ''}`;
+async function gsLoad() {
+  _gsLoading = true; renderGoogle();
+  try { _gs = await pApi('GET', gsPath() + '?adminEmail=' + encodeURIComponent(S.user?.email || '')); _gsErr = ''; }
+  catch (e) { _gs = null; _gsErr = e.message; }
+  _gsLoading = false; updateGoogleRow(); renderGoogle();
+}
+function updateGoogleRow() {
+  const el = document.getElementById('googleRowSub'); if (!el) return;
+  el.textContent = !_gs ? 'Google Sheet sync' : !_gs.connected ? 'Sheet not connected' : _gs.error ? 'Sheet needs attention' : 'Sheet connected';
+}
+function openGoogle() {
+  if (!isGroupOwner()) { toast('Group owner only', 'err'); return; }
+  _gs = null; _gsErr = '';
+  openSheet('googleSheet'); gsLoad();
+}
+function renderGoogle() {
+  const el = document.getElementById('googleBody'); if (!el) return;
+  if (_gsLoading && !_gs) { el.innerHTML = '<div class="sheet-loading">Loading…</div>'; return; }
+  if (_gsErr) { el.innerHTML = `<div class="info-box" style="background:var(--danger-bg);border-color:#ffc9cb;color:var(--danger)">${_esc(_gsErr)}</div><button class="btn btn-ghost btn-full" onclick="gsLoad()">${ic('refresh-cw')} Try again</button>`; return; }
+  if (!_gs) { el.innerHTML = ''; return; }
+  if (!_gs.configured) { el.innerHTML = '<div class="info-box">The server has no Google key yet. The developer must set <strong>GOOGLE_SERVICE_ACCOUNT_JSON</strong> on Render first.</div>'; return; }
+  const when = _gs.syncedAt ? new Date(_gs.syncedAt).toLocaleString() : '';
+  let h = '';
+  if (_gs.connected) {
+    h += `<div class="info-box" style="${_gs.error ? 'background:var(--danger-bg);border-color:#ffc9cb;color:var(--danger)' : ''}">
+      <strong>${ic(_gs.error ? 'circle-alert' : 'circle-check')} ${_gs.error ? 'Needs attention' : 'Connected'}</strong><br>
+      ${_gs.error ? _esc(_gs.error) + '<br>' : ''}${when ? 'Last synced: ' + _esc(when) : 'First sync is running…'}<br>
+      <a href="${_esc(_gs.sheetUrl)}" target="_blank" rel="noopener" style="color:inherit;font-weight:700">Open the Sheet</a></div>
+      <div style="font-size:12px;color:var(--muted)">Tabs "LabStock Stock" and "LabStock Log" are rewritten about every 30 seconds after a change. Edits made in those tabs are overwritten. Use other tabs for your own work.</div>
+      <button class="btn btn-ghost btn-full" onclick="gsLoad()">${ic('refresh-cw')} Refresh status</button>
+      <button class="btn btn-danger btn-full" onclick="gsDisconnect()">${ic('x')} Disconnect</button>
+      <div class="form-label" style="margin-top:6px">Use a different Sheet</div>`;
+  } else {
+    h += `<div style="font-size:13px;line-height:1.6"><strong>1.</strong> Create or open a Google Sheet.<br><strong>2.</strong> Click Share and add this email as <strong>Editor</strong>:</div>`;
+  }
+  if (!_gs.connected) h += `<div style="display:flex;gap:8px;align-items:center"><div style="flex:1;min-width:0;font-size:12px;padding:10px;background:var(--surface2);border-radius:8px;font-family:var(--mono);word-break:break-all;user-select:text;-webkit-user-select:text">${_esc(_gs.syncEmail)}</div><button class="btn btn-ghost btn-sm" onclick="gsCopyEmail()">${ic('copy')} Copy</button></div>
+    <div style="font-size:13px"><strong>3.</strong> Paste the Sheet link here:</div>`;
+  else h += `<div style="font-size:11px;color:var(--muted)">Share the new Sheet with ${_esc(_gs.syncEmail)} as Editor first.</div>`;
+  h += `<input class="form-input" id="gsUrl" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off">
+    <button class="btn btn-primary btn-full" id="gsBtn" onclick="gsConnect()">${ic('link')} ${_gs.connected ? 'Switch to this Sheet' : 'Connect Sheet'}</button>`;
+  el.innerHTML = h;
+}
+function gsCopyEmail() {
+  const t = _gs?.syncEmail || '';
+  navigator.clipboard.writeText(t).then(() => toast('Email copied', 'ok')).catch(() => prompt('Sync email:', t));
+}
+async function gsConnect() {
+  const url = (document.getElementById('gsUrl')?.value || '').trim();
+  if (!url) { toast('Paste the Sheet link', 'err'); return; }
+  if (_gsBusy) return;
+  _gsBusy = true;
+  const btn = document.getElementById('gsBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
+  try {
+    _gs = await pApi('POST', gsPath('/connect'), { adminEmail: S.user?.email, sheetUrl: url });
+    logAct('Google Sheet connected'); save();
+    toast('Sheet connected. The first fill takes a few seconds', 'ok');
+    updateGoogleRow(); renderGoogle();
+    setTimeout(() => { if (document.getElementById('googleSheet').classList.contains('open')) gsLoad(); }, 5000);
+  } catch (e) { toast(e.message, 'err'); if (btn) { btn.disabled = false; btn.innerHTML = ic('link') + ' ' + (_gs?.connected ? 'Switch to this Sheet' : 'Connect Sheet'); } }
+  _gsBusy = false;
+}
+async function gsDisconnect() {
+  if (!confirm('Disconnect the Google Sheet?\n\nThe Sheet keeps its current data but stops updating.')) return;
+  try {
+    _gs = await pApi('POST', gsPath('/disconnect'), { adminEmail: S.user?.email });
+    logAct('Google Sheet disconnected'); save();
+    updateGoogleRow(); renderGoogle(); toast('Disconnected', 'wrn');
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 // ── PURPOSE LIST EDITOR (N7d-3) ──
