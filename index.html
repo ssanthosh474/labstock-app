@@ -2956,7 +2956,7 @@ async function dismissInbox(id) {
 // Group owner pastes a Sheet link; the server then keeps two tabs ("LabStock Stock", "LabStock Log") up to date.
 let _gs = null, _gsErr = '', _gsLoading = false, _gsBusy = false, _gf = null;
 // Paste the template Form's link here (the one ending /edit) to show a 'Make a copy' button in Connect Google. Leave '' to hide it.
-const FORM_TEMPLATE_URL = 'https://docs.google.com/forms/d/1wfzh4Y_4vUJj45z7dBIkKzlt_mycOxY-Wnw8TwFQuFA/edit';
+const FORM_TEMPLATE_URL = '';
 function isGroupOwner() { const g = S.groups.find(x => x.id === gid()); return !!g && !!S.user && g.adminEmail === S.user.email; }
 const gsPath = tail => `/api/groups/${encodeURIComponent(gid())}/sheet${tail || ''}`;
 async function gsLoad() {
@@ -3018,7 +3018,7 @@ function gsFormHTML() {
   else if (Date.now() - new Date(f.seenAt).getTime() < 3 * 3600000) st = `<div class="info-box"><strong>${ic('circle-check')} Connected</strong><br>Form last contacted LabStock ${_esc(ago(f.seenAt))}.${f.entryAt ? '<br>Last entry received ' + _esc(ago(f.entryAt)) + '.' : '<br>No entries received yet.'}</div>`;
   else st = `<div class="info-box" style="background:var(--danger-bg);border-color:#ffc9cb;color:var(--danger)"><strong>${ic('circle-alert')} No contact for ${_esc(ago(f.seenAt).replace(' ago', ''))}</strong><br>Open the Form, then LabStock &gt; Check connection. The token may have been replaced.</div>`;
   const tpl = FORM_TEMPLATE_URL ? `<a class="btn btn-ghost btn-full" href="${_esc(FORM_TEMPLATE_URL.replace(/\/edit.*$/, '/copy'))}" target="_blank" rel="noopener">${ic('copy')} Make a copy of the template Form</a>` : '';
-  return st + `<div style="font-size:13px;line-height:1.7"><strong>1.</strong> Make a copy of the template Form${FORM_TEMPLATE_URL ? '' : ' (ask your developer for the link)'}.<br><strong>2.</strong> Tap Copy token here.<br><strong>3.</strong> On a computer, open your copy in the Form editor, click the puzzle-piece icon (Add-ons), then <strong>LabStock &gt; Connect</strong>, and paste the token.<br><strong>4.</strong> Google asks for permission once. If it says "unverified app", choose Advanced, then Go to the project. This is normal for your own script.</div>` +
+  return st + `<div style="font-size:13px;line-height:1.7"><strong>1.</strong> ${FORM_TEMPLATE_URL ? 'Make a copy of the template Form.' : 'Open the Form the LabStock developer shared with you (one Form per lab group).'}<br><strong>2.</strong> Tap Copy token here.<br><strong>3.</strong> On a computer, open your copy in the Form editor, click the puzzle-piece icon (Add-ons), then <strong>LabStock &gt; Connect</strong>, and paste the token.<br><strong>4.</strong> Google asks for permission once. If it says "unverified app", choose Advanced, then Go to the project. This is normal for your own script.</div>` +
     tpl + `<button class="btn btn-primary btn-full" onclick="gfCopyToken()">${ic('key-round')} Copy token</button>` +
     `<button class="btn btn-ghost btn-full" onclick="gsLoad()">${ic('refresh-cw')} Refresh status</button>`;
 }
