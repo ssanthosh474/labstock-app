@@ -2954,13 +2954,19 @@ async function dismissInbox(id) {
 
 // ── CONNECT GOOGLE: SHEET SYNC (N10a) ──
 // Group owner pastes a Sheet link; the server then keeps two tabs ("LabStock Stock", "LabStock Log") up to date.
-let _gs = null, _gsErr = '', _gsLoading = false, _gsBusy = false;
+let _gs = null, _gsErr = '', _gsLoading = false, _gsBusy = false, _gf = null;
+// Paste the template Form's link here (the one ending /edit) to show a 'Make a copy' button in Connect Google. Leave '' to hide it.
+const FORM_TEMPLATE_URL = 'https://docs.google.com/forms/d/1wfzh4Y_4vUJj45z7dBIkKzlt_mycOxY-Wnw8TwFQuFA/edit';
 function isGroupOwner() { const g = S.groups.find(x => x.id === gid()); return !!g && !!S.user && g.adminEmail === S.user.email; }
 const gsPath = tail => `/api/groups/${encodeURIComponent(gid())}/sheet${tail || ''}`;
 async function gsLoad() {
   _gsLoading = true; renderGoogle();
-  try { _gs = await pApi('GET', gsPath() + '?adminEmail=' + encodeURIComponent(S.user?.email || '')); _gsErr = ''; }
-  catch (e) { _gs = null; _gsErr = e.message; }
+  try {
+    const em = '?adminEmail=' + encodeURIComponent(S.user?.email || '');
+    const [a, f] = await Promise.all([pApi('GET', gsPath() + em), pApi('GET', `/api/groups/${encodeURIComponent(gid())}/form-status` + em).catch(() => null)]);
+    _gs = a; _gf = f; _gsErr = '';
+  }
+  catch (e) { _gs = null; _gf = null; _gsErr = e.message; }
   _gsLoading = false; updateGoogleRow(); renderGoogle();
 }
 function updateGoogleRow() {
@@ -2969,7 +2975,7 @@ function updateGoogleRow() {
 }
 function openGoogle() {
   if (!isGroupOwner()) { toast('Group owner only', 'err'); return; }
-  _gs = null; _gsErr = '';
+  _gs = null; _gf = null; _gsErr = '';
   openSheet('googleSheet'); gsLoad();
 }
 function renderGoogle() {
@@ -2977,7 +2983,11 @@ function renderGoogle() {
   if (_gsLoading && !_gs) { el.innerHTML = '<div class="sheet-loading">Loading…</div>'; return; }
   if (_gsErr) { el.innerHTML = `<div class="info-box" style="background:var(--danger-bg);border-color:#ffc9cb;color:var(--danger)">${_esc(_gsErr)}</div><button class="btn btn-ghost btn-full" onclick="gsLoad()">${ic('refresh-cw')} Try again</button>`; return; }
   if (!_gs) { el.innerHTML = ''; return; }
-  if (!_gs.configured) { el.innerHTML = '<div class="info-box">The server has no Google key yet. The developer must set <strong>GOOGLE_SERVICE_ACCOUNT_JSON</strong> on Render first.</div>'; return; }
+  el.innerHTML = '<div class="form-label">Google Sheet</div>' + gsSheetHTML() +
+    '<div style="height:1px;background:var(--border);margin:6px 0"></div><div class="form-label">Google Form</div>' + gsFormHTML();
+}
+function gsSheetHTML() {
+  if (!_gs.configured) return '<div class="info-box">The server has no Google key yet. The developer must set <strong>GOOGLE_SERVICE_ACCOUNT_JSON</strong> on Render first.</div>';
   const when = _gs.syncedAt ? new Date(_gs.syncedAt).toLocaleString() : '';
   let h = '';
   if (_gs.connected) {
@@ -2997,7 +3007,27 @@ function renderGoogle() {
   else h += `<div style="font-size:11px;color:var(--muted)">Share the new Sheet with ${_esc(_gs.syncEmail)} as Editor first.</div>`;
   h += `<input class="form-input" id="gsUrl" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off">
     <button class="btn btn-primary btn-full" id="gsBtn" onclick="gsConnect()">${ic('link')} ${_gs.connected ? 'Switch to this Sheet' : 'Connect Sheet'}</button>`;
-  el.innerHTML = h;
+  return h;
+}
+// The Form script's hourly refresh is its heartbeat (form_seen_at), so "recent" = within 3 hours.
+function gsFormHTML() {
+  const f = _gf, ago = t => { const m = Math.round((Date.now() - new Date(t).getTime()) / 60000); return m < 2 ? 'just now' : m < 120 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
+  let st;
+  if (!f) st = '<div style="font-size:12px;color:var(--muted)">Status unavailable. Tap Refresh below.</div>';
+  else if (!f.seenAt) st = `<div class="info-box"><strong>${ic('circle-alert')} Not connected yet</strong><br>${f.hasToken ? 'Follow the steps below.' : 'Tap Copy token to create the token for this group, then follow the steps.'}</div>`;
+  else if (Date.now() - new Date(f.seenAt).getTime() < 3 * 3600000) st = `<div class="info-box"><strong>${ic('circle-check')} Connected</strong><br>Form last contacted LabStock ${_esc(ago(f.seenAt))}.${f.entryAt ? '<br>Last entry received ' + _esc(ago(f.entryAt)) + '.' : '<br>No entries received yet.'}</div>`;
+  else st = `<div class="info-box" style="background:var(--danger-bg);border-color:#ffc9cb;color:var(--danger)"><strong>${ic('circle-alert')} No contact for ${_esc(ago(f.seenAt).replace(' ago', ''))}</strong><br>Open the Form, then LabStock &gt; Check connection. The token may have been replaced.</div>`;
+  const tpl = FORM_TEMPLATE_URL ? `<a class="btn btn-ghost btn-full" href="${_esc(FORM_TEMPLATE_URL.replace(/\/edit.*$/, '/copy'))}" target="_blank" rel="noopener">${ic('copy')} Make a copy of the template Form</a>` : '';
+  return st + `<div style="font-size:13px;line-height:1.7"><strong>1.</strong> Make a copy of the template Form${FORM_TEMPLATE_URL ? '' : ' (ask your developer for the link)'}.<br><strong>2.</strong> Tap Copy token here.<br><strong>3.</strong> On a computer, open your copy in the Form editor, click the puzzle-piece icon (Add-ons), then <strong>LabStock &gt; Connect</strong>, and paste the token.<br><strong>4.</strong> Google asks for permission once. If it says "unverified app", choose Advanced, then Go to the project. This is normal for your own script.</div>` +
+    tpl + `<button class="btn btn-primary btn-full" onclick="gfCopyToken()">${ic('key-round')} Copy token</button>` +
+    `<button class="btn btn-ghost btn-full" onclick="gsLoad()">${ic('refresh-cw')} Refresh status</button>`;
+}
+async function gfCopyToken() {
+  try {
+    const r = await pApi('POST', `/api/groups/${encodeURIComponent(gid())}/form-token`, { adminEmail: S.user?.email });
+    await navigator.clipboard.writeText(r.token).then(() => toast('Token copied', 'ok')).catch(() => prompt('Token:', r.token));
+    if (_gf) { _gf.hasToken = true; renderGoogle(); }
+  } catch (e) { toast('Could not get token: ' + e.message, 'err'); }
 }
 function gsCopyEmail() {
   const t = _gs?.syncEmail || '';
