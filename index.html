@@ -1698,6 +1698,23 @@ div:has(> .exp-chip){gap:8px !important}
   </div>
 </div>
 
+<!-- Member menu (N11 batch B) -->
+<div class="sheet-overlay" id="memberMenuSheet" onclick="sheetBgClose(event,'memberMenuSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="mmTitle">Member</div>
+      <button class="sheet-close" onclick="closeSheet('memberMenuSheet')"><i data-ic="x"></i></button>
+    </div>
+    <div class="sheet-body">
+      <div id="mmEmail" style="font-size:12px;color:var(--muted);word-break:break-all"></div>
+      <button class="btn btn-primary btn-full" id="mmAdmin" onclick="mmSetRole('admin')"><i data-ic="arrow-up"></i> Make admin</button>
+      <button class="btn btn-ghost btn-full" id="mmMember" onclick="mmSetRole('member')"><i data-ic="user"></i> Make member</button>
+      <button class="btn btn-danger btn-full" onclick="mmRemove()"><i data-ic="trash-2"></i> Remove member</button>
+    </div>
+  </div>
+</div>
+
 <!-- Activity Sheet -->
 <div class="sheet-overlay" id="activitySheet" onclick="sheetBgClose(event,'activitySheet')">
   <div class="sheet">
@@ -3570,7 +3587,7 @@ function _renderMembersList(el) {
     const effectiveRole = (grp && grp.adminEmail===m.email) ? 'admin' : (m.role||'member');
     const isAdmMem = effectiveRole==='admin';
     const canEdit = curIsAdmin && !isSelf && !(grp && grp.adminEmail===m.email);
-    return `<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border)">
+    return `<div data-mem="${canEdit ? m.id : ''}" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);-webkit-touch-callout:none">
       <div style="width:40px;height:40px;border-radius:50%;background:${isAdmMem?'var(--accent)':'#888'};display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:15px;flex-shrink:0">${init}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -3579,15 +3596,8 @@ function _renderMembersList(el) {
           <span class="badge ${isAdmMem?'bg-green':'bg-gray'}" style="font-size:9px">${effectiveRole}</span>
         </div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px;word-break:break-all">${m.email}</div>
-        ${canEdit ? `<div style="display:flex;gap:8px;margin-top:8px">
-          <button onclick="changeRole('${m.id}')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface2);font-size:11px;font-weight:600;cursor:pointer">
-            ${isAdmMem?(ic('download') + ' Member'):(ic('arrow-up') + ' Admin')}
-          </button>
-          <button onclick="confirmRemoveMem('${m.id}')" style="padding:5px 10px;border-radius:6px;border:1.5px solid var(--danger);color:var(--danger);background:transparent;font-size:11px;font-weight:600;cursor:pointer">
-            ${ic('trash-2')} Remove
-          </button>
-        </div>` : ''}
-      </div>
+        </div>
+      ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="openMemberMenu('${m.id}')" style="flex-shrink:0;padding:0 10px">${ic('ellipsis')}</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -3674,48 +3684,60 @@ function cancelInvite(invId) {
   toast('Invite cancelled', 'wrn');
 }
 
-function changeRole(memId) {
-  const m = S.members.find(m => m.id===memId);
-  if (!m) return;
-  const newRole = m.role==='admin' ? 'member' : 'admin';
-  m.role = newRole;
-  logAct(`Changed ${m.name} to ${newRole}`); save(); renderMembersSheet();
-  toast(`${m.name} is now ${newRole}`, 'ok');
-  // Sync to server
-  fetch(`${RAILWAY_URL}/api/lab-members`, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({id:m.id, groupId:m.groupId, email:m.email, name:m.name, role:newRole, joined:m.joined||new Date().toISOString()})
-  }).catch(()=>{});
+// ── MEMBER MENU (N11 batch B): role change / remove wait for the server, then update the screen ──
+let _mmId = null, _mmBusy = false;
+const memById = id => S.members.find(m => m.id === id);
+function openMemberMenu(id) {
+  if (!isAdmin()) return;
+  const m = memById(id), grp = S.groups.find(g => g.id === S.activeGroupId);
+  if (!m || m.email === S.user?.email || (grp && grp.adminEmail === m.email)) return;
+  _mmId = id;
+  document.getElementById('mmTitle').textContent = m.name || m.email;
+  document.getElementById('mmEmail').textContent = m.email + ' · ' + (m.role || 'member');
+  const adm = m.role === 'admin';
+  document.getElementById('mmAdmin').style.display = adm ? 'none' : '';
+  document.getElementById('mmMember').style.display = adm ? '' : 'none';
+  openSheet('memberMenuSheet');
 }
-
-function confirmRemoveMem(memId) {
-  const m = S.members.find(m => m.id===memId);
-  if (!m) return;
-  // Show in-sheet confirmation instead of browser confirm()
-  const el = document.getElementById('membersSheetBody');
-  const existing = el.querySelector(`[data-confirm="${memId}"]`);
-  if (existing) { existing.remove(); renderMembersSheet(); return; }
-  const conf = document.createElement('div');
-  conf.setAttribute('data-confirm', memId);
-  conf.style.cssText = 'background:var(--danger-bg);border:1px solid #ffc9cb;border-radius:10px;padding:14px 16px;margin:8px 16px;';
-  conf.innerHTML = `<div style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:8px">Remove ${m.name}?</div>
-    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">They will lose access to this group immediately.</div>
-    <div style="display:flex;gap:8px">
-      <button onclick="removeMem('${memId}')" class="btn btn-danger btn-full">Yes, Remove</button>
-      <button onclick="this.closest('[data-confirm]').remove()" class="btn btn-ghost btn-full">Cancel</button>
-    </div>`;
-  el.prepend(conf);
+async function mmSetRole(role) {
+  const m = memById(_mmId); if (!m || _mmBusy) return;
+  _mmBusy = true;
+  try {
+    const r = await pApi('POST', '/api/lab-members/role', { groupId: m.groupId, email: m.email, role, adminEmail: S.user?.email });
+    m.role = (r.member && r.member.role) || role;
+    logAct(`Changed ${m.name} to ${m.role}`); save();
+    closeSheet('memberMenuSheet'); renderMembersSheet();
+    toast(`${m.name} is now ${m.role}`, 'ok');
+  } catch (e) { toast('Could not change role: ' + e.message, 'err'); }
+  _mmBusy = false;
 }
-
-function removeMem(id) {
-  const m = S.members.find(m => m.id === id);
-  if (!m) return;
-  S.members = S.members.filter(m => m.id !== id);
-  logAct(`Removed ${m.email}`); save(); renderMembersSheet();
-  toast(`${m.name} removed`, 'wrn');
-  // Sync delete to server
-  fetch(`${RAILWAY_URL}/api/lab-members/${encodeURIComponent(m.groupId)}/${encodeURIComponent(m.email)}`, {method:'DELETE'}).catch(()=>{});
+async function mmRemove() {
+  const m = memById(_mmId); if (!m || _mmBusy) return;
+  if (!confirm(`Remove ${m.name || m.email}?\n\nThey lose access to this group immediately.`)) return;
+  _mmBusy = true;
+  try {
+    await pApi('DELETE', `/api/lab-members/${encodeURIComponent(m.groupId)}/${encodeURIComponent(m.email)}?adminEmail=${encodeURIComponent(S.user?.email || '')}`);
+    S.members = S.members.filter(x => x.id !== m.id);
+    logAct(`Removed ${m.email}`); save();
+    closeSheet('memberMenuSheet'); renderMembersSheet();
+    toast(`${m.name || m.email} removed`, 'wrn');
+  } catch (e) { toast('Could not remove: ' + e.message, 'err'); }
+  _mmBusy = false;
 }
+(function initMemberLongPress() {
+  const el = document.getElementById('membersSheetBody'); if (!el) return;
+  let t = null, x0 = 0, y0 = 0; const stop = () => clearTimeout(t);
+  el.addEventListener('pointerdown', e => {
+    stop();
+    const row = e.target.closest('[data-mem]');
+    if (!row || !row.dataset.mem || e.target.closest('button')) return;
+    x0 = e.clientX; y0 = e.clientY;
+    t = setTimeout(() => { if (navigator.vibrate) navigator.vibrate(15); openMemberMenu(row.dataset.mem); }, 450);
+  });
+  el.addEventListener('pointermove', e => { if (Math.abs(e.clientX - x0) > 10 || Math.abs(e.clientY - y0) > 10) stop(); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(n => el.addEventListener(n, stop));
+  el.addEventListener('contextmenu', e => { if (e.target.closest('[data-mem]')) e.preventDefault(); });
+})();
 
 function promptInvite() { switchMemTab('add'); }
 function gid() { return S.activeGroupId; }
