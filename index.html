@@ -1514,13 +1514,17 @@ div:has(> .exp-chip){gap:8px !important}
 
     <!-- Stock report export -->
     <div id="epanel-stock" class="sheet-body" style="display:none">
-      <div class="info-box" style="font-size:12px;margin-bottom:4px">
+      <div class="form-group">
+        <label class="form-label">Group by</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="stkGroupChips"></div>
+      </div>
+      <div class="info-box" id="stkPriInfo" style="font-size:12px;margin-bottom:4px">
         Items sorted by priority level:<br>
         <span class="dot dot-r"></span> <strong>P0</strong> — Critical: Stock at or below minimum<br>
         <span class="dot dot-y"></span> <strong>P1</strong> — Moderate: Stock between 1×–2× minimum<br>
         <span class="dot dot-g"></span> <strong>P2</strong> — Balanced: Stock above 2× minimum
       </div>
-      <div class="form-group">
+      <div class="form-group" id="stkPriGroup">
         <label class="form-label">Priorities</label>
         <div style="display:flex;gap:6px;flex-wrap:wrap" id="stkPriChips"></div>
       </div>
@@ -5571,6 +5575,7 @@ function renderLogPage(t) {
     act += `<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="logPageClose('RETURNED')">${out ? (ic('undo-2') + ' Came back') : (ic('undo-2') + ' Returned')}</button><button class="btn btn-ghost" style="flex:1" onclick="logPageClose('DISPOSED')">${out ? (ic('x') + ' Not returning') : (ic('trash-2') + ' Disposed')}</button></div>`;
   }
   const item = !prod && getItems().find(i => i.name.toLowerCase() === String(t.itemName || '').toLowerCase());
+  if (!prod) act += `<button class="btn btn-primary btn-full" onclick="logPageAddStock()">${ic('plus')} Add to stock</button>`;
   if (item) act += `<button class="btn btn-ghost btn-full" onclick="logPageOpenItem('${item.id}')">${ic('package')} Open item</button>`;
   if (isAdmin()) act += ('<button class="btn btn-danger btn-full" onclick="logPageDelete()">' + ic('trash-2') + ' Delete entry</button>');
   document.getElementById('logPageBody').innerHTML = `<div style="padding:20px 16px 0">
@@ -5588,6 +5593,31 @@ async function logPageClose(how) {
   if (ok && t2) renderLogPage(t2);
 }
 function logPageOpenItem(itemId) { closeLogPage(); setTimeout(() => openProductPage(itemId), 320); }
+// Existing item: normal IN sheet, qty prefilled. Not in stock: Add Item sheet with name + qty prefilled (editable), the rest blank.
+function logPageAddStock() {
+  const t = logTxById(_logPageId); if (!t) return;
+  const name = String(t.itemName || '').trim(), qty = t.qty;
+  const item = getItems().find(i => i.name.toLowerCase() === name.toLowerCase());
+  closeLogPage();
+  setTimeout(() => {
+    if (item) {
+      openSheet('txSheet');
+      setTimeout(() => {
+        selectTxItem(item.id); setTxType('IN');
+        document.getElementById('txQty').value = qty || '';
+        document.getElementById('txNotes').value = 'Added from log entry';
+      }, 60);
+    } else {
+      document.getElementById('editId').value = '';
+      document.getElementById('itemSheetTitle').textContent = 'Add Item';
+      openSheet('addItemSheet');   // a fresh Add clears the fields, so fill name + stock after it
+      document.getElementById('iName').value = name;
+      document.getElementById('iStock').value = qty || 0;
+      document.getElementById('iCat').value = ''; document.getElementById('iUnit').value = '';
+      setTimeout(() => document.getElementById('iCat').focus(), 320);
+    }
+  }, 320);
+}
 function logPageDelete() {
   if (!isAdmin()) { toast('Admin only', 'err'); return; }
   const t = logTxById(_logPageId); if (!t) return;
@@ -5816,7 +5846,8 @@ function getPriority(item) {
   return { level: 'P2', label: 'BALANCED', color: '#2d6a4f', bg: '#d8f3dc', emoji: '🟢' };
 }
 
-let _stkPri = ['P0', 'P1', 'P2'], _stkCats = [], _stkCatList = [];
+let _stkPri = ['P0', 'P1', 'P2'], _stkCats = [], _stkCatList = [], _stkGroup = 'priority';
+function setStkGroup(k) { _stkGroup = k === 'category' ? 'category' : 'priority'; renderStockFilters(); }
 function toggleStkPri(p) { _stkPri = _stkPri.includes(p) ? _stkPri.filter(x => x !== p) : [..._stkPri, p]; renderStockFilters(); }
 function toggleStkCat(i) {
   if (i < 0) _stkCats = [];
@@ -5824,7 +5855,7 @@ function toggleStkCat(i) {
   renderStockFilters();
 }
 function stockFilterLabel() {
-  const p = _stkPri.length === 3 ? 'All priorities' : (_stkPri.join(' + ') || 'No priority');
+  const p = _stkGroup === 'category' ? 'Grouped by category' : _stkPri.length === 3 ? 'All priorities' : (_stkPri.join(' + ') || 'No priority');
   const c = !_stkCats.length ? 'All categories' : _stkCats.length <= 2 ? _stkCats.join(', ') : _stkCats.length + ' categories';
   return p + ' · ' + c;
 }
@@ -5832,6 +5863,10 @@ function renderStockFilters() {
   _stkCatList = [...new Set(getItems().map(i => i.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   _stkCats = _stkCats.filter(c => _stkCatList.includes(c));
   const pri = document.getElementById('stkPriChips'), cat = document.getElementById('stkCatChips');
+  const gb = document.getElementById('stkGroupChips');
+  if (gb) gb.innerHTML = [['priority', 'Priority (P0 / P1 / P2)'], ['category', 'Category']]
+    .map(([k, l]) => `<button type="button" class="exp-chip${_stkGroup === k ? ' on' : ''}" onclick="setStkGroup('${k}')">${l}</button>`).join('');
+  ['stkPriInfo', 'stkPriGroup'].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = _stkGroup === 'category' ? 'none' : ''; });
   if (pri) pri.innerHTML = [['P0', (dot('r') + ' P0 Critical')], ['P1', (dot('y') + ' P1 Moderate')], ['P2', (dot('g') + ' P2 Balanced')]]
     .map(([k, l]) => `<button type="button" class="exp-chip${_stkPri.includes(k) ? ' on' : ''}" onclick="toggleStkPri('${k}')">${l}</button>`).join('');
   if (cat) {
@@ -5848,11 +5883,12 @@ function getStockItems() {
   const items = getItems().map(i => ({ ...i, priority: getPriority(i) }));
   // Sort: P0 first, then P1, then P2, then by name within each group
   items.sort((a, b) => {
+    if (_stkGroup === 'category') return (a.category || '').localeCompare(b.category || '') || a.name.localeCompare(b.name);
     const order = { P0: 0, P1: 1, P2: 2 };
     if (order[a.priority.level] !== order[b.priority.level]) return order[a.priority.level] - order[b.priority.level];
     return a.name.localeCompare(b.name);
   });
-  return items.filter(i => _stkPri.includes(i.priority.level) && (!_stkCats.length || _stkCats.includes(i.category)));
+  return items.filter(i => (_stkGroup === 'category' || _stkPri.includes(i.priority.level)) && (!_stkCats.length || _stkCats.includes(i.category)));
 }
 
 function doStockExport(format) {
@@ -5866,6 +5902,7 @@ function doStockExport(format) {
   const p0 = items.filter(i => i.priority.level === 'P0');
   const p1 = items.filter(i => i.priority.level === 'P1');
   const p2 = items.filter(i => i.priority.level === 'P2');
+  if (_stkGroup === 'category') { exportStockByCategory(format, items, g, today, fname); closeSheet('exportSheet'); return; }
 
   if (format === 'csv') {
     const rows = [['Priority', 'Level', 'Item Name', 'Code', 'Category', 'Location', 'Current Stock', 'Unit', 'Min Stock', 'Status']];
@@ -5974,6 +6011,32 @@ function doStockExport(format) {
     toast('🖨️ Stock report ready — Print or Save as PDF', 'ok');
   }
   closeSheet('exportSheet');
+}
+
+// Stock report without priorities: one block per category (Print) or a category-sorted CSV.
+function exportStockByCategory(format, items, g, today, fname) {
+  const low = i => Number(i.stock) <= Number(i.minStock);
+  if (format === 'csv') {
+    const rows = [['Category', 'Item Name', 'Code', 'Location', 'Current Stock', 'Unit', 'Min Stock', 'Low stock']];
+    items.forEach(i => rows.push([i.category || 'Uncategorized', i.name, i.code || '', i.location || '', i.stock, i.unit, i.minStock, low(i) ? 'Yes' : 'No']));
+    dlFile(`${fname}_by_category.csv`, 'text/csv', '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n'));
+    toast('Stock report CSV downloaded', 'ok'); return;
+  }
+  const cats = [];
+  items.forEach(i => { const c = i.category || 'Uncategorized'; let b = cats.find(x => x.c === c); if (!b) cats.push(b = { c, list: [] }); b.list.push(i); });
+  const blocks = cats.map(b => `<h3>${_esc(b.c)} <span>${b.list.length} item${b.list.length !== 1 ? 's' : ''}</span></h3><table><thead><tr><th>Item Name</th><th>Code</th><th>Location</th><th>Stock</th><th>Min Level</th></tr></thead><tbody>` +
+    b.list.map(i => `<tr><td>${_esc(i.name)}</td><td class="m">${_esc(i.code || '-')}</td><td class="m">${_esc(i.location || '-')}</td><td style="font-weight:700;color:${low(i) ? '#c1121f' : '#1a1a1a'}">${i.stock} ${_esc(i.unit)}${low(i) ? ' (low)' : ''}</td><td class="m">${i.minStock} ${_esc(i.unit)}</td></tr>`).join('') + '</tbody></table>').join('');
+  const win = window.open('', '_blank');
+  if (!win) { toast('Allow popups for this site', 'err'); return; }
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>LabStock Stock Report</title>
+  <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:20px;color:#1a1a1a}h2{color:#2d6a4f;margin-bottom:4px}p{font-size:13px;color:#666;margin-bottom:14px}
+  h3{margin:22px 0 8px;font-size:15px;color:#2d6a4f}h3 span{font-size:12px;font-weight:400;color:#888}table{width:100%;border-collapse:collapse;font-size:13px}
+  th{background:#2d6a4f;color:#fff;padding:7px 10px;text-align:left}td{padding:7px 10px;border:1px solid #ddd}td.m{color:#666;font-size:12px}tr{page-break-inside:avoid}
+  button{background:#2d6a4f;color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:14px;cursor:pointer;margin-bottom:12px}@media print{button{display:none}body{padding:8px}}</style></head>
+  <body><h2>LabStock Stock Report (by category)</h2><p>${_esc(g ? g.name : '')} | ${today} | ${items.length} items in ${cats.length} categories | ${_esc(stockFilterLabel())}</p>
+  <button onclick="window.print()">Print / Save as PDF</button>${blocks}</body></html>`);
+  win.document.close();
+  toast('Print window opened', 'ok');
 }
 
 function dlFile(filename, type, content) {
