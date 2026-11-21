@@ -1699,6 +1699,31 @@ div:has(> .exp-chip){gap:8px !important}
   </div>
 </div>
 
+<!-- Set location for an item without one -->
+<div class="sheet-overlay" id="setLocSheet" onclick="sheetBgClose(event,'setLocSheet')">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-hd">
+      <div class="sheet-title" id="slTitle">Set location</div>
+      <button class="sheet-close" onclick="closeSheet('setLocSheet')"><i data-ic="x"></i></button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-group">
+        <label class="form-label">Pick an existing location</label>
+        <div id="slChips" style="display:flex;gap:6px;flex-wrap:wrap;max-height:150px;overflow-y:auto"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Or type a new one</label>
+        <input class="form-input" id="slLoc" placeholder="e.g. Shelf A3, Fridge 2" autocomplete="off">
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary btn-full" id="slSave" onclick="saveSetLocation()"><i data-ic="check"></i> Save</button>
+      <button class="btn btn-ghost btn-full" onclick="closeSheet('setLocSheet')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Member menu (N11 batch B) -->
 <div class="sheet-overlay" id="memberMenuSheet" onclick="sheetBgClose(event,'memberMenuSheet')">
   <div class="sheet">
@@ -3366,7 +3391,7 @@ function showJoinGroupInApp() {
   closeSheet('groupSheet');
   const code = prompt('Paste your invite link or code:');
   if (!code?.trim()) return;
-  handleInviteLink(code.trim());
+  joinByCodeOrLink(code);
 }
 function generateInviteLink(groupId) {
   const base = window.location.origin + window.location.pathname;
@@ -3411,6 +3436,7 @@ function handleInviteLink(code) {
       // Fallback: old format "groupId|timestamp"
       try {
         const decoded = atob(code);
+        if (decoded.indexOf('|') < 1) throw new Error('not an invite');   // e.g. a 6-character group code
         groupId   = decoded.split('|')[0];
         groupName = 'Lab Group';
         groupDesc = '';
@@ -3421,7 +3447,7 @@ function handleInviteLink(code) {
       }
     }
 
-    if (!groupId) { toast('Invalid invite — missing group ID', 'err'); return; }
+    if (!groupId || !/^g_[A-Za-z0-9_-]+$/.test(groupId)) { toast('Invalid invite link or code', 'err'); return; }
 
     // Bootstrap group on this device if not present
     let g = S.groups.find(g => g.id === groupId);
@@ -4405,8 +4431,14 @@ function renderLocationList() {
   const title = document.getElementById('invCountTitle');
   if (title) title.textContent = `${locs.length} Location${locs.length!==1?'s':''}`;
   updateLocPrintAllBtn();
-  if (!locs.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('map-pin') + '</div><p>No locations found.</p></div>'); return; }
-  el.innerHTML = locs.map(l => `<div class="list-row" style="cursor:pointer" onclick="openLocationView('${l.key.replace(/'/g,"\\'")}')">
+  const nl = noLocationItems();
+  const noRow = (nl.length && (!q || 'items without location'.includes(q))) ? `<div class="list-row" style="cursor:pointer" onclick="openLocationView('${NO_LOC}')">
+      <div class="row-icon warn">${ic('triangle-alert')}</div>
+      <div class="row-body"><div class="row-title">Items without location</div><div class="row-sub">${nl.length} item${nl.length !== 1 ? 's' : ''} · tap to assign</div></div>
+      <span style="color:var(--muted);font-size:20px">›</span>
+    </div>` : '';
+  if (!locs.length && !noRow) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('map-pin') + '</div><p>No locations found.</p></div>'); return; }
+  el.innerHTML = noRow + locs.map(l => `<div class="list-row" style="cursor:pointer" onclick="openLocationView('${l.key.replace(/'/g,"\\'")}')">
       <div class="row-icon info">${ic('map-pin')}</div>
       <div class="row-body">
         <div class="row-title">${l.label}</div>
@@ -4417,7 +4449,20 @@ function renderLocationList() {
 }
 
 // Shared destination for QR scan AND Stock-page Locations mode.
+const NO_LOC = '__none__';
+const noLocationItems = () => getItems().filter(i => !String(i.location || '').trim());
+function openNoLocationView() {
+  if (curTab !== 'inv') switchTab('inv');
+  if (stockMode !== 'locations') { stockMode = 'locations'; setStockModeUIOnly(); }
+  _locationView = NO_LOC;
+  const items = noLocationItems(), el = document.getElementById('invList'), title = document.getElementById('invCountTitle');
+  if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; ${ic('triangle-alert')} Items without location`;
+  updateLocPrintAllBtn();
+  if (!items.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('map-pin') + '</div><p>Every item has a location.</p></div>'); return; }
+  el.innerHTML = items.map(i => itemRowHTML(i, `<div style="margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openSetLocation('${i.id}')">${ic('map-pin')} Set location</button></div>`)).join('');
+}
 function openLocationView(key) {
+  if (key === NO_LOC) { openNoLocationView(); return; }
   if (curTab !== 'inv') switchTab('inv');
   if (stockMode !== 'locations') { stockMode = 'locations'; setStockModeUIOnly(); }
   _locationView = key;
@@ -7077,6 +7122,33 @@ async function renameLocation() {
   } catch (e) { toast('Could not rename: ' + e.message, 'err'); }
 }
 
+// ── SET LOCATION FOR AN ITEM THAT HAS NONE ──
+let _slId = null, _slList = [];
+function openSetLocation(id) {
+  const it = S.inventory.find(i => i.id === id); if (!it) return;
+  _slId = id; _slList = getNormalizedLocations().map(l => l.label);
+  document.getElementById('slTitle').textContent = it.name;
+  document.getElementById('slLoc').value = '';
+  document.getElementById('slChips').innerHTML = _slList.length
+    ? _slList.map((l, k) => `<button type="button" class="exp-chip" onclick="slPick(${k})">${_esc(l)}</button>`).join('')
+    : '<span style="font-size:12px;color:var(--muted)">No locations yet. Type a new one.</span>';
+  openSheet('setLocSheet');
+}
+function slPick(k) { document.getElementById('slLoc').value = _slList[k] || ''; }
+async function saveSetLocation() {
+  const it = S.inventory.find(i => i.id === _slId); if (!it) return;
+  const typed = document.getElementById('slLoc').value.trim().replace(/\s+/g, ' ').slice(0, 80);
+  if (!typed) { toast('Pick or type a location', 'err'); return; }
+  const hit = getNormalizedLocations().find(l => l.key === typed.toLowerCase()), loc = hit ? hit.label : typed;   // reuse the existing spelling
+  const btn = document.getElementById('slSave'); btn.disabled = true;
+  try {
+    await pApi('PUT', `/api/inventory/${encodeURIComponent(it.name)}?groupId=${encodeURIComponent(gid())}`, { location: loc, groupId: gid(), updated_by: S.user?.name || S.user?.email || '' });
+    it.location = loc; logAct(`Location set: ${it.name} → ${loc}`); save();
+    closeSheet('setLocSheet'); renderStockView(); toast(`${it.name} → ${loc}`, 'ok');
+  } catch (e) { toast('Could not save: ' + e.message, 'err'); }
+  btn.disabled = false;
+}
+
 // ── EMPTY LOCATIONS (N11 batch C) ──
 async function syncLocations() {
   const g = S.activeGroupId; if (!g || S.user?.isDemo) return false;
@@ -7651,9 +7723,10 @@ function _showPublicItemView(itemCode, groupId, prefetched) {
 }
 
 
-// applyManualInvite — handles invite links AND 6-char group codes
-function applyManualInvite() {
-  const raw = document.getElementById('manualInviteCode').value.trim();
+// handles invite links AND 6-char group codes; used by the login screen box and by Groups > Join Group
+function applyManualInvite() { joinByCodeOrLink(document.getElementById('manualInviteCode').value); }
+function joinByCodeOrLink(rawIn) {
+  const raw = String(rawIn || '').trim();
   if (!raw) { toast('Paste an invite link or code', 'err'); return; }
 
   // Extract invite param from URL if present
@@ -7740,6 +7813,15 @@ async function _joinGroupDirectly(groupId, groupName, groupDesc, adminEmail) {
   toast(`Joined "${groupName}"! Loading inventory...`, 'ok');
 }
 load();
+// Remove the empty "Lab Group" stubs the old in-app Join Group bug created on this phone (no owner, odd id)
+(function dropStubGroups() {
+  const bad = S.groups.filter(g => g.name === 'Lab Group' && !g.adminEmail && !/^g_\d+$/.test(g.id)).map(g => g.id);
+  if (!bad.length) return;
+  const keep = a => a.filter(x => !bad.includes(x.groupId));
+  S.groups = S.groups.filter(g => !bad.includes(g.id)); S.members = keep(S.members); S.inventory = keep(S.inventory); S.transactions = keep(S.transactions);
+  if (bad.includes(S.activeGroupId)) S.activeGroupId = (S.groups[0] || {}).id || null;
+  save();
+})();
 // Check for invite link on page load
 detectInviteOnLoad();
 // Check QR deep link first — non-users go to public view, not login
