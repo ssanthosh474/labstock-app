@@ -949,6 +949,7 @@ div:has(> .exp-chip){gap:8px !important}
           <button class="btn btn-ghost btn-sm" onclick="toggleProdView()" id="btnProdView" style="display:none"></button>
           <button class="btn btn-ghost btn-sm" onclick="openProdExport()" id="btnProdExport" style="display:none"><i data-ic="download"></i> Export</button>
           <button class="btn btn-ghost btn-sm" onclick="openLocationQRPrintAll()" id="btnLocPrintAll" style="display:none"><i data-ic="printer"></i> Print All</button>
+          <button class="btn btn-primary btn-sm" onclick="newLocation()" id="btnNewLoc" style="display:none">+ Location</button>
           <button class="btn btn-primary btn-sm" onclick="newProduct()" id="btnNewProduct" style="display:none">+ Product</button>
           <button class="btn btn-ghost btn-sm" onclick="openBulk(stockMode==='products'?'products':'items')" id="btnBulk"><i data-ic="inbox"></i> Bulk</button>
           <button class="btn btn-primary btn-sm" onclick="openSheet('addItemSheet')" id="btnAddItem">+ Add</button>
@@ -4349,7 +4350,10 @@ function setStockMode(mode) {
   _productView = null;
   setStockModeUIOnly();
   if (mode === 'items') renderInv();
-  else if (mode === 'locations') renderLocationList();
+  else if (mode === 'locations') {
+    renderLocationList();
+    syncLocations().then(ch => { if (ch && stockMode === 'locations' && !_locationView) renderLocationList(); });
+  }
   else {
     renderProductList();
     syncProducts().then(ch => { if (ch && stockMode === 'products') renderStockView(); });
@@ -4361,6 +4365,8 @@ function setStockMode(mode) {
 function updateLocPrintAllBtn() {
   const btn = document.getElementById('btnLocPrintAll');
   if (btn) btn.style.display = (stockMode === 'locations' && !_locationView) ? '' : 'none';
+  const nl = document.getElementById('btnNewLoc');
+  if (nl) nl.style.display = (stockMode === 'locations' && !_locationView && isAdmin()) ? '' : 'none';
   const np = document.getElementById('btnNewProduct');
   if (np) np.style.display = (stockMode === 'products' && !_productView && isAdmin()) ? '' : 'none';
   const bb = document.getElementById('btnBulk');
@@ -4383,10 +4389,13 @@ function getNormalizedLocations() {
     groups[key].items.push(i);
     groups[key].caseCounts[raw] = (groups[key].caseCounts[raw]||0) + 1;
   });
-  return Object.values(groups).map(g => {
+  const out = Object.values(groups).map(g => {
     const label = Object.entries(g.caseCounts).sort((a,b)=>b[1]-a[1])[0][0];
     return { key: g.key, label, count: g.items.length };
-  }).sort((a,b) => a.label.localeCompare(b.label));
+  });
+  // locations created on the server before any item is stored there (N11 batch C)
+  ((S.locRows || {})[gid()] || []).forEach(r => { if (!groups[r.key]) out.push({ key: r.key, label: r.name, count: 0 }); });
+  return out.sort((a,b) => a.label.localeCompare(b.label));
 }
 
 function renderLocationList() {
@@ -4417,7 +4426,7 @@ function openLocationView(key) {
   const items = getItems().filter(i => (i.location||'').trim().toLowerCase() === key);
   const el = document.getElementById('invList');
   const title = document.getElementById('invCountTitle');
-  if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; ${ic('map-pin')} ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">${ic('qr-code')} QR</button>${isAdmin() ? ` <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="renameLocation()">${ic('pencil')} Rename</button>` : ''}`;
+  if (title) title.innerHTML = `<span onclick="backToLocationList()" style="cursor:pointer;color:var(--accent)">← Locations</span> &nbsp;·&nbsp; ${ic('map-pin')} ${label} <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="openLocationQR('${key.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">${ic('qr-code')} QR</button>${isAdmin() ? ` <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px" onclick="renameLocation()">${ic('pencil')} Rename</button>` : ''}${isAdmin() && !items.length ? ` <button class="btn btn-ghost btn-sm" style="margin-left:6px;padding:2px 8px;color:var(--danger)" onclick="deleteLocation()">${ic('trash-2')} Delete</button>` : ''}`;
   updateLocPrintAllBtn();
   if (!items.length) { el.innerHTML = ('<div class="empty"><div class="empty-icon">' + ic('package') + '</div><p>No items at this location.</p></div>'); return; }
   el.innerHTML = items.map(i => itemRowHTML(i)).join('');
@@ -6525,6 +6534,7 @@ async function syncFromServer(force = false) {
     }
     if (await syncProducts()) { if (curTab === 'inv' && stockMode === 'products') renderStockView(); refreshPIPage(); }
     if (await syncPhotoIndex() && curTab === 'inv') renderStockView();
+    if (await syncLocations() && curTab === 'inv' && stockMode === 'locations') renderStockView();
     if (await syncInbox()) { updateInboxBadge(); if (document.getElementById('inboxSheet').classList.contains('open')) renderInbox(); }
     if (await syncKeepOpen()) { updateKeepBanner(); if (document.getElementById('keepSheet').classList.contains('open')) renderKeep(); }
     maybePromptInbox();
@@ -7057,6 +7067,7 @@ async function renameLocation() {
   try {
     const r = await pApi('POST', '/api/locations/rename', { groupId: gid(), from: key, to, adminEmail: S.user?.email, person: S.user?.name || S.user?.email || '' });
     getItems().filter(i => (i.location || '').trim().toLowerCase() === key).forEach(i => { i.location = to; });
+    ((S.locRows || {})[gid()] || []).forEach(r => { if (r.key === key) { r.name = to; r.key = tl; } });
     const cache = (S.locIds || {})[gid()];
     if (cache && cache[key]) { cache[tl] = cache[key]; if (tl !== key) delete cache[key]; }
     logAct(`Location renamed: ${loc.label} → ${to} (${r.updated} item${r.updated !== 1 ? 's' : ''})`);
@@ -7064,6 +7075,52 @@ async function renameLocation() {
     openLocationView(tl);
     toast(`Renamed to "${to}"`, 'ok');
   } catch (e) { toast('Could not rename: ' + e.message, 'err'); }
+}
+
+// ── EMPTY LOCATIONS (N11 batch C) ──
+async function syncLocations() {
+  const g = S.activeGroupId; if (!g || S.user?.isDemo) return false;
+  try {
+    const r = await fetch(`${RAILWAY_URL}/api/locations?groupId=${encodeURIComponent(g)}`);
+    if (!r.ok) return false;
+    const rows = await r.json();
+    if (S.activeGroupId !== g) return false;
+    if (!S.locRows) S.locRows = {};
+    if (!S.locIds) S.locIds = {};
+    const cache = S.locIds[g] || (S.locIds[g] = {});
+    rows.forEach(x => { cache[x.key] = x.id; });
+    if (JSON.stringify(S.locRows[g] || []) === JSON.stringify(rows)) return false;
+    S.locRows[g] = rows; save(); return true;
+  } catch (e) { return false; }
+}
+async function newLocation() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  const input = prompt('New location name (shelf, fridge, cabinet...):'); if (input === null) return;
+  const name = input.trim().replace(/\s+/g, ' ').slice(0, 80), key = name.toLowerCase();
+  if (!name) return;
+  if (getNormalizedLocations().some(l => l.key === key)) { toast('This location already exists', 'wrn'); return; }
+  try {
+    const r = await pApi('POST', '/api/locations/add', { groupId: gid(), name, adminEmail: S.user?.email });
+    const L = r.location;
+    if (!S.locRows) S.locRows = {}; if (!S.locIds) S.locIds = {};
+    (S.locRows[gid()] || (S.locRows[gid()] = [])).push({ id: L.id, name: L.name, key: L.key });
+    (S.locIds[gid()] || (S.locIds[gid()] = {}))[L.key] = L.id;
+    logAct(`Location added: ${L.name}`); save();
+    renderLocationList(); toast(`"${L.name}" added`, 'ok');
+  } catch (e) { toast('Could not add: ' + e.message, 'err'); }
+}
+async function deleteLocation() {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  const key = _locationView, loc = getNormalizedLocations().find(l => l.key === key); if (!loc) return;
+  if (loc.count) { toast('Move the items out first', 'err'); return; }
+  if (!confirm(`Delete the empty location "${loc.label}"?\n\nIts QR label will stop working.`)) return;
+  try {
+    await pApi('POST', '/api/locations/delete', { groupId: gid(), name: loc.label, adminEmail: S.user?.email });
+    if (S.locRows && S.locRows[gid()]) S.locRows[gid()] = S.locRows[gid()].filter(r => r.key !== key);
+    const cache = (S.locIds || {})[gid()]; if (cache) delete cache[key];
+    logAct(`Location deleted: ${loc.label}`); save();
+    backToLocationList(); toast('Location deleted', 'wrn');
+  } catch (e) { toast('Could not delete: ' + e.message, 'err'); }
 }
 
 function openQRSheet() {
@@ -7342,19 +7399,24 @@ async function _syncGroupsBackground(user) {
 }
 
 function getGroupCode(groupId) {
-  // Short 6-char code derived from groupId — stable and unique
-  const raw = groupId.replace(/[^a-z0-9]/gi, '').toUpperCase();
-  return raw.slice(-6).padStart(6, '0');
+  // Random code stored on the server (N11 batch C); cached on the group after the admin opens Members > Add
+  return ((S.groups.find(g => g.id === groupId) || {}).joinCode) || '';
 }
 
 function populateAddMemberPanel() {
   if (!S.activeGroupId) return;
-  const link = generateInviteLink(S.activeGroupId);
-  const code = getGroupCode(S.activeGroupId);
+  const gId = S.activeGroupId;
+  const link = generateInviteLink(gId);
   const linkEl = document.getElementById('inviteLinkDisplay');
   const codeEl = document.getElementById('groupCodeDisplay');
   if (linkEl) linkEl.textContent = link;
-  if (codeEl) codeEl.textContent = code;
+  if (codeEl) codeEl.textContent = getGroupCode(gId) || '…';
+  pApi('GET', `/api/groups/${encodeURIComponent(gId)}/join-code?adminEmail=${encodeURIComponent(S.user?.email || '')}`)
+    .then(r => {
+      const g = S.groups.find(x => x.id === gId); if (g && r.code) { g.joinCode = r.code; save(); }
+      if (S.activeGroupId === gId && codeEl) codeEl.textContent = r.code || '—';
+    })
+    .catch(e => { if (codeEl && !getGroupCode(gId)) codeEl.textContent = '—'; toast('Could not get the group code: ' + e.message, 'err'); });
 }
 
 function copyInviteLink() {
@@ -7366,6 +7428,7 @@ function copyInviteLink() {
 
 function copyGroupCode() {
   const code = getGroupCode(S.activeGroupId);
+  if (!code) { toast('Code not ready yet. Try again in a moment', 'wrn'); return; }
   navigator.clipboard.writeText(code)
     .then(() => toast('Group code copied: ' + code, 'ok'))
     .catch(() => { prompt('Group code:', code); });
@@ -7602,20 +7665,11 @@ function applyManualInvite() {
 
   // 6-char group code
   if (/^[A-Z0-9]{6}$/i.test(code)) {
-    // Check locally first
-    const localMatch = S.groups.find(g => getGroupCode(g.id) === code.toUpperCase());
-    if (localMatch) {
-      _joinGroupDirectly(localMatch.id, localMatch.name, localMatch.desc, localMatch.adminEmail);
-      return;
-    }
-    // Fetch from server
+    // Always ask the server: a code is only valid if the server knows it (a local guess could pick the wrong group)
     fetch(`${RAILWAY_URL}/api/lab-groups/by-code/${code.toUpperCase()}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(g => {
-        if (g) _joinGroupDirectly(g.id, g.name, g.desc, g.adminEmail);
-        else toast('Group code not found', 'err');
-      })
-      .catch(() => toast('Could not reach server — try the full invite link', 'err'));
+      .then(async r => { const j = await r.json().catch(() => ({})); if (r.ok) return j; throw new Error(j.error || 'Group code not found'); })
+      .then(g => _joinGroupDirectly(g.id, g.name, g.desc, g.adminEmail))
+      .catch(e => toast(/failed to fetch|networkerror|load failed/i.test(e.message) ? 'Could not reach server — try the full invite link' : e.message, 'err'));
     return;
   }
 
