@@ -1406,6 +1406,7 @@ div:has(> .exp-chip){gap:8px !important}
     <div class="sheet-body">
       <div class="info-box" id="bulkInfo" style="font-size:12px;margin-bottom:4px"></div>
       <button class="btn btn-ghost btn-full btn-sm" onclick="downloadTemplate()" style="margin-bottom:4px"><i data-ic="download"></i> Download Template CSV</button>
+      <button class="btn btn-ghost btn-full btn-sm" id="bulkDownloadCurrent" onclick="downloadItemsEditCSV(false)" style="margin-bottom:4px;display:none"><i data-ic="download"></i> Download current stock (editable)</button>
       <div class="form-group">
         <label class="form-label">Upload File (.csv or .xlsx)</label>
         <input type="file" class="form-input" id="bulkFile" accept=".csv,.xlsx,.xls" onchange="previewBulk(event)" style="padding:10px">
@@ -1544,6 +1545,7 @@ div:has(> .exp-chip){gap:8px !important}
             <span style="font-size:22px"><i data-ic="printer"></i></span><span style="font-size:12px">Print / PDF</span>
           </button>
         </div>
+        <button class="btn btn-ghost btn-full" onclick="downloadItemsEditCSV(true)" style="margin-top:8px"><i data-ic="download"></i> Edit file (change and upload again in Bulk)</button>
       </div>
     </div>
   </div>
@@ -3980,7 +3982,9 @@ function saveItem() {
     if (!confirm(summary)) { cancelTxResume(); return; }
   }
   const _editItem = eid ? S.inventory.find(i => i.id === eid) : null;   // ADD
-  const _prevStockBeforeEdit = _editItem ? _editItem.stock : 0;  
+  const _prevStockBeforeEdit = _editItem ? _editItem.stock : 0;
+  const _prevName = _editItem ? _editItem.name : '', _snap = _editItem ? { ..._editItem } : null;
+  if (_editItem && name.toLowerCase() !== _prevName.toLowerCase() && getItems().some(i => i.id !== eid && i.name.toLowerCase() === name.toLowerCase())) { toast(`An item named "${name}" already exists`, 'err'); return; }  
   if (eid) {
     const item = S.inventory.find(i=>i.id===eid);
     // Check code uniqueness if changed
@@ -4003,13 +4007,20 @@ function saveItem() {
   save(); closeSheet('addItemSheet'); renderInv(); updateAlertBadge();
   // Block sync for 6s so race condition doesn't overwrite local edit with stale server value
   lastSyncTime = Date.now() + 6000;
+  let editPut = Promise.resolve(true), _editTxId = null;
   if (eid) {
-    // PUT updates existing item by name — more reliable than POST upsert for stock edits
-    fetch(`${RAILWAY_URL}/api/inventory/${encodeURIComponent(name)}?groupId=${encodeURIComponent(S.activeGroupId||'')}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, code, category: cat, location: loc, stock, unit, minStock: min, expiry, groupId: S.activeGroupId, updated_by: S.user?.name || S.user?.email || 'unknown' })
-    }).catch(() => {});
+    // The URL carries the OLD name so a rename finds the row (it used the new name before, so a rename never reached the server).
+    // Stock is not sent here: a stock change goes through the IN/OUT entry below, which waits for this call, so it is applied once.
+    editPut = pApi('PUT', `/api/inventory/${encodeURIComponent(_prevName || name)}?groupId=${encodeURIComponent(S.activeGroupId||'')}`,
+      { name, code, category: cat, location: loc, unit, minStock: min, expiry, groupId: S.activeGroupId, updated_by: S.user?.name || S.user?.email || 'unknown' })
+      .then(() => { if (_prevName && _prevName.toLowerCase() !== name.toLowerCase()) syncPhotoIndex().then(ch => { if (ch) renderStockView(); }); return true; })
+      .catch(e => {
+        toast('Not saved to server: ' + e.message, 'err');
+        if (_snap && _editItem) Object.assign(_editItem, _snap);
+        if (_editTxId) S.transactions = S.transactions.filter(t => t.id !== _editTxId);
+        save(); renderStockView(); updateAlertBadge();
+        return false;
+      });
   } else {
     fetch(`${RAILWAY_URL}/api/inventory`, {
       method: 'POST',
@@ -4023,7 +4034,7 @@ if (eid) {
       const txType = diff > 0 ? 'IN' : 'OUT';
       const txQty  = Math.abs(diff);
       S.transactions.unshift({
-        id: 'tx_edit_' + Date.now(), groupId: gid(), type: txType, source: 'APP',
+        id: (_editTxId = 'tx_edit_' + Date.now()), groupId: gid(), type: txType, source: 'APP',
         itemName: name, itemCode: code, category: cat, unit,
         qty: txQty, person: S.user?.name || S.user?.email || 'Admin',
         labMember: S.user?.name || S.user?.email || '',
@@ -4031,14 +4042,14 @@ if (eid) {
         date: localDateStr(),
         timestamp: new Date().toISOString()
       });
-      fetch(`${RAILWAY_URL}/api/transactions`, {
+      editPut.then(ok => ok && fetch(`${RAILWAY_URL}/api/transactions`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           groupId: S.activeGroupId, itemName: name, qty: txQty,
           type: txType, person: S.user?.name || S.user?.email || 'Admin',
           notes: 'Stock updated via Edit', unit, category: cat
         })
-      }).catch(() => {});
+      })).catch(() => {});
     }
   } else if (stock > 0) {
     S.transactions.unshift({
@@ -4396,7 +4407,7 @@ function updateLocPrintAllBtn() {
   const np = document.getElementById('btnNewProduct');
   if (np) np.style.display = (stockMode === 'products' && !_productView && isAdmin()) ? '' : 'none';
   const bb = document.getElementById('btnBulk');
-  if (bb) bb.style.display = (stockMode === 'items' || (stockMode === 'products' && !_productView && isAdmin())) ? '' : 'none';
+  if (bb) bb.style.display = ((stockMode === 'items' || (stockMode === 'products' && !_productView)) && isAdmin()) ? '' : 'none';
   const pv = document.getElementById('btnProdView'), pe = document.getElementById('btnProdExport');
   if (pv) { pv.style.display = stockMode === 'products' ? '' : 'none'; pv.innerHTML = prodViewMode === 'grid' ? (ic('list') + ' List') : (ic('layout-grid') + ' Grid'); }
   if (pe) pe.style.display = (stockMode === 'products' && isAdmin()) ? '' : 'none';
@@ -6150,7 +6161,7 @@ async function exportQRLinksCSV() {
 const PAPA_URL = 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js';
 const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
 const BULK_MAX_ROWS = 2000;
-let _bulkKind = 'items', _bulkData = [];
+let _bulkKind = 'items', _bulkData = [], _bulkExtra = '', _bulkDiff = null;
 const _libP = {};
 function loadScriptOnce(src) {
   return _libP[src] || (_libP[src] = new Promise((ok, bad) => {
@@ -6163,13 +6174,13 @@ function loadScriptOnce(src) {
 const BULK_CFG = {
   items: {
     title: 'Bulk Upload Items', btn: (ic('check') + ' Import Items'), noun: 'item', file: 'labstock_items_template.csv',
-    info: 'Columns: <strong>Item Name, Category, Unit, Stock</strong><br>Optional: Unique Code, Location, Min Stock, Expiry.<br>A blank cell never overwrites an existing item.',
+    info: 'Columns: <strong>Item Name, Category, Unit, Stock</strong><br>Optional: Unique Code, Location, Min Stock, Expiry, <strong>Item ID</strong>.<br>To edit existing items, tap <strong>Download current stock</strong>, change the file and upload it. A row with an Item ID updates that item (name, stock, location, expiry); a blank Location or Expiry clears it. Rows without an Item ID are matched by name and blank cells never overwrite.',
     need: [{ label: 'Item Name', keys: ['itemname', 'name', 'item'] }],
-    tpl: `Item Name,Unique Code,Category,Location,Unit,Stock,Min Stock,Expiry
-Ethanol 95%,CHM-001,Chemicals,Shelf A1,L,10,5,2027-03-31
-Sodium Chloride,CHM-002,Chemicals,Cabinet B2,g,500,100,
-Micropipette Tips,CSM-001,Consumables,Drawer 3,box,20,5,
-Petri Dishes,GLS-001,Glassware,Shelf C1,pcs,50,10,`
+    tpl: `Item Name,Unique Code,Category,Location,Unit,Stock,Min Stock,Expiry,Item ID
+Ethanol 95%,CHM-001,Chemicals,Shelf A1,L,10,5,2027-03-31,
+Sodium Chloride,CHM-002,Chemicals,Cabinet B2,g,500,100,,
+Micropipette Tips,CSM-001,Consumables,Drawer 3,box,20,5,,
+Petri Dishes,GLS-001,Glassware,Shelf C1,pcs,50,10,,`
   },
   products: {
     title: 'Bulk Upload Products', btn: (ic('check') + ' Import Products'), noun: 'product item', file: 'labstock_products_template.csv',
@@ -6219,18 +6230,79 @@ async function readTable(file) {
 
 function mapItemRows(objs, errors) {
   const out = [], num = x => (x === '' || isNaN(parseFloat(x))) ? null : parseFloat(x);
+  const has = (v, ...keys) => keys.some(k => k in v);
   objs.forEach(({ n, v }) => {
+    const qrId = String(pick(v, 'itemid', 'qrid')).trim().toUpperCase();
     const name = pick(v, 'itemname', 'name', 'item');
-    if (!name) { errors.push({ n, reason: 'missing item name' }); return; }
-    const stock = num(pick(v, 'stock', 'count', 'qty', 'quantity')), minStock = num(pick(v, 'minstock', 'min'));
+    if (qrId && !/^I-[A-Z0-9]{4,12}$/.test(qrId)) { errors.push({ n, reason: `Item ID "${qrId}" is not valid (leave it blank for a new item)` }); return; }
+    if (!name && !qrId) { errors.push({ n, reason: 'missing item name' }); return; }
+    const stock = num(pick(v, 'stock', 'currentstock', 'count', 'qty', 'quantity')), minStock = num(pick(v, 'minstock', 'min'));
     if (stock !== null && stock < 0) { errors.push({ n, reason: 'stock cannot be negative' }); return; }
     const exr = pick(v, 'expiry', 'expirydate', 'exp'), expiry = normDate(exr);
     if (exr && expiry === null) { errors.push({ n, reason: `unreadable expiry "${exr}"` }); return; }
-    const row = { name, code: pick(v, 'uniquecode', 'code'), category: pick(v, 'category', 'cat'), location: pick(v, 'location', 'loc'), unit: pick(v, 'unit'), stock, minStock };
-    if (expiry) row.expiry = expiry;   // blank expiry is never sent, so it cannot clear a stored date
+    const row = { n, name, code: pick(v, 'uniquecode', 'code'), category: pick(v, 'category', 'cat'), location: pick(v, 'location', 'loc'), unit: pick(v, 'unit'), stock, minStock };
+    if (qrId) {
+      // Rows with an Item ID edit THAT item. A column that is present but blank clears it; a missing column leaves it alone.
+      row.qrId = qrId;
+      if (!has(v, 'location', 'loc')) delete row.location;
+      if (has(v, 'expiry', 'expirydate', 'exp')) row.expiry = expiry || '';
+    } else if (expiry) row.expiry = expiry;   // rows without an ID: a blank expiry is never sent, so it cannot clear a stored date
     out.push(row);
   });
   return out;
+}
+// What the upload will change, compared with the stock on this phone. Rows that would be refused are moved to `errors`.
+function analyzeItemRows(errors) {
+  const inv = getItems();
+  const byId = new Map(inv.filter(i => i.qrId).map(i => [String(i.qrId).toUpperCase(), i]));
+  const byName = new Map(inv.map(i => [i.name.toLowerCase(), i]));
+  const seen = new Set(), claimed = new Set(), keep = [];
+  const s = { added: 0, renamed: [], stock: [], loc: 0, locCleared: 0, exp: 0, expCleared: 0, other: 0, same: 0 };
+  const eq = (a, b) => String(a ?? '').trim() === String(b ?? '').trim();
+  _bulkData.forEach(d => {
+    let ex;
+    if (d.qrId) {
+      ex = byId.get(d.qrId);
+      if (!ex) { errors.push({ n: d.n, reason: `Item ID ${d.qrId} not found in this group (clear the Item ID cell to import it by name)` }); return; }
+      if (seen.has(d.qrId)) { errors.push({ n: d.n, reason: 'duplicate Item ID in the file' }); return; }
+      seen.add(d.qrId);
+      if (d.name && d.name.toLowerCase() !== ex.name.toLowerCase()) {
+        const nl = d.name.toLowerCase(), other = byName.get(nl);
+        if (other && other !== ex) { errors.push({ n: d.n, reason: `name "${d.name}" is already used by another item` }); return; }
+        if (claimed.has(nl)) { errors.push({ n: d.n, reason: `two rows rename to "${d.name}"` }); return; }
+        claimed.add(nl);
+      }
+    } else {
+      ex = byName.get(d.name.toLowerCase());
+      if (!ex) { s.added++; keep.push(d); return; }
+    }
+    let changed = false;
+    if (d.qrId && d.name && d.name !== ex.name) { s.renamed.push({ from: ex.name, to: d.name }); changed = true; }
+    if (d.stock !== null && Number(d.stock) !== Number(ex.stock)) { s.stock.push({ name: d.name || ex.name, from: ex.stock, to: d.stock }); changed = true; }
+    if (d.qrId) {
+      if ('location' in d && !eq(d.location, ex.location)) { if (d.location) s.loc++; else s.locCleared++; changed = true; }
+      if ('expiry' in d && !eq(d.expiry, ex.expiry)) { if (d.expiry) s.exp++; else s.expCleared++; changed = true; }
+    } else {
+      if (d.location && !eq(d.location, ex.location)) { s.loc++; changed = true; }
+      if (d.expiry && !eq(d.expiry, ex.expiry)) { s.exp++; changed = true; }
+    }
+    ['code', 'category', 'unit'].forEach(k => { if (d[k] && !eq(d[k], ex[k])) { s.other++; changed = true; } });
+    if (d.minStock !== null && Number(d.minStock) !== Number(ex.minStock)) { s.other++; changed = true; }
+    if (!changed) s.same++;
+    keep.push(d);
+  });
+  _bulkData = keep; _bulkDiff = s;
+  const pl = (n, w) => `${n} ${w}${n !== 1 ? 's' : ''}`, L = [];
+  if (s.added) L.push(pl(s.added, 'new item'));
+  if (s.renamed.length) L.push(`${s.renamed.length} renamed: ` + s.renamed.slice(0, 4).map(r => `${_esc(r.from)} → ${_esc(r.to)}`).join(', ') + (s.renamed.length > 4 ? ', …' : ''));
+  if (s.stock.length) L.push(pl(s.stock.length, 'stock change') + ': ' + s.stock.slice(0, 4).map(r => `${_esc(r.name)} ${r.from} → ${r.to}`).join(', ') + (s.stock.length > 4 ? ', …' : ''));
+  if (s.loc) L.push(pl(s.loc, 'location') + ' changed');
+  if (s.locCleared) L.push(pl(s.locCleared, 'location') + ' cleared');
+  if (s.exp) L.push(pl(s.exp, 'expiry date') + ' changed');
+  if (s.expCleared) L.push(pl(s.expCleared, 'expiry date') + ' cleared');
+  if (s.other) L.push(pl(s.other, 'other field change'));
+  if (s.same) L.push(pl(s.same, 'row') + ' with no change');
+  return L.length ? '<strong>What will change</strong><br>' + L.map(x => '• ' + x).join('<br>') : '';
 }
 function mapProductRows(objs, errors) {
   const out = [];
@@ -6282,7 +6354,7 @@ function showBulkPreview(errors, fatal) {
     prev.innerHTML = `<div class="info-box" style="font-size:12px;background:var(--danger-bg);border-color:#ffc9cb">${ic('circle-x')} <strong>${_esc(fatal || 'No rows could be read.')}</strong>${bulkErrHtml(errors, 'rows skipped')}</div>`;
     btn.style.display = 'none'; return;
   }
-  prev.innerHTML = `<div class="info-box" style="font-size:12px">${ic('check')} <strong>${_bulkData.length} ${BULK_CFG[_bulkKind].noun}${_bulkKind === 'log' ? (_bulkData.length === 1 ? 'y' : 'ies') : (_bulkData.length === 1 ? '' : 's')}</strong> ready to import${bulkErrHtml(errors, 'rows will be skipped')}<br><br>${_bulkData.slice(0, 3).map(bulkSample).join('<br>')}${_bulkData.length > 3 ? `<br>…and ${_bulkData.length - 3} more` : ''}</div>`;
+  prev.innerHTML = `<div class="info-box" style="font-size:12px">${ic('check')} <strong>${_bulkData.length} ${BULK_CFG[_bulkKind].noun}${_bulkKind === 'log' ? (_bulkData.length === 1 ? 'y' : 'ies') : (_bulkData.length === 1 ? '' : 's')}</strong> ready to import${bulkErrHtml(errors, 'rows will be skipped')}<br><br>${_bulkExtra || (_bulkData.slice(0, 3).map(bulkSample).join('<br>') + (_bulkData.length > 3 ? `<br>…and ${_bulkData.length - 3} more` : ''))}</div>`;
   btn.style.display = '';
 }
 function showBulkResult(headline, skipped, warn) {
@@ -6294,8 +6366,9 @@ function showBulkResult(headline, skipped, warn) {
 }
 
 function openBulk(kind) {
-  if (kind !== 'items' && !isAdmin()) { toast('Admin only', 'err'); return; }
-  _bulkKind = kind; _bulkData = [];
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  _bulkKind = kind; _bulkData = []; _bulkExtra = ''; _bulkDiff = null;
+  const dl = document.getElementById('bulkDownloadCurrent'); if (dl) dl.style.display = kind === 'items' ? '' : 'none';
   const c = BULK_CFG[kind];
   document.getElementById('bulkTitle').textContent = c.title;
   document.getElementById('bulkInfo').innerHTML = c.info;
@@ -6304,6 +6377,19 @@ function openBulk(kind) {
   document.getElementById('bulkPreview').style.display = 'none';
   document.getElementById('bulkFile').value = '';
   openSheet('bulkSheet');
+}
+// Same columns as the bulk template (+ Item ID last), so the file can be edited and uploaded again (N11 batch E).
+function downloadItemsEditCSV(useCatFilter) {
+  if (!isAdmin()) { toast('Admin only', 'err'); return; }
+  let items = [...getItems()].sort((a, b) => a.name.localeCompare(b.name));
+  if (useCatFilter && _stkCats.length) items = items.filter(i => _stkCats.includes(i.category));
+  if (!items.length) { toast('No items to export', 'wrn'); return; }
+  const rows = [['Item Name', 'Unique Code', 'Category', 'Location', 'Unit', 'Stock', 'Min Stock', 'Expiry', 'Item ID'],
+    ...items.map(i => [i.name, i.code || '', i.category || '', i.location || '', i.unit || '', i.stock, i.minStock ?? '', i.expiry || '', i.qrId || ''])];
+  dlFile(`labstock_items_edit_${localDateStr()}.csv`, 'text/csv', '\uFEFF' + rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n'));
+  const noId = items.filter(i => !i.qrId).length;
+  toast(`${items.length} items downloaded` + (noId ? ` (${noId} without an Item ID cannot be renamed yet)` : ''), noId ? 'wrn' : 'ok');
+  closeSheet('exportSheet');
 }
 function downloadTemplate() {
   const c = BULK_CFG[_bulkKind];
@@ -6314,7 +6400,7 @@ function downloadTemplate() {
 async function previewBulk(event) {
   const file = event.target.files[0]; if (!file) return;
   const prev = document.getElementById('bulkPreview');
-  _bulkData = []; document.getElementById('bulkImportBtn').style.display = 'none';
+  _bulkData = []; _bulkExtra = ''; _bulkDiff = null; document.getElementById('bulkImportBtn').style.display = 'none';
   prev.style.display = 'block'; prev.innerHTML = '<div class="sheet-loading">Reading file…</div>';
   try {
     const rows = await readTable(file);
@@ -6331,6 +6417,7 @@ async function previewBulk(event) {
     if (objs.length > BULK_MAX_ROWS) { showBulkPreview([], `Too many rows (${objs.length}). Split the file into parts of ${BULK_MAX_ROWS} or fewer.`); return; }
     const errors = [];
     _bulkData = BULK_MAP[_bulkKind](objs, errors);
+    _bulkExtra = _bulkKind === 'items' ? analyzeItemRows(errors) : '';
     showBulkPreview(errors);
   } catch (err) {
     console.error('bulk read', err);
@@ -6343,16 +6430,36 @@ async function importBulk() {
   if (!_bulkData.length) return;
   const btn = document.getElementById('bulkImportBtn'); btn.disabled = true;
   try {
-    if (_bulkKind === 'items') importItemsBulk();
+    if (_bulkKind === 'items') await importItemsBulk();
     else if (_bulkKind === 'products') await importProductsBulk();
     else await importLogBulk();
   } catch (e) { toast('Import failed: ' + e.message, 'err'); }
   btn.disabled = false;
 }
 
-function importItemsBulk() {
+function applyEditLocal(d) {
+  const it = getItems().find(i => String(i.qrId || '').toUpperCase() === d.qrId); if (!it) return;
+  if (d.name) it.name = d.name;
+  ['code', 'category', 'unit'].forEach(k => { if (d[k]) it[k] = d[k]; });
+  if ('location' in d) it.location = d.location;          // blank clears
+  if (d.minStock !== null) it.minStock = d.minStock;
+  if (d.stock !== null) it.stock = d.stock;
+  if ('expiry' in d) it.expiry = d.expiry || '';          // blank clears
+}
+
+async function importItemsBulk() {
+  const dd = _bulkDiff;
+  if (dd && (dd.renamed.length || dd.stock.length || dd.locCleared || dd.expCleared)) {
+    const pl = (n, w) => `${n} ${w}${n !== 1 ? 's' : ''}`, parts = [];
+    if (dd.renamed.length) parts.push(pl(dd.renamed.length, 'rename'));
+    if (dd.stock.length) parts.push(pl(dd.stock.length, 'stock change'));
+    if (dd.locCleared) parts.push(pl(dd.locCleared, 'location') + ' cleared');
+    if (dd.expCleared) parts.push(pl(dd.expCleared, 'expiry date') + ' cleared');
+    if (!confirm('Apply these changes?\n\n' + parts.join('\n') + '\n\nStock changes are recorded in the Log.')) return;
+  }
+  const edits = _bulkData.filter(d => d.qrId), plain = _bulkData.filter(d => !d.qrId);
   let added = 0, updated = 0;
-  _bulkData.forEach(d => {
+  plain.forEach(d => {
     const existing = getItems().find(i => i.name.toLowerCase() === d.name.toLowerCase());
     // Blank cells never overwrite an existing item; new items get defaults
     if (!existing) {
@@ -6372,31 +6479,47 @@ function importItemsBulk() {
       if (d.expiry) existing.expiry = d.expiry;
       updated++;
     } else {
-      S.inventory.push({ id: 'i_'+Date.now()+Math.random(), groupId: gid(), ...d, stock: d.stock ?? 0 });
+      const { n: _n, qrId: _q, ...rest } = d;
+      S.inventory.push({ id: 'i_'+Date.now()+Math.random(), groupId: gid(), ...rest, stock: d.stock ?? 0 });
       added++;
     }
   });
-  logAct(`Bulk imported: ${added} added, ${updated} updated`);
-  save(); closeSheet('bulkSheet'); renderInv(); updateAlertBadge();
-
-  if (S.activeGroupId) {
-    fetch(`${RAILWAY_URL}/api/inventory/bulk`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupId: S.activeGroupId, items: _bulkData, person: S.user?.name || S.user?.email || '' })
-    }).then(async r => {
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || ('server ' + r.status));
-      if (j.logFailed) toast('Imported, but the Log entries failed to save', 'wrn');
-      setTimeout(() => syncFromServer(true), 800);
-    }).catch(e => toast('Server import FAILED: ' + e.message + ' — not saved to server', 'err'));
+  const who = S.user?.name || S.user?.email || '';
+  if (!edits.length) {
+    logAct(`Bulk imported: ${added} added, ${updated} updated`);
+    save(); closeSheet('bulkSheet'); renderInv(); updateAlertBadge();
+    if (S.activeGroupId) {
+      fetch(`${RAILWAY_URL}/api/inventory/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: S.activeGroupId, items: _bulkData, person: who })
+      }).then(async r => {
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || ('server ' + r.status));
+        if (j.logFailed) toast('Imported, but the Log entries failed to save', 'wrn');
+        setTimeout(() => syncFromServer(true), 800);
+      }).catch(e => toast('Server import FAILED: ' + e.message + ' — not saved to server', 'err'));
+    }
+    _bulkData = []; _bulkExtra = ''; _bulkDiff = null;
+    document.getElementById('bulkFile').value = '';
+    document.getElementById('bulkPreview').style.display = 'none';
+    document.getElementById('bulkImportBtn').style.display = 'none';
+    toast(`${added} added, ${updated} updated!`, 'ok');
+    return;
   }
-
-  _bulkData = [];
-  document.getElementById('bulkFile').value = '';
-  document.getElementById('bulkPreview').style.display = 'none';
-  document.getElementById('bulkImportBtn').style.display = 'none';
-  toast(`${added} added, ${updated} updated!`, 'ok');
+  // Rows with an Item ID: wait for the server, then apply only the rows it accepted (a refused rename must not change this phone)
+  try {
+    const r = await pApi('POST', '/api/inventory/bulk', { groupId: S.activeGroupId, items: _bulkData, person: who, adminEmail: S.user?.email });
+    const bad = new Set((r.skipped || []).map(x => x.n));
+    edits.filter(d => !bad.has(d.n)).forEach(applyEditLocal);
+    logAct(`Bulk edited by Item ID: ${r.edited} updated, ${r.renamed || 0} renamed; ${added} added, ${updated} updated by name`);
+    save(); renderInv(); updateAlertBadge();
+    const head = [`<strong>${r.edited} item${r.edited !== 1 ? 's' : ''} updated</strong>` + (r.renamed ? ` (${r.renamed} renamed)` : '')];
+    if (added || updated) head.push(`${added} added, ${updated} updated by name`);
+    showBulkResult(ic('check') + ' ' + head.join(' · '), r.skipped || [], r.logFailed ? 'Saved, but some Log entries failed' : '');
+    syncPhotoIndex().then(ch => { if (ch) renderStockView(); });
+    setTimeout(() => syncFromServer(true), 800);
+  } catch (e) { toast('Server import FAILED: ' + e.message + ' — the rows with an Item ID were not saved', 'err'); }
 }
 
 async function importProductsBulk() {
