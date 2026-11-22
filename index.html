@@ -6372,7 +6372,7 @@ function openBulk(kind) {
   const c = BULK_CFG[kind];
   document.getElementById('bulkTitle').textContent = c.title;
   document.getElementById('bulkInfo').innerHTML = c.info;
-  document.getElementById('bulkImportBtn').textContent = c.btn;
+  document.getElementById('bulkImportBtn').innerHTML = c.btn;
   document.getElementById('bulkImportBtn').style.display = 'none';
   document.getElementById('bulkPreview').style.display = 'none';
   document.getElementById('bulkFile').value = '';
