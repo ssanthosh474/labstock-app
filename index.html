@@ -2702,6 +2702,7 @@ function renderStockView() {
 }
 function openSheet(id) {
   if (id === 'txSheet') {
+    _addFromLog = null;
     const sel = document.getElementById('txItem');
     sel.innerHTML = '<option value="">Select item…</option>' + getItems().map(i => `<option value="${i.id}">${i.name} (${i.stock} ${i.unit})</option>`).join('');
     document.getElementById('txDate').value = localDateStr();
@@ -2713,6 +2714,7 @@ function openSheet(id) {
     setTxType('IN');
   }
   if (id === 'addItemSheet') {
+    _addFromLog = null;
     const existingEditId = document.getElementById('editId').value;
     if (!existingEditId) {
       document.getElementById('itemSheetTitle').textContent = 'Add Item';
@@ -2749,6 +2751,7 @@ function histBack() {
 function closeSheet(id) {
   const el = document.getElementById(id);
   if (!el) return;
+  if (id === 'txSheet' || id === 'addItemSheet') _addFromLog = null;
   const wasOpen = el.classList.contains('open');
   el.classList.remove('open');
   // If the sheet was open and we closed it programmatically (not via popstate),
@@ -2764,6 +2767,8 @@ window.addEventListener('popstate', function(e) {
   if (_skipPops > 0) { _skipPops--; return; }   // our own history.back(), not the user's Back
   const openSheets = [...document.querySelectorAll('.sheet-overlay.open')];
   if (openSheets.length > 0) {
+    const topId = openSheets[openSheets.length - 1].id;
+    if (topId === 'txSheet' || topId === 'addItemSheet') _addFromLog = null;
     openSheets[openSheets.length - 1].classList.remove('open');
     return;
   }
@@ -3967,6 +3972,7 @@ function updateExpiryPreview() {
 }
 
 function saveItem() {
+  const fromLog = _addFromLog;
   const name = document.getElementById('iName').value.trim();
   let code = document.getElementById('iCode').value.trim();
   const cat = document.getElementById('iCat').value.trim();
@@ -4068,7 +4074,7 @@ if (eid) {
         type: 'IN', person: S.user?.name || S.user?.email || 'Admin',
         notes: 'Initial stock via Add Item', unit, category: cat
       })
-    }).catch(() => {});
+    }).then(r => { if (r && r.ok && fromLog) markAddedToStock(fromLog.id); }).catch(() => {});
   }
 
   // If this item was created via "+ Add as new item" from Log Transaction,
@@ -5204,6 +5210,7 @@ function submitTx(override=null) {
     ? S.inventory.find(i=>i.id===d.itemId)
     : { id: null, name: freeformName, code: '', category: 'Uncategorized', unit: '', minStock: 0, stock: 0, location: '' };
   if (!item) return false;
+  const fromLog = (!override && !d.logOnly && d.type === 'IN' && _addFromLog) ? _addFromLog : null;
   if (!d.logOnly) {
     if (d.type==='OUT'&&d.qty>item.stock) { toast(`Only ${item.stock} ${item.unit} available`,'err'); return false; }
     if (d.type==='IN') item.stock+=d.qty; else item.stock-=d.qty;
@@ -5255,6 +5262,7 @@ function submitTx(override=null) {
     toast('Not saved to server: ' + msg, 'err');   // was silent before
     return null;
   }).then(result => {
+    if (result && fromLog) markAddedToStock(fromLog.id);
     // After server confirms, store server's transaction id for dedup
     if (result?.tx?.id) {
       const local = S.transactions.find(t => t.id === d._localId);
@@ -5547,6 +5555,7 @@ function logToggleAll(checked) {
 }
 // ── LOG DETAIL PAGE + LONG-PRESS SELECT (phase D) ──
 let _logPageId = null, _lpTimer = null, _lpFired = false, _lpX = 0, _lpY = 0;
+let _addFromLog = null;   // { id } of the Log only entry whose Add to stock sheet is open; cleared whenever that sheet closes
 const LOG_SRC = { APP: 'App', LOG_ONLY: 'Log only', PRODUCT: 'Product' };
 function logTxById(id) { return S.transactions.find(t => !t._act && String(t.id) === String(id)); }
 
@@ -5641,6 +5650,7 @@ function renderLogPage(t) {
   if (!logOnly && t.stockAfter !== undefined && t.stockAfter !== null) add(main, 'Stock after', t.stockAfter + unit);
   add(main, 'Source', (LOG_SRC[t.source] || t.source || '') + (d.via === 'form' ? ' (via Form)' : ''));
   add(main, 'Form entry', d.form_id);
+  if (d.added_to_stock) add(main, 'Added to stock', `${d.added_to_stock.by || '?'}${d.added_to_stock.at ? ' on ' + new Date(d.added_to_stock.at).toLocaleDateString() : ''}${d.added_to_stock.manual ? ' (marked manually)' : ''}`, 'var(--accent)');
   add(main, 'Recorded', t.timestamp ? new Date(t.timestamp).toLocaleString() : '');
   if (d.returnable) add(keep, 'Returnable', d.returnable === 'RETURNABLE' ? 'Returnable' : 'Non-returnable');
   if (d.keep_until) {
@@ -5662,7 +5672,10 @@ function renderLogPage(t) {
     act += `<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="logPageClose('RETURNED')">${out ? (ic('undo-2') + ' Came back') : (ic('undo-2') + ' Returned')}</button><button class="btn btn-ghost" style="flex:1" onclick="logPageClose('DISPOSED')">${out ? (ic('x') + ' Not returning') : (ic('trash-2') + ' Disposed')}</button></div>`;
   }
   const item = !prod && getItems().find(i => i.name.toLowerCase() === String(t.itemName || '').toLowerCase());
-  if (!prod) act += `<button class="btn btn-primary btn-full" onclick="logPageAddStock()">${ic('plus')} Add to stock</button>`;
+  if (logOnly && !out && !d.added_to_stock && t._serverId) {
+    act += `<button class="btn btn-primary btn-full" onclick="logPageAddStock()">${ic('plus')} Add to stock</button>`;
+    act += `<button class="btn btn-ghost btn-full" onclick="logPageMarkAdded()">${ic('check')} Mark as added (no stock change)</button>`;
+  }
   if (item) act += `<button class="btn btn-ghost btn-full" onclick="logPageOpenItem('${item.id}')">${ic('package')} Open item</button>`;
   if (isAdmin()) act += ('<button class="btn btn-danger btn-full" onclick="logPageDelete()">' + ic('trash-2') + ' Delete entry</button>');
   document.getElementById('logPageBody').innerHTML = `<div style="padding:20px 16px 0">
@@ -5679,16 +5692,37 @@ async function logPageClose(how) {
   const t2 = logTxById(_logPageId);
   if (ok && t2) renderLogPage(t2);
 }
+// Writes the mark on the server AFTER the stock change worked. manual = true: "Mark as added" for entries added earlier (no stock change).
+async function markAddedToStock(serverId, manual) {
+  try {
+    const r = await pApi('POST', `/api/transactions/${encodeURIComponent(serverId)}/added`, { groupId: gid(), person: S.user?.name || S.user?.email || '', manual: !!manual });
+    const t = S.transactions.find(x => String(x._serverId) === String(serverId));
+    if (t) t.details = { ...(t.details || {}), added_to_stock: r.added };
+    save();
+    if (t && _logPageId === t.id && document.getElementById('logPage').classList.contains('open')) renderLogPage(t);
+    return true;
+  } catch (e) {
+    if (!/already added/i.test(e.message)) toast(manual ? 'Could not mark: ' + e.message : 'Stock was added, but the Log entry could not be marked: ' + e.message, 'wrn');
+    return false;
+  }
+}
+async function logPageMarkAdded() {
+  const t = logTxById(_logPageId); if (!t || !t._serverId) return;
+  if (!confirm(`Mark "${t.itemName}" × ${t.qty} as already added to stock?\n\nStock does not change. Use this only for entries you added to stock earlier.`)) return;
+  if (await markAddedToStock(t._serverId, true)) toast('Marked as added to stock', 'ok');
+}
 function logPageOpenItem(itemId) { closeLogPage(); setTimeout(() => openProductPage(itemId), 320); }
 // Existing item: normal IN sheet, qty prefilled. Not in stock: Add Item sheet with name + qty prefilled (editable), the rest blank.
 function logPageAddStock() {
   const t = logTxById(_logPageId); if (!t) return;
   const name = String(t.itemName || '').trim(), qty = t.qty;
+  const from = t._serverId ? { id: String(t._serverId) } : null;
   const item = getItems().find(i => i.name.toLowerCase() === name.toLowerCase());
   closeLogPage();
   setTimeout(() => {
     if (item) {
       openSheet('txSheet');
+      _addFromLog = from;
       setTimeout(() => {
         selectTxItem(item.id); setTxType('IN');
         document.getElementById('txQty').value = qty || '';
@@ -5698,6 +5732,7 @@ function logPageAddStock() {
       document.getElementById('editId').value = '';
       document.getElementById('itemSheetTitle').textContent = 'Add Item';
       openSheet('addItemSheet');   // a fresh Add clears the fields, so fill name + stock after it
+      _addFromLog = from;
       document.getElementById('iName').value = name;
       document.getElementById('iStock').value = qty || 0;
       document.getElementById('iCat').value = ''; document.getElementById('iUnit').value = '';
@@ -6691,6 +6726,8 @@ async function syncFromServer(force = false) {
           source: tx.source || 'APP'
         });
         changed = true;
+      } else if (tx.details && JSON.stringify(exists.details || null) !== JSON.stringify(tx.details)) {
+        exists.details = tx.details; changed = true;
       }
     });
 
